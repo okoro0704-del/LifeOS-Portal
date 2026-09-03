@@ -1,0 +1,17 @@
+node_modules/
+dist/
+build/
+.env
+.env.local
+.env.production
+*.db
+*.db-journal
+.DS_Store
+Thumbs.db
+coverage/
+.turbo/
+*.log
+.vite/
+*.tsbuildinfo
+apps/portal-api/data/*.json
+!apps/portal-api/data/.gitkeep

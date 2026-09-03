@@ -1,0 +1,13 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "RAILPACK",
+    "buildCommand": "npm run build -w @lifeos-portal/shared && npm run build -w @lifeos-portal/finprove && npm run build -w @lifeos-portal/finprove-engine"
+  },
+  "deploy": {
+    "startCommand": "npm run start:finprove",
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 10,
+    "restartPolicyType": "ON_FAILURE"
+  }
+}

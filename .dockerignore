@@ -1,0 +1,15 @@
+.git
+.github
+.cursor
+canvases
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+!**/.env.example
+**/data
+**/*.md
+**/test
+**/*.test.ts
+**/*.spec.ts
+agent-transcripts

@@ -1,0 +1,41 @@
+{
+  "name": "lifeos-portal",
+  "private": true,
+  "version": "0.1.0",
+  "main": "index.js",
+  "description": "LifeOS Portal — install and launch business operating systems (HospitalityOS first)",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web,biz,ops,fin -c teal,cyan,green,blue,magenta \"npm:dev:api\" \"npm:dev:web\" \"npm:dev:business-portal\" \"npm:dev:platform-admin\" \"npm:dev:finprove\"",
+    "dev:api": "npm run dev -w @lifeos-portal/api",
+    "dev:web": "npm run dev -w @lifeos-portal/web",
+    "dev:business-portal": "npm run dev -w @lifeos-portal/business-portal",
+    "dev:platform-admin": "npm run dev -w @lifeos-portal/platform-admin",
+    "dev:finprove": "npm run dev -w @lifeos-portal/finprove-engine",
+    "build": "npm run build -w @lifeos-portal/shared && npm run build -w @lifeos-portal/env && npm run build -w @lifeos-portal/finprove && npm run build -w @lifeos-portal/api && npm run build -w @lifeos-portal/finprove-engine && npm run build -w @lifeos-portal/web && npm run build -w @lifeos-portal/business-portal && npm run build -w @lifeos-portal/platform-admin",
+    "build:gateway": "npm run build -w @lifeos-portal/shared && npm run build -w @lifeos-portal/env && npm run build -w @lifeos-portal/finprove && npm run build -w @lifeos-portal/api",
+    "start": "node index.js",
+    "start:finprove": "node --conditions=production apps/finprove/dist/index.js",
+    "setup": "npm install && npm run build -w @lifeos-portal/shared && npm run build -w @lifeos-portal/env && npm run build -w @lifeos-portal/finprove",
+    "test": "npm run test:e2e && npm run test:web && npm run test:admin",
+    "test:e2e": "node --import tsx --test --test-concurrency=1 apps/portal-api/test/e2e/portal.test.ts && node --import tsx --test --test-concurrency=1 apps/portal-api/test/e2e/portal-ecommerce-install.test.ts && node --import tsx --test --test-concurrency=1 apps/portal-api/test/e2e/portal-transportation-install.test.ts && node --import tsx --test --test-concurrency=1 apps/portal-api/test/e2e/portal-finprove-unbound.test.ts && node --import tsx --test --test-concurrency=1 apps/portal-api/test/e2e/portal-env.test.ts && node --import tsx --test --test-concurrency=1 apps/portal-api/test/e2e/portal-gateway-resilience.test.ts && node --import tsx --test --test-concurrency=1 apps/portal-api/test/e2e/dev-auth.test.ts && node --import tsx --test --test-concurrency=1 apps/portal-api/test/e2e/portal-prod-hardening.test.ts && node --import tsx --test --test-concurrency=1 apps/portal-api/test/e2e/migrate.test.ts",
+    "test:web": "npm run test -w @lifeos-portal/web",
+    "test:admin": "npm run test -w @lifeos-portal/business-portal",
+    "typecheck": "npm run build -w @lifeos-portal/shared && npm run build -w @lifeos-portal/env && npm run build -w @lifeos-portal/finprove && npm run typecheck -w @lifeos-portal/api && npm run typecheck -w @lifeos-portal/finprove-engine && npm run typecheck -w @lifeos-portal/web && npm run typecheck -w @lifeos-portal/business-portal && npm run typecheck -w @lifeos-portal/platform-admin",
+    "secrets": "node scripts/generate-secrets.mjs",
+    "secrets:railway": "node scripts/generate-secrets.mjs --railway",
+    "smoke": "bash scripts/smoke-test.sh",
+    "migrate": "node --import tsx apps/portal-api/src/store/migrate.ts"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "tsx": "^4.19.3"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "npm@10.9.2"
+}
