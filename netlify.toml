@@ -1,0 +1,6 @@
+# React Router SPA fallback. Deep links (/app, /admin, /downloads)
+# must rewrite to index.html instead of a Netlify 404.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
