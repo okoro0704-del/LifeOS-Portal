@@ -9,10 +9,10 @@ export function WelcomePage() {
         <p className="brand-hero">
           LifeOS <span>Portal</span>
         </p>
-        <h1>Explore the ecosystem. Download and test every OS.</h1>
+        <h1>License a domain OS. Run the vertical you actually operate.</h1>
         <p className="lead">
-          TrustID is disconnected for open testing. Preview customer modules, open the admin
-          dashboard, or download LifeOS, FinanceOS, RealEstateOS, ellFStream, and LiveOS.
+          HospitalityOS (hotels, dining, gyms, and the rest), ServiceOS, ECommerceOS, and
+          TransportationOS. Other shells are planned — they are not installable here yet.
         </p>
         <div className="actions">
           {bypassAuthForTesting ? (
@@ -24,9 +24,6 @@ export function WelcomePage() {
               Sign in
             </Link>
           )}
-          <Link className="btn btn-ghost" to="/downloads">
-            OS downloads
-          </Link>
           {bypassAuthForTesting ? (
             <Link className="linkish" to="/admin">
               Admin dashboard

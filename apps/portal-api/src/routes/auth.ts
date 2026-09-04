@@ -38,7 +38,6 @@ export async function registerAuthRoutes(app: FastifyInstance, store: PortalStor
       enableTrustId: config.enableTrustId,
       localAuth: isLocalAuthEnabled(),
       guestAuth: isGuestAuthEnabled(),
-      allowGuestDownloads: config.allowGuestDownloads,
     };
   });
 

@@ -55,7 +55,6 @@ export function parsePortalServerEnv(source: NodeJS.ProcessEnv = process.env) {
     source.BYPASS_AUTH_FOR_TESTING,
     !production && nodeEnv !== "test",
   );
-  const allowGuestDownloads = boolish(source.ALLOW_GUEST_DOWNLOADS ?? source.NEXT_PUBLIC_ALLOW_GUEST_DOWNLOADS, !enableTrustId);
   const defaultUserRole = (source.DEFAULT_USER_ROLE ?? source.NEXT_PUBLIC_DEFAULT_USER_ROLE ?? "ADMIN").toUpperCase() ===
     "USER"
     ? "USER"
@@ -203,7 +202,6 @@ export function parsePortalServerEnv(source: NodeJS.ProcessEnv = process.env) {
     enableTrustId,
     bypassTrustId,
     bypassAuthForTesting,
-    allowGuestDownloads,
     defaultUserRole: defaultUserRole as "USER" | "ADMIN",
     elfcomApiUrl: source.ELFCOM_API_URL ?? "",
     elfcomBaasApiKey: source.ELFCOM_BAAS_API_KEY ?? "",

@@ -96,7 +96,6 @@ test("local development still falls back to localhost Finprove", () => {
   assert.equal(env.enableTrustId, false);
   assert.equal(env.bypassTrustId, true);
   assert.equal(env.bypassAuthForTesting, true);
-  assert.equal(env.allowGuestDownloads, true);
   assert.equal(env.defaultUserRole, "ADMIN");
 });
 
@@ -132,5 +131,4 @@ test("production can open guest testing with an explicit bypass flag", () => {
     DATABASE_URL: "postgres://portal:portal@db.internal:5432/lifeos",
   });
   assert.equal(env.bypassAuthForTesting, true);
-  assert.equal(env.allowGuestDownloads, true);
 });

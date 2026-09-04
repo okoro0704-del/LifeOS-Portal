@@ -23,7 +23,7 @@ export function ChooseLanePage() {
         <article className="card card--choice">
           <p className="eyebrow">lane</p>
           <h2>Business OS</h2>
-          <p>License a domain operating system, then pick the vertical you actually run.</p>
+          <p>HospitalityOS, ServiceOS, ECommerceOS, or TransportationOS — then the vertical you run.</p>
           <Link className="btn btn-primary" to="/app/business">
             Open Business OS
           </Link>

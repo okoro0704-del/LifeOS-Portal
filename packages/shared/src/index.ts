@@ -51,8 +51,6 @@ export {
   type EcommerceInstallTemplate,
 } from "./catalog.js";
 
-export { OS_DOWNLOADS, getOsDownload, type OsDownload, type DownloadKind } from "./downloads.js";
-
 export {
   PORTAL_AUTH_SCOPES,
   PORTAL_SESSION_COOKIE,

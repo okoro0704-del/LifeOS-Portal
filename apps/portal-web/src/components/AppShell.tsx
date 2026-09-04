@@ -14,7 +14,6 @@ export function AppShell() {
             Choose OS
           </NavLink>
           <NavLink to="/app/profile">Profile</NavLink>
-          <NavLink to="/app/downloads">Downloads</NavLink>
           <NavLink to="/app/business">Business OS</NavLink>
           <NavLink to="/app/installs">Installs</NavLink>
           <NavLink to="/app/organizations">Organizations</NavLink>

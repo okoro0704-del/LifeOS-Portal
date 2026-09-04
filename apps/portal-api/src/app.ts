@@ -26,7 +26,6 @@ import { registerFinproveRoutes } from "./routes/finprove.js";
 import { registerDataZoneAdminRoutes } from "./routes/datazone-admin.js";
 import { registerUserAdminRoutes } from "./routes/users.js";
 import { registerPushRoutes } from "./routes/push.js";
-import { registerDownloadRoutes } from "./routes/downloads.js";
 import { seedLocalAdmin } from "./lib/seed-admin.js";
 
 export type BuildAppOptions = {
@@ -95,7 +94,6 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
 
   await registerHealthModule(app);
   await registerAuthRoutes(app, store);
-  await registerDownloadRoutes(app);
   await registerCatalogRoutes(app);
   await registerBillingRoutes(app, store);
   await registerInstallRoutes(app, store, distributor, hos, eco, tos);
