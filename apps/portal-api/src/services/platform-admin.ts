@@ -1,6 +1,9 @@
 import {
   platformFeeMinor,
   type PlatformBillingRow,
+  type PlatformInstallHealthRow,
+  type PlatformOrganizationRow,
+  type PlatformTenantDetail,
   type PlatformTenantRow,
   type PlatformVerticalRow,
   type RoutingEntry,
@@ -80,6 +83,119 @@ export function listPlatformVerticals(store: PortalStore): PlatformVerticalRow[]
     modulesEnabled: install.modulesEnabled ?? install.enabledModules ?? [],
     createdAt: install.createdAt,
   }));
+}
+
+const STUCK_AFTER_MS = 15 * 60_000;
+
+function siblingInstalls(store: PortalStore, tenantId: string) {
+  const seed = store.getInstallByTenantId(tenantId);
+  if (!seed) return [];
+  return store.listAllInstalls().filter((row) => {
+    if (row.ownerUserId === seed.ownerUserId) return true;
+    return Boolean(seed.organizationId && row.organizationId === seed.organizationId);
+  });
+}
+
+export function getTenantDetail(store: PortalStore, tenantId: string): PlatformTenantDetail | undefined {
+  const seed = store.getInstallByTenantId(tenantId);
+  if (!seed) return undefined;
+  const owner = store.getUser(seed.ownerUserId);
+  const installs = siblingInstalls(store, tenantId);
+  const installIds = new Set(installs.map((row) => row.id));
+  const billingIds = new Set(installs.map((row) => row.billingId).filter(Boolean) as string[]);
+  const verticals = listPlatformVerticals(store).filter((row) => installIds.has(row.installId));
+  const tenantIds = new Set(installs.map((row) => row.distributorTenantId));
+  const domains = routingTable(store).filter((row) => tenantIds.has(row.tenantId));
+  const billings = listPlatformBillings(store).filter(
+    (row) => billingIds.has(row.id) || row.ownerUserId === seed.ownerUserId,
+  );
+  return {
+    tenantId: seed.distributorTenantId,
+    displayName: seed.displayName,
+    organizationId: seed.organizationId,
+    owner: {
+      id: owner?.id ?? seed.ownerUserId,
+      email: owner?.email,
+      displayName: owner?.displayName ?? seed.ownerTrustId,
+      trustId: owner?.trustId ?? seed.ownerTrustId,
+      role: owner?.role ?? "USER",
+      lastLoginAt: owner?.lastLoginAt ?? seed.createdAt,
+    },
+    verticals,
+    domains,
+    billings,
+    launchUrls: installs.map((row) => ({
+      installId: row.id,
+      displayName: row.displayName,
+      staff: row.launchUrls?.staff,
+      guest: row.launchUrls?.guest,
+      storefront: row.launchUrls?.storefront ?? row.storefrontUrl,
+      admin: row.launchUrls?.admin ?? row.adminConsoleUrl,
+    })),
+    status: seed.suspended ? "suspended" : seed.status,
+    suspended: Boolean(seed.suspended),
+  };
+}
+
+export function listInstallHealth(store: PortalStore): PlatformInstallHealthRow[] {
+  const now = Date.now();
+  return store
+    .listAllInstalls()
+    .map((install) => {
+      const age = now - new Date(install.updatedAt).getTime();
+      const pending =
+        install.status === "bootstrapping" ||
+        install.status === "awaiting_domain" ||
+        install.status === "provisioning";
+      return {
+        installId: install.id,
+        tenantId: install.distributorTenantId,
+        displayName: install.displayName,
+        subdomain: install.subdomain,
+        osId: install.osId,
+        verticalId: install.verticalId,
+        status: install.suspended ? "suspended" : install.status,
+        error: install.error,
+        updatedAt: install.updatedAt,
+        stuck: pending && age >= STUCK_AFTER_MS,
+      };
+    })
+    .filter((row) => row.status !== "ready" || row.stuck || Boolean(row.error))
+    .sort((a, b) => Number(b.stuck) - Number(a.stuck) || b.updatedAt.localeCompare(a.updatedAt));
+}
+
+export function listPlatformOrganizations(store: PortalStore): PlatformOrganizationRow[] {
+  const groups = new Map<string, ReturnType<PortalStore["listAllInstalls"]>>();
+  for (const install of store.listAllInstalls()) {
+    const key = install.organizationId || `owner:${install.ownerUserId}`;
+    const bucket = groups.get(key) ?? [];
+    bucket.push(install);
+    groups.set(key, bucket);
+  }
+  return [...groups.entries()]
+    .map(([organizationId, installs]) => {
+      const primary = installs[0]!;
+      const owner = store.getUser(primary.ownerUserId);
+      return {
+        organizationId,
+        name: primary.displayName,
+        kind: primary.organizationId ? ("suite" as const) : ("owner" as const),
+        ownerUserId: primary.ownerUserId,
+        ownerEmail: owner?.email,
+        ownerName: owner?.displayName ?? primary.ownerTrustId,
+        tenantIds: [...new Set(installs.map((row) => row.distributorTenantId))],
+        installCount: installs.length,
+        verticals: installs.map((row) => ({
+          installId: row.id,
+          tenantId: row.distributorTenantId,
+          osId: row.osId,
+          verticalId: row.verticalId,
+          displayName: row.displayName,
+          status: row.suspended ? "suspended" : row.status,
+        })),
+      };
+    })
+    .sort((a, b) => b.installCount - a.installCount || a.name.localeCompare(b.name));
 }
 
 export function routingTable(store: PortalStore): RoutingEntry[] {

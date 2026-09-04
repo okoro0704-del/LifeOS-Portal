@@ -66,11 +66,143 @@ test("admin host guest can manage tenants, billings, and verticals", async () =>
   const verticals = await app.inject({ method: "GET", url: "/v1/admin/verticals", headers });
   assert.equal(verticals.statusCode, 200, verticals.body);
   assert.ok(Array.isArray(verticals.json().verticals));
+
+  const missing = await app.inject({ method: "GET", url: "/v1/admin/tenants/does-not-exist", headers });
+  assert.equal(missing.statusCode, 404);
+
+  const users = await app.inject({ method: "GET", url: "/v1/admin/users", headers });
+  assert.equal(users.statusCode, 200, users.body);
+  assert.ok(Array.isArray(users.json().users));
+
+  const domains = await app.inject({ method: "GET", url: "/v1/admin/routing", headers });
+  assert.equal(domains.statusCode, 200, domains.body);
+
+  const health = await app.inject({ method: "GET", url: "/v1/admin/installs/health", headers });
+  assert.equal(health.statusCode, 200, health.body);
+  assert.ok(Array.isArray(health.json().installs));
+
+  const orgs = await app.inject({ method: "GET", url: "/v1/admin/organizations", headers });
+  assert.equal(orgs.statusCode, 200, orgs.body);
+  assert.ok(Array.isArray(orgs.json().organizations));
 });
 
 test("OS download routes are gone", async () => {
   const list = await app.inject({ method: "GET", url: "/downloads" });
   assert.equal(list.statusCode, 404);
+});
+
+test("tenant detail groups sibling verticals and health lists failures", async () => {
+  const { createStore } = await import("../../src/store.js");
+  const { buildApp } = await import("../../src/app.js");
+  const store = createStore();
+  const owner = store.createLocalUser({
+    email: "owner@lifeos.test",
+    displayName: "Apex Owner",
+    role: "USER",
+  });
+  store.createInstall({
+    ownerUserId: owner.id,
+    ownerTrustId: `local:${owner.id}`,
+    appId: "hospitalityos",
+    osId: "hospitalityos",
+    verticalId: "hotel",
+    displayName: "Apex Hotel",
+    subdomain: "apex-hotel",
+    distributorTenantId: "ten_hotel",
+    organizationId: "org_apex",
+    modulesEnabled: ["accommodation"],
+    seedApplied: true,
+    status: "ready",
+    launchUrls: { staff: "https://apex-hotel.lifeos.app/staff", guest: "https://apex-hotel.lifeos.app/guest" },
+  });
+  store.createInstall({
+    ownerUserId: owner.id,
+    ownerTrustId: `local:${owner.id}`,
+    appId: "hospitalityos",
+    osId: "hospitalityos",
+    verticalId: "restaurant",
+    displayName: "Apex Dining",
+    subdomain: "apex-dining",
+    distributorTenantId: "ten_dining",
+    organizationId: "org_apex",
+    modulesEnabled: ["dining"],
+    seedApplied: false,
+    status: "failed",
+    error: "hos_timeout",
+  });
+  const local = await buildApp({ store });
+  await local.ready();
+  const headers = { origin: "https://admin.getlifeos.app" };
+  try {
+    const detail = await local.inject({ method: "GET", url: "/v1/admin/tenants/ten_hotel", headers });
+    assert.equal(detail.statusCode, 200, detail.body);
+    const tenant = detail.json().tenant as { verticals: Array<{ verticalId: string }>; owner: { email?: string } };
+    assert.equal(tenant.owner.email, "owner@lifeos.test");
+    assert.equal(tenant.verticals.length, 2);
+
+    const health = await local.inject({ method: "GET", url: "/v1/admin/installs/health", headers });
+    assert.equal(health.statusCode, 200, health.body);
+    const failed = (health.json().installs as Array<{ error?: string }>).some((row) => row.error === "hos_timeout");
+    assert.equal(failed, true);
+
+    const orgs = await local.inject({ method: "GET", url: "/v1/admin/organizations", headers });
+    assert.equal(orgs.statusCode, 200, orgs.body);
+    const suite = (orgs.json().organizations as Array<{ organizationId: string; installCount: number }>).find(
+      (row) => row.organizationId === "org_apex",
+    );
+    assert.ok(suite);
+    assert.equal(suite.installCount, 2);
+  } finally {
+    await local.close();
+  }
+});
+
+test("guest hotel install works when TrustID is off and distributor is remote", async () => {
+  const { createStore } = await import("../../src/store.js");
+  const { buildApp } = await import("../../src/app.js");
+  const { createRemoteDistributor } = await import("../../src/services/distributor.js");
+  const { createLocalHospitalityOs } = await import("../../src/services/hospitalityos.js");
+  const { createLocalEcommerceOs } = await import("../../src/services/ecommerceos.js");
+  const { createLocalTransportationOs } = await import("../../src/services/transportationos.js");
+
+  const local = await buildApp({
+    store: createStore(),
+    distributor: createRemoteDistributor(),
+    hos: createLocalHospitalityOs(),
+    eco: createLocalEcommerceOs(),
+    tos: createLocalTransportationOs(),
+  });
+  await local.ready();
+  const headers = { origin: "https://getlifeos.app" };
+  try {
+    const paid = await local.inject({
+      method: "POST",
+      url: "/billing/checkout",
+      headers,
+      payload: { osId: "hospitalityos", verticalId: "hotel" },
+    });
+    assert.equal(paid.statusCode, 201, paid.body);
+    const billingId = paid.json().billing.id as string;
+    const subdomain = `guest-hotel-${Date.now().toString(36)}`;
+    const res = await local.inject({
+      method: "POST",
+      url: "/installs",
+      headers,
+      payload: {
+        osId: "hospitalityos",
+        verticalId: "hotel",
+        billingId,
+        displayName: "Guest Hotel",
+        subdomain,
+        adminStaff: { email: "owner@guest-hotel.example", displayName: "Owner" },
+      },
+    });
+    assert.equal(res.statusCode, 201, res.body);
+    assert.equal(res.json().install.status, "ready");
+    assert.equal(res.json().install.verticalId, "hotel");
+  } finally {
+    await local.close();
+  }
 });
 
 test("catalog is reachable without a session cookie", async () => {

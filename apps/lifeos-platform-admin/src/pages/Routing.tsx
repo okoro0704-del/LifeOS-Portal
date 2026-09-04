@@ -22,9 +22,9 @@ export function RoutingPage() {
   return (
     <div className="page marketplace">
       <header className="page-head">
-        <p className="eyebrow">Master Distributor</p>
-        <h1>Routing table</h1>
-        <p className="lead">Live CNAME mappings and subdomains. Renew SSL or flush edge cache per host.</p>
+        <p className="eyebrow">Admin</p>
+        <h1>Domains</h1>
+        <p className="lead">Tenant hostnames, DNS, and SSL. Renew a certificate or flush edge cache.</p>
       </header>
       {error ? <p className="banner-error">{error}</p> : null}
       <table className="data-table">

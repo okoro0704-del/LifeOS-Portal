@@ -1,31 +1,30 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import type { PlatformVerticalRow } from "@lifeos-portal/shared";
+import type { PlatformInstallHealthRow } from "@lifeos-portal/shared";
 import { ApiError, portalApi } from "../lib/api";
 
-export function VerticalsPage() {
-  const [verticals, setVerticals] = useState<PlatformVerticalRow[]>([]);
+export function InstallHealthPage() {
+  const [installs, setInstalls] = useState<PlatformInstallHealthRow[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  async function load() {
-    try {
-      setVerticals((await portalApi.verticals()).verticals);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load verticals.");
-    }
-  }
-
   useEffect(() => {
-    void load();
+    void portalApi
+      .installHealth()
+      .then((data) => {
+        setInstalls(data.installs);
+        setError(null);
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof ApiError ? err.message : "Could not load install health.");
+      });
   }, []);
 
   return (
     <div className="page marketplace">
       <header className="page-head">
         <p className="eyebrow">Admin</p>
-        <h1>Verticals</h1>
-        <p className="lead">Every tenant vertical install. Suspend or restore from here.</p>
+        <h1>Install health</h1>
+        <p className="lead">Failed, suspended, and stuck provisions. Stuck means pending longer than 15 minutes.</p>
       </header>
       {error ? <p className="banner-error">{error}</p> : null}
       <table className="data-table">
@@ -34,11 +33,12 @@ export function VerticalsPage() {
             <th>Brand</th>
             <th>Vertical</th>
             <th>Status</th>
-            <th></th>
+            <th>Error</th>
+            <th>Updated</th>
           </tr>
         </thead>
         <tbody>
-          {verticals.map((row) => (
+          {installs.map((row) => (
             <tr key={row.installId}>
               <td>
                 <Link to={`/admin/tenants/${encodeURIComponent(row.tenantId)}`}>
@@ -49,16 +49,12 @@ export function VerticalsPage() {
               <td>
                 {row.osId} / {row.verticalId}
               </td>
-              <td>{row.status}</td>
-              <td className="row-actions">
-                <button
-                  className="btn btn-ghost"
-                  type="button"
-                  onClick={() => void portalApi.suspend(row.tenantId, !row.suspended).then(() => load())}
-                >
-                  {row.suspended ? "Restore" : "Suspend"}
-                </button>
+              <td>
+                {row.status}
+                {row.stuck ? " · stuck" : ""}
               </td>
+              <td className="muted small">{row.error || "—"}</td>
+              <td className="mono muted small">{row.updatedAt.slice(0, 19)}</td>
             </tr>
           ))}
         </tbody>

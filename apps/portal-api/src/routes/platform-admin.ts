@@ -6,8 +6,11 @@ import { HttpError } from "../lib/http.js";
 import type { PortalStore } from "../store.js";
 import type { DistributorClient } from "../services/distributor.js";
 import {
+  getTenantDetail,
   issueImpersonationToken,
+  listInstallHealth,
   listPlatformBillings,
+  listPlatformOrganizations,
   listPlatformVerticals,
   routingTable,
   searchTenants,
@@ -32,6 +35,24 @@ export async function registerPlatformAdminRoutes(
   app.get("/v1/admin/verticals", async (req, reply) => {
     if (!requirePlatformAdmin(req, reply)) return;
     return { verticals: listPlatformVerticals(store) };
+  });
+
+  app.get("/v1/admin/tenants/:tenantId", async (req, reply) => {
+    if (!requirePlatformAdmin(req, reply)) return;
+    const { tenantId } = req.params as { tenantId: string };
+    const tenant = getTenantDetail(store, tenantId);
+    if (!tenant) return reply.code(404).send({ error: "not_found", message: "Tenant not found" });
+    return { tenant };
+  });
+
+  app.get("/v1/admin/installs/health", async (req, reply) => {
+    if (!requirePlatformAdmin(req, reply)) return;
+    return { installs: listInstallHealth(store) };
+  });
+
+  app.get("/v1/admin/organizations", async (req, reply) => {
+    if (!requirePlatformAdmin(req, reply)) return;
+    return { organizations: listPlatformOrganizations(store) };
   });
 
   app.post("/v1/admin/tenants/:tenantId/suspend", async (req, reply) => {

@@ -146,6 +146,65 @@ export type PlatformBillingRow = {
   paidAt?: string;
 };
 
+export type PlatformTenantDetail = {
+  tenantId: string;
+  displayName: string;
+  organizationId?: string;
+  owner: {
+    id: string;
+    email?: string | null;
+    displayName: string;
+    trustId: string | null;
+    role: string;
+    lastLoginAt: string;
+  };
+  verticals: PlatformVerticalRow[];
+  domains: RoutingEntry[];
+  billings: PlatformBillingRow[];
+  launchUrls: Array<{
+    installId: string;
+    displayName: string;
+    staff?: string;
+    guest?: string;
+    storefront?: string;
+    admin?: string;
+  }>;
+  status: string;
+  suspended: boolean;
+};
+
+export type PlatformInstallHealthRow = {
+  installId: string;
+  tenantId: string;
+  displayName: string;
+  subdomain: string;
+  osId: string;
+  verticalId: string;
+  status: string;
+  error?: string;
+  updatedAt: string;
+  stuck: boolean;
+};
+
+export type PlatformOrganizationRow = {
+  organizationId: string;
+  name: string;
+  kind: "suite" | "owner";
+  ownerUserId: string;
+  ownerEmail?: string | null;
+  ownerName: string;
+  tenantIds: string[];
+  installCount: number;
+  verticals: Array<{
+    installId: string;
+    tenantId: string;
+    osId: string;
+    verticalId: string;
+    displayName: string;
+    status: string;
+  }>;
+};
+
 export type PlatformVerticalRow = {
   installId: string;
   tenantId: string;

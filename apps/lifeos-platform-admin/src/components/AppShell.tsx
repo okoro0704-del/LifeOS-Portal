@@ -11,8 +11,12 @@ export function AppShell() {
         </p>
         <nav>
           <NavLink to="/admin/tenants">Tenants</NavLink>
+          <NavLink to="/admin/organizations">Organizations</NavLink>
+          <NavLink to="/admin/accounts">Accounts</NavLink>
           <NavLink to="/admin/billings">Billings</NavLink>
           <NavLink to="/admin/verticals">Verticals</NavLink>
+          <NavLink to="/admin/domains">Domains</NavLink>
+          <NavLink to="/admin/health">Install health</NavLink>
         </nav>
         <div className="sidebar-foot">
           <p className="mono muted small">{user?.email || user?.trustId}</p>

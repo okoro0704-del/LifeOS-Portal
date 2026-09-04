@@ -8,6 +8,7 @@ import {
   type DomainStatusResult,
 } from "@lifeos-portal/shared";
 import { config } from "../config.js";
+import { isTrustIdEnabled } from "../lib/local-auth.js";
 import { HttpError, httpJson } from "../lib/http.js";
 
 export type BootstrapInput = {
@@ -150,8 +151,19 @@ export function createLocalDistributor(): DistributorClient {
 
 export function createRemoteDistributor(): DistributorClient {
   const base = config.masterDistributorUrl;
+  const local = createLocalDistributor();
+
+  // Standalone/guest installs have no TrustID session token. Keep Master Distributor
+  // remote when a token is present; otherwise finish bootstrap locally.
+  function useLocalFallback(accessToken?: string) {
+    return !isTrustIdEnabled() && !accessToken;
+  }
+
   return {
     async bootstrap(input) {
+      if (useLocalFallback(input.accessToken)) {
+        return local.bootstrap(input);
+      }
       if (!input.accessToken) {
         throw new HttpError(
           "TrustID access token required for Master Distributor bootstrap.",
@@ -175,6 +187,7 @@ export function createRemoteDistributor(): DistributorClient {
       });
     },
     async getDomainStatus(domainId, accessToken) {
+      if (useLocalFallback(accessToken)) return local.getDomainStatus(domainId);
       return httpJson<DomainStatusResult>(
         base,
         `/v1/distributor/domains/${encodeURIComponent(domainId)}/status`,
@@ -185,6 +198,9 @@ export function createRemoteDistributor(): DistributorClient {
       );
     },
     async provisionCustomDomain(input) {
+      if (useLocalFallback(input.accessToken)) {
+        return local.provisionCustomDomain(input);
+      }
       if (!input.accessToken) {
         throw new HttpError(
           "TrustID access token required for custom domain attachment.",
@@ -211,6 +227,7 @@ export function createRemoteDistributor(): DistributorClient {
       };
     },
     async verifyDomain(domainId, accessToken) {
+      if (useLocalFallback(accessToken)) return local.verifyDomain(domainId);
       return httpJson<DomainStatusResult>(
         base,
         `/v1/distributor/domains/${encodeURIComponent(domainId)}/status`,
@@ -221,6 +238,9 @@ export function createRemoteDistributor(): DistributorClient {
       );
     },
     async purchaseDomain(input) {
+      if (useLocalFallback(input.accessToken)) {
+        return local.purchaseDomain(input);
+      }
       if (!input.accessToken) {
         throw new HttpError(
           "TrustID access token required for domain purchase.",
@@ -247,6 +267,7 @@ export function createRemoteDistributor(): DistributorClient {
       };
     },
     async renewSsl(domainId, accessToken) {
+      if (useLocalFallback(accessToken)) return local.renewSsl(domainId);
       return httpJson<DomainStatusResult>(
         base,
         `/v1/distributor/domains/${encodeURIComponent(domainId)}/status`,

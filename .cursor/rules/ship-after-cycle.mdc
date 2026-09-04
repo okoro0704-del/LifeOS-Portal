@@ -1,0 +1,14 @@
+---
+description: Commit, push to GitHub, and ship Netlify after every coding cycle
+alwaysApply: true
+---
+
+# Ship after every coding cycle
+
+When a coding cycle finishes (feature, fix, or requested change):
+
+1. Commit relevant project files. Do not wait to be asked.
+2. Push `main` to `origin` on GitHub.
+3. Netlify builds getlifeos.app from GitHub `main`. Confirm the push landed.
+4. Also deploy Railway gateway and platform-admin when API or admin UI changed. Those do not go live from Netlify alone.
+5. Never commit secrets (`.env`, tokens, DB URLs, cookie secrets).

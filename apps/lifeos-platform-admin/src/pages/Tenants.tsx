@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import type { PlatformTenantRow } from "@lifeos-portal/shared";
 import { ApiError, money, portalApi } from "../lib/api";
 
@@ -68,7 +69,9 @@ export function TenantsPage() {
           {tenants.map((tenant) => (
             <tr key={tenant.tenantId}>
               <td>
-                <strong>{tenant.displayName}</strong>
+                <Link to={`/admin/tenants/${encodeURIComponent(tenant.tenantId)}`}>
+                  <strong>{tenant.displayName}</strong>
+                </Link>
                 <div className="mono muted small">{tenant.subdomain}.lifeos.app</div>
               </td>
               <td className="mono">{tenant.ownerTrustId}</td>
@@ -78,6 +81,9 @@ export function TenantsPage() {
               <td>{money(tenant.gmvMinor)}</td>
               <td>{tenant.status}</td>
               <td className="row-actions">
+                <Link className="btn btn-ghost" to={`/admin/tenants/${encodeURIComponent(tenant.tenantId)}`}>
+                  Open
+                </Link>
                 <button
                   className="btn btn-ghost"
                   type="button"

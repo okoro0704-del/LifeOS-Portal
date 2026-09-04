@@ -6,6 +6,9 @@ import {
   type DataZoneWebhook,
   type GatewayUpstreamStatus,
   type PlatformBillingRow,
+  type PlatformInstallHealthRow,
+  type PlatformOrganizationRow,
+  type PlatformTenantDetail,
   type PlatformTenantRow,
   type PlatformVerticalRow,
   type PortalUserPublic,
@@ -144,8 +147,23 @@ export const portalApi = {
   logout: () => api<{ ok: boolean }>("/auth/logout", { method: "POST" }),
   tenants: (q?: string) =>
     api<{ tenants: PlatformTenantRow[] }>(`/v1/admin/tenants${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  tenant: (tenantId: string) =>
+    api<{ tenant: PlatformTenantDetail }>(`/v1/admin/tenants/${encodeURIComponent(tenantId)}`),
   billings: () => api<{ billings: PlatformBillingRow[] }>("/v1/admin/billings"),
   verticals: () => api<{ verticals: PlatformVerticalRow[] }>("/v1/admin/verticals"),
+  installHealth: () => api<{ installs: PlatformInstallHealthRow[] }>("/v1/admin/installs/health"),
+  organizations: () => api<{ organizations: PlatformOrganizationRow[] }>("/v1/admin/organizations"),
+  users: () => api<{ users: PortalUserPublic[] }>("/v1/admin/users"),
+  suspendUser: (id: string, suspended: boolean) =>
+    api<{ ok: boolean; user: PortalUserPublic }>(`/v1/admin/users/${encodeURIComponent(id)}/suspend`, {
+      method: "POST",
+      body: JSON.stringify({ suspended }),
+    }),
+  setUserRole: (id: string, role: "USER" | "ADMIN") =>
+    api<{ ok: boolean; user: PortalUserPublic }>(`/v1/admin/users/${encodeURIComponent(id)}/role`, {
+      method: "POST",
+      body: JSON.stringify({ role }),
+    }),
   suspend: (tenantId: string, suspended: boolean) =>
     api<{ ok: boolean }>(`/v1/admin/tenants/${encodeURIComponent(tenantId)}/suspend`, {
       method: "POST",

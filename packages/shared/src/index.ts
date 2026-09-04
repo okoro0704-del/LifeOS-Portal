@@ -79,8 +79,11 @@ export {
   type EscrowHold,
   type TenantFinance,
   type PlatformTenantRow,
+  type PlatformTenantDetail,
   type PlatformBillingRow,
   type PlatformVerticalRow,
+  type PlatformInstallHealthRow,
+  type PlatformOrganizationRow,
   type RoutingEntry,
   type PlatformFinanceSummary,
 } from "./admin.js";
