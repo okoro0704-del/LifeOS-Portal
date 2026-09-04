@@ -9,6 +9,7 @@ import {
 import { FundzmanRailAdapter } from "@lifeos-portal/finprove";
 import { config } from "../config.js";
 import { HttpError } from "../lib/http.js";
+import { identitySubject } from "../lib/local-auth.js";
 import type { PortalInstall, PortalStore, PortalUser, TenantFinanceRecord } from "../store.js";
 
 export function activateBusinessPortal(opts: {
@@ -20,7 +21,7 @@ export function activateBusinessPortal(opts: {
 }) {
   const access = opts.store.grantTenantPortalAccess({
     userId: opts.user.id,
-    trustId: opts.user.trustId,
+    trustId: identitySubject(opts.user),
     grantedAt: new Date().toISOString(),
     sourceInstallId: opts.install.id,
     businessPortalUrl: config.businessPortalUrl,

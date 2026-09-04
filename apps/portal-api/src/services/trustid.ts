@@ -22,6 +22,7 @@ export class TrustIdError extends Error {
 }
 
 export async function checkTrustIdAvailable(): Promise<boolean> {
+  if (!config.enableTrustId) return false;
   if (config.trustIdMode === "mock") return true;
   try {
     const res = await fetch(`${config.trustIdApi}/health`, {

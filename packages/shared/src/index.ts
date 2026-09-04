@@ -58,6 +58,7 @@ export {
   type PortalUserPublic,
   type AuthStatus,
   type TrustIdRole,
+  type PortalAccountRole,
 } from "./auth.js";
 
 export {

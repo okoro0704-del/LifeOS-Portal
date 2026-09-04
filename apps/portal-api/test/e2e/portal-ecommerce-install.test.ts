@@ -7,6 +7,7 @@ import type { FastifyInstance } from "fastify";
 import { ECOMMERCEOS_MANIFEST } from "@lifeos-portal/shared";
 
 process.env.NODE_ENV = "test";
+process.env.ENABLE_TRUST_ID = "true";
 process.env.TRUSTID_MODE = "mock";
 process.env.INSTALL_MODE = "local";
 process.env.COOKIE_SECRET = "portal-e2e-cookie";

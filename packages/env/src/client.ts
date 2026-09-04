@@ -12,6 +12,7 @@ export const clientEnvSchema = z.object({
   VITE_TRUSTID_API: z.string().url().optional(),
   VITE_TRUSTID_WEB: z.string().url().optional(),
   VITE_TRUSTID_MODE: z.enum(["mock", "remote"]).optional(),
+  VITE_ENABLE_TRUST_ID: z.enum(["true", "false"]).optional(),
   VITE_TRUSTID_CLIENT_ID: z.string().min(1).optional(),
   VITE_TRUSTID_REDIRECT_URI: z.string().url().optional(),
 });
@@ -23,7 +24,11 @@ export function resolveGatewayUrl(env: Record<string, string | undefined>) {
 export function parsePortalClientEnv(source: Record<string, string | undefined>, opts?: { production?: boolean }) {
   const parsed = clientEnvSchema.safeParse(source);
   if (!parsed.success) throw new EnvValidationError(parsed.error.issues);
-  if (opts?.production && (parsed.data.VITE_TRUSTID_MODE ?? "mock") === "mock") {
+  if (
+    opts?.production &&
+    parsed.data.VITE_ENABLE_TRUST_ID !== "false" &&
+    (parsed.data.VITE_TRUSTID_MODE ?? "mock") === "mock"
+  ) {
     throw new EnvValidationError([
       {
         path: ["VITE_TRUSTID_MODE"],

@@ -3,6 +3,7 @@ import type { CookieSerializeOptions } from "@fastify/cookie";
 import type { AuthStatus, PortalUserPublic, TrustIdRole } from "@lifeos-portal/shared";
 import { config } from "../config.js";
 import { hashSecret } from "./crypto.js";
+import { accountRoleFromRoles } from "./local-auth.js";
 import type { PortalStore, PortalUser } from "../store.js";
 
 declare module "fastify" {
@@ -14,13 +15,17 @@ declare module "fastify" {
 }
 
 export function toPublicUser(user: PortalUser): PortalUserPublic {
+  const role = user.role ?? accountRoleFromRoles(user.roles);
   return {
     id: user.id,
     trustId: user.trustId,
+    email: user.email,
     displayName: user.displayName,
+    role,
     trustTier: user.trustTier,
     identityStatus: user.identityStatus,
-    roles: user.roles?.length ? user.roles : ["tenant"],
+    roles: user.roles?.length ? user.roles : role === "ADMIN" ? ["tenant", "platform_admin"] : ["tenant"],
+    suspended: user.suspended,
     createdAt: user.createdAt,
     lastLoginAt: user.lastLoginAt,
   };
@@ -66,7 +71,7 @@ export async function attachSession(req: FastifyRequest, store: PortalStore) {
   const session = store.getSessionByTokenHash(hashSecret(token));
   if (!session) return;
   const user = store.getUser(session.userId);
-  if (!user) return;
+  if (!user || user.suspended) return;
   req.portalUser = user;
   req.portalSessionToken = token;
   req.trustIdAccessToken = session.trustIdAccessToken;
@@ -76,7 +81,7 @@ export function requireSession(req: FastifyRequest, reply: FastifyReply) {
   if (!req.portalUser) {
     reply.code(401).send({
       error: "unauthorized",
-      message: "Sign in with TrustID to continue.",
+      message: config.enableTrustId ? "Sign in with TrustID to continue." : "Sign in to continue.",
     });
     return false;
   }
@@ -89,10 +94,11 @@ export function hasRole(user: PortalUser | undefined, role: TrustIdRole) {
 
 export function requirePlatformAdmin(req: FastifyRequest, reply: FastifyReply) {
   if (!requireSession(req, reply)) return false;
-  if (!hasRole(req.portalUser, "platform_admin")) {
+  const user = req.portalUser!;
+  if (user.role !== "ADMIN" && !hasRole(user, "platform_admin")) {
     reply.code(403).send({
       error: "forbidden",
-      message: "Platform operator TrustID required.",
+      message: "Administrator access required.",
     });
     return false;
   }

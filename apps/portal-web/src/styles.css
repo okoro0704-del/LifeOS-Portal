@@ -482,6 +482,29 @@ fieldset {
   border-radius: 12px;
 }
 
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1.25rem;
+  background: var(--los-surface);
+  border-radius: var(--los-radius);
+  overflow: hidden;
+  box-shadow: var(--los-shadow);
+}
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--los-border);
+  vertical-align: top;
+}
+.data-table th {
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--los-muted);
+}
+
 @media (max-width: 800px) {
   .shell {
     grid-template-columns: 1fr;

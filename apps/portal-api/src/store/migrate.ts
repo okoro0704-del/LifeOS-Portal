@@ -28,6 +28,26 @@ CREATE TABLE IF NOT EXISTS portal.sessions (
   payload jsonb NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS portal.users (
+  id text PRIMARY KEY,
+  email text UNIQUE,
+  password_hash text,
+  role text NOT NULL DEFAULT 'USER' CHECK (role IN ('USER', 'ADMIN')),
+  trust_id text UNIQUE,
+  display_name text NOT NULL,
+  suspended boolean NOT NULL DEFAULT false,
+  payload jsonb NOT NULL,
+  created_at timestamptz NOT NULL,
+  last_login_at timestamptz NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS portal.push_tokens (
+  user_id text PRIMARY KEY,
+  push_token text NOT NULL,
+  app_id text NOT NULL DEFAULT 'life_os',
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS finprove.schema_migrations (
   id text PRIMARY KEY,
   applied_at timestamptz NOT NULL DEFAULT now()
@@ -69,6 +89,8 @@ CREATE TABLE IF NOT EXISTS finprove.balances (
 
 INSERT INTO portal.schema_migrations (id) VALUES ('001_portal_core')
   ON CONFLICT (id) DO NOTHING;
+INSERT INTO portal.schema_migrations (id) VALUES ('002_local_users')
+  ON CONFLICT (id) DO NOTHING;
 INSERT INTO finprove.schema_migrations (id) VALUES ('001_finprove_ledger')
   ON CONFLICT (id) DO NOTHING;
 `;
@@ -84,10 +106,10 @@ export async function verifySchemas(client: { query: (sql: string) => Promise<{ 
   const tables = await client.query(`
     SELECT table_schema, table_name
     FROM information_schema.tables
-    WHERE (table_schema = 'portal' AND table_name IN ('snapshots', 'sessions'))
+    WHERE (table_schema = 'portal' AND table_name IN ('snapshots', 'sessions', 'users'))
        OR (table_schema = 'finprove' AND table_name IN ('intents', 'disbursements', 'balances'))
   `);
-  if (tables.rows.length < 5) {
+  if (tables.rows.length < 6) {
     throw new Error("schema verification failed: portal/finprove tables missing");
   }
 }

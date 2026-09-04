@@ -8,6 +8,7 @@ interface ImportMetaEnv {
   readonly VITE_TRUSTID_REDIRECT_URI?: string;
   readonly VITE_TRUSTID_SCOPES?: string;
   readonly VITE_TRUSTID_MODE?: string;
+  readonly VITE_ENABLE_TRUST_ID?: string;
 }
 
 interface ImportMeta {

@@ -7,6 +7,9 @@ test("migration DDL creates portal and finprove schemas", () => {
   assert.match(PORTAL_FINPROVE_DDL, /CREATE SCHEMA IF NOT EXISTS finprove/);
   assert.match(PORTAL_FINPROVE_DDL, /portal\.snapshots/);
   assert.match(PORTAL_FINPROVE_DDL, /portal\.sessions/);
+  assert.match(PORTAL_FINPROVE_DDL, /portal\.users/);
+  assert.match(PORTAL_FINPROVE_DDL, /portal\.push_tokens/);
+  assert.match(PORTAL_FINPROVE_DDL, /002_local_users/);
   assert.match(PORTAL_FINPROVE_DDL, /finprove\.intents/);
   assert.match(PORTAL_FINPROVE_DDL, /finprove\.disbursements/);
   assert.match(PORTAL_FINPROVE_DDL, /finprove\.balances/);

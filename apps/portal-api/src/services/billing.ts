@@ -2,6 +2,7 @@ import type { BillingChargePublic } from "@lifeos-portal/shared";
 import { getBusinessOs, getVertical } from "@lifeos-portal/shared";
 import { defaultFinproveEngine } from "@lifeos-portal/finprove";
 import { HttpError } from "../lib/http.js";
+import { identitySubject } from "../lib/local-auth.js";
 import type { PortalBilling, PortalStore, PortalUser } from "../store.js";
 
 export function toPublicBilling(row: PortalBilling): BillingChargePublic {
@@ -41,7 +42,7 @@ export async function checkoutVerticalLicense(opts: {
   }
 
   const intent = await defaultFinproveEngine.createIntent({
-    trustId: opts.user.trustId,
+    trustId: identitySubject(opts.user),
     amount: vertical.priceMonthlyMinor / 100,
     currency: vertical.currency,
     reference: `license:${opts.osId}:${opts.verticalId}:${opts.user.id}`,

@@ -1,0 +1,30 @@
+// Contract only — LifeOS persists via Fastify + portal.users, not a Prisma client.
+// trustId stays optional so existing rows survive reconnecting TrustID.
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model User {
+  id           String   @id
+  email        String?  @unique
+  passwordHash String?  @map("password_hash")
+  role         Role     @default(USER)
+  trustId      String?  @unique @map("trust_id")
+  displayName  String   @map("display_name")
+  suspended    Boolean  @default(false)
+  createdAt    DateTime @map("created_at")
+  lastLoginAt  DateTime @map("last_login_at")
+
+  @@map("users")
+}

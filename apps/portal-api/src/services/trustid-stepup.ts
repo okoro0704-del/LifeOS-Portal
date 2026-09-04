@@ -2,6 +2,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { config } from "../config.js";
 import { HttpError, httpJson } from "../lib/http.js";
 import { requirePlatformAdmin } from "../lib/auth.js";
+import { identitySubject, isTrustIdEnabled } from "../lib/local-auth.js";
 
 export type BiometricAuthContext = {
   trustId: string;
@@ -33,6 +34,16 @@ export async function validateBiometricIdentity(
 ): Promise<boolean> {
   if (!requirePlatformAdmin(req, reply)) return false;
 
+  if (!isTrustIdEnabled()) {
+    req.biometricAuth = {
+      trustId: identitySubject(req.portalUser!),
+      accessLevel: "master",
+      isMasterDevice: true,
+      verifiedAt: new Date().toISOString(),
+    };
+    return true;
+  }
+
   if (config.trustIdMode === "mock") {
     if (headerFlag(req, "x-trustid-biometric") !== "verified") {
       reply.code(401).send({
@@ -42,7 +53,7 @@ export async function validateBiometricIdentity(
       return false;
     }
     req.biometricAuth = {
-      trustId: req.portalUser!.trustId,
+      trustId: identitySubject(req.portalUser!),
       accessLevel: headerFlag(req, "x-trustid-master-device") === "bound" ? "master" : "standard",
       isMasterDevice: headerFlag(req, "x-trustid-master-device") === "bound",
       verifiedAt: new Date().toISOString(),
@@ -70,7 +81,7 @@ export async function validateBiometricIdentity(
       return false;
     }
     req.biometricAuth = {
-      trustId: result.trustId ?? req.portalUser!.trustId,
+      trustId: result.trustId ?? identitySubject(req.portalUser!),
       accessLevel: result.accessLevel === "master" ? "master" : "standard",
       isMasterDevice: Boolean(result.isMasterDevice),
       verifiedAt: new Date().toISOString(),
@@ -98,6 +109,7 @@ export async function checkMasterDeviceBinding(
     return false;
   }
   if (!(await validateBiometricIdentity(req, reply))) return false;
+  if (!isTrustIdEnabled()) return true;
 
   if (config.trustIdMode === "mock") {
     if (headerFlag(req, "x-trustid-master-device") !== "bound" || !req.biometricAuth?.isMasterDevice) {

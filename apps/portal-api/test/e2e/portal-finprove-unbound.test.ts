@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import type { FastifyInstance } from "fastify";
 
 process.env.NODE_ENV = "test";
+process.env.ENABLE_TRUST_ID = "true";
 process.env.TRUSTID_MODE = "mock";
 process.env.INSTALL_MODE = "local";
 process.env.GATEWAY_MODE = "remote";

@@ -11,6 +11,7 @@ import type {
   EscrowHold,
   InstallStatus,
   LaunchUrls,
+  PortalAccountRole,
   TenantDomain,
   TenantPortalAccess,
   TrustIdRole,
@@ -19,11 +20,15 @@ import { newId } from "./lib/crypto.js";
 
 export type PortalUser = {
   id: string;
-  trustId: string;
+  trustId: string | null;
+  email?: string | null;
+  passwordHash?: string | null;
+  role: PortalAccountRole;
   displayName: string;
   trustTier: number | null;
   identityStatus: string | null;
   roles: TrustIdRole[];
+  suspended?: boolean;
   createdAt: string;
   lastLoginAt: string;
 };
@@ -112,18 +117,37 @@ export type Snapshot = {
   dataZoneProvenance: DataZoneProvenance[];
   dataZoneTombstones: DataZoneTombstone[];
   dataZoneAudit: DataZoneAuditEvent[];
+  pushTokens: PortalPushToken[];
+};
+
+export type PortalPushToken = {
+  userId: string;
+  pushToken: string;
+  appId: string;
+  updatedAt: string;
 };
 
 export type PortalStore = {
   upsertUser(input: {
-    trustId: string;
+    trustId?: string | null;
+    email?: string | null;
+    passwordHash?: string | null;
+    role?: PortalAccountRole;
     displayName: string;
     trustTier: number | null;
     identityStatus: string | null;
     roles?: TrustIdRole[];
   }): PortalUser;
+  createLocalUser(input: {
+    email: string;
+    passwordHash: string;
+    displayName: string;
+    role?: PortalAccountRole;
+  }): PortalUser;
+  updateUser(id: string, patch: Partial<PortalUser>): PortalUser | undefined;
   getUser(id: string): PortalUser | undefined;
   getUserByTrustId(trustId: string): PortalUser | undefined;
+  getUserByEmail(email: string): PortalUser | undefined;
   listUsers(): PortalUser[];
   createSession(input: {
     tokenHash: string;
@@ -173,6 +197,8 @@ export type PortalStore = {
   listDataZoneTombstones(): DataZoneTombstone[];
   appendDataZoneAudit(input: Omit<DataZoneAuditEvent, "id" | "createdAt"> & { id?: string }): DataZoneAuditEvent;
   listDataZoneAudit(): DataZoneAuditEvent[];
+  upsertPushToken(input: PortalPushToken): PortalPushToken;
+  getPushToken(userId: string): PortalPushToken | undefined;
   flush(): Promise<void>;
   close(): Promise<void>;
 };
@@ -184,6 +210,26 @@ export function createStore(opts?: {
 }): PortalStore {
   const users = new Map<string, PortalUser>();
   const usersByTrust = new Map<string, string>();
+  const usersByEmail = new Map<string, string>();
+
+  function indexUser(user: PortalUser) {
+    if (user.trustId) usersByTrust.set(user.trustId, user.id);
+    if (user.email) usersByEmail.set(user.email.toLowerCase(), user.id);
+  }
+
+  function normalizeUser(u: PortalUser): PortalUser {
+    const role: PortalAccountRole =
+      u.role ?? (u.roles?.includes("platform_admin") ? "ADMIN" : "USER");
+    return {
+      ...u,
+      trustId: u.trustId || null,
+      email: u.email ?? null,
+      passwordHash: u.passwordHash ?? null,
+      role,
+      roles: u.roles?.length ? u.roles : role === "ADMIN" ? ["tenant", "platform_admin"] : ["tenant"],
+      suspended: Boolean(u.suspended),
+    };
+  }
   const sessions = new Map<string, PortalSession>();
   const installs = new Map<string, PortalInstall>();
   const billings = new Map<string, PortalBilling>();
@@ -196,6 +242,7 @@ export function createStore(opts?: {
   const dataZoneProvenance = new Map<string, DataZoneProvenance>();
   const dataZoneTombstones = new Map<string, DataZoneTombstone>();
   const dataZoneAudit = new Map<string, DataZoneAuditEvent>();
+  const pushTokens = new Map<string, PortalPushToken>();
   const persistPath = opts?.persistPath;
 
   function snapshot(): Snapshot {
@@ -213,6 +260,7 @@ export function createStore(opts?: {
       dataZoneProvenance: [...dataZoneProvenance.values()],
       dataZoneTombstones: [...dataZoneTombstones.values()],
       dataZoneAudit: [...dataZoneAudit.values()],
+      pushTokens: [...pushTokens.values()],
     };
   }
 
@@ -238,8 +286,9 @@ export function createStore(opts?: {
     try {
       const snap = bootSnap;
       for (const u of snap.users ?? []) {
-        users.set(u.id, { ...u, roles: u.roles?.length ? u.roles : ["tenant"] });
-        usersByTrust.set(u.trustId, u.id);
+        const next = normalizeUser(u);
+        users.set(next.id, next);
+        indexUser(next);
       }
       for (const s of snap.sessions ?? []) sessions.set(s.tokenHash, s);
       for (const i of snap.installs ?? []) installs.set(i.id, i);
@@ -253,6 +302,7 @@ export function createStore(opts?: {
       for (const p of snap.dataZoneProvenance ?? []) dataZoneProvenance.set(p.id, p);
       for (const t of snap.dataZoneTombstones ?? []) dataZoneTombstones.set(t.id, t);
       for (const a of snap.dataZoneAudit ?? []) dataZoneAudit.set(a.id, a);
+      for (const t of snap.pushTokens ?? []) pushTokens.set(t.userId, t);
     } catch {
       /* start empty */
     }
@@ -260,13 +310,23 @@ export function createStore(opts?: {
 
   return {
     upsertUser(input) {
-      const existingId = usersByTrust.get(input.trustId);
+      const email = input.email?.trim().toLowerCase() || null;
+      const existingId =
+        (input.trustId ? usersByTrust.get(input.trustId) : undefined) ??
+        (email ? usersByEmail.get(email) : undefined);
       const now = new Date().toISOString();
-      const roles: TrustIdRole[] = input.roles?.length ? input.roles : ["tenant"];
+      const role: PortalAccountRole =
+        input.role ?? (input.roles?.includes("platform_admin") ? "ADMIN" : "USER");
+      const roles: TrustIdRole[] =
+        input.roles?.length ? input.roles : role === "ADMIN" ? ["tenant", "platform_admin"] : ["tenant"];
       if (existingId) {
         const prev = users.get(existingId)!;
         const next: PortalUser = {
           ...prev,
+          trustId: input.trustId ?? prev.trustId,
+          email: email ?? prev.email,
+          passwordHash: input.passwordHash ?? prev.passwordHash,
+          role,
           displayName: input.displayName,
           trustTier: input.trustTier,
           identityStatus: input.identityStatus,
@@ -274,12 +334,16 @@ export function createStore(opts?: {
           lastLoginAt: now,
         };
         users.set(existingId, next);
+        indexUser(next);
         persist();
         return next;
       }
       const user: PortalUser = {
         id: newId("usr"),
-        trustId: input.trustId,
+        trustId: input.trustId ?? null,
+        email,
+        passwordHash: input.passwordHash ?? null,
+        role,
         displayName: input.displayName,
         trustTier: input.trustTier,
         identityStatus: input.identityStatus,
@@ -288,15 +352,53 @@ export function createStore(opts?: {
         lastLoginAt: now,
       };
       users.set(user.id, user);
-      usersByTrust.set(user.trustId, user.id);
+      indexUser(user);
       persist();
       return user;
+    },
+    createLocalUser(input) {
+      const email = input.email.trim().toLowerCase();
+      if (usersByEmail.has(email)) {
+        throw new Error("email_taken");
+      }
+      const now = new Date().toISOString();
+      const role = input.role ?? "USER";
+      const user: PortalUser = {
+        id: newId("usr"),
+        trustId: null,
+        email,
+        passwordHash: input.passwordHash,
+        role,
+        displayName: input.displayName,
+        trustTier: null,
+        identityStatus: "local",
+        roles: role === "ADMIN" ? ["tenant", "platform_admin"] : ["tenant"],
+        createdAt: now,
+        lastLoginAt: now,
+      };
+      users.set(user.id, user);
+      indexUser(user);
+      persist();
+      return user;
+    },
+    updateUser(id, patch) {
+      const prev = users.get(id);
+      if (!prev) return undefined;
+      const next = normalizeUser({ ...prev, ...patch, id: prev.id });
+      users.set(id, next);
+      indexUser(next);
+      persist();
+      return next;
     },
     getUser(id) {
       return users.get(id);
     },
     getUserByTrustId(trustId) {
       const id = usersByTrust.get(trustId);
+      return id ? users.get(id) : undefined;
+    },
+    getUserByEmail(email) {
+      const id = usersByEmail.get(email.trim().toLowerCase());
       return id ? users.get(id) : undefined;
     },
     listUsers() {
@@ -559,6 +661,19 @@ export function createStore(opts?: {
     },
     listDataZoneAudit() {
       return [...dataZoneAudit.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    },
+    upsertPushToken(input) {
+      const row: PortalPushToken = {
+        ...input,
+        appId: input.appId || "life_os",
+        updatedAt: input.updatedAt || new Date().toISOString(),
+      };
+      pushTokens.set(row.userId, row);
+      persist();
+      return row;
+    },
+    getPushToken(userId) {
+      return pushTokens.get(userId);
     },
     async flush() {
       persist();

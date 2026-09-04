@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { HttpError } from "../lib/http.js";
+import { identitySubject } from "../lib/local-auth.js";
 import type { PortalStore } from "../store.js";
 import { checkMasterDeviceBinding, validateBiometricIdentity } from "../services/trustid-stepup.js";
 import {
@@ -39,7 +40,7 @@ export async function registerDataZoneAdminRoutes(app: FastifyInstance, store: P
     const minted = mintDataZoneKey(store, {
       name: body.name,
       scopes: body.scopes,
-      ownerTrustId: req.portalUser!.trustId,
+      ownerTrustId: identitySubject(req.portalUser!),
     });
     return reply.code(201).send(minted);
   });
@@ -48,7 +49,7 @@ export async function registerDataZoneAdminRoutes(app: FastifyInstance, store: P
     if (!(await checkMasterDeviceBinding(req, reply))) return;
     const { id } = req.params as { id: string };
     try {
-      return { key: revokeDataZoneKey(store, id, req.portalUser!.trustId) };
+      return { key: revokeDataZoneKey(store, id, identitySubject(req.portalUser!)) };
     } catch (err) {
       return sendHttp(reply, err);
     }
@@ -70,7 +71,7 @@ export async function registerDataZoneAdminRoutes(app: FastifyInstance, store: P
       })
       .parse(req.body);
     return reply.code(201).send({
-      webhook: registerWebhook(store, { ...body, actorTrustId: req.portalUser!.trustId }),
+      webhook: registerWebhook(store, { ...body, actorTrustId: identitySubject(req.portalUser!) }),
     });
   });
 
@@ -92,7 +93,7 @@ export async function registerDataZoneAdminRoutes(app: FastifyInstance, store: P
       })
       .parse(req.body);
     return reply.code(201).send({
-      asset: recordProvenance(store, { ...body, actorTrustId: req.portalUser!.trustId }),
+      asset: recordProvenance(store, { ...body, actorTrustId: identitySubject(req.portalUser!) }),
     });
   });
 
@@ -104,7 +105,7 @@ export async function registerDataZoneAdminRoutes(app: FastifyInstance, store: P
       return revokeAsset(store, {
         assetId,
         platforms: body.platforms,
-        actorTrustId: req.portalUser!.trustId,
+        actorTrustId: identitySubject(req.portalUser!),
       });
     } catch (err) {
       return sendHttp(reply, err);

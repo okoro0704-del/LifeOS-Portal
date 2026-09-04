@@ -49,15 +49,20 @@ function boolish(value: string | undefined, fallback: boolean) {
 export function parsePortalServerEnv(source: NodeJS.ProcessEnv = process.env) {
   const nodeEnv = (source.NODE_ENV ?? "development") as "development" | "test" | "production";
   const production = nodeEnv === "production";
+  const enableTrustId = boolish(source.ENABLE_TRUST_ID, false);
+  const bypassTrustId = boolish(source.BYPASS_TRUST_ID, !production);
 
   const raw = {
     NODE_ENV: nodeEnv,
     GATEWAY_MODE: source.GATEWAY_MODE ?? (production ? undefined : "local"),
     DATAZONE_API_URL: source.DATAZONE_API_URL ?? (production ? undefined : "http://localhost:4200"),
-    TRUST_ID_API_URL: source.TRUST_ID_API_URL || source.TRUSTID_API || (production ? undefined : "http://localhost:8787"),
+    TRUST_ID_API_URL:
+      source.TRUST_ID_API_URL ||
+      source.TRUSTID_API ||
+      (enableTrustId ? (production ? undefined : "http://localhost:8787") : "https://trust-id.disabled.invalid"),
     FINPROVE_API_URL: defaultFinproveApiUrl(source, production),
     PORTAL_SECRET_KEY: source.PORTAL_SECRET_KEY || source.COOKIE_SECRET || (production ? undefined : "portal-dev-cookie-secret-change-me"),
-    TRUSTID_MODE: source.TRUSTID_MODE ?? (production ? undefined : "mock"),
+    TRUSTID_MODE: source.TRUSTID_MODE ?? (enableTrustId && production ? undefined : "mock"),
     CORS_ORIGINS: source.CORS_ORIGINS,
     PORTAL_DOMAIN: source.PORTAL_DOMAIN || source.NEXT_PUBLIC_PORTAL_DOMAIN,
     INTERNAL_PROVISION_TOKEN: source.INTERNAL_PROVISION_TOKEN ?? (production ? undefined : "dev-primitives-token"),
@@ -85,6 +90,7 @@ export function parsePortalServerEnv(source: NodeJS.ProcessEnv = process.env) {
     .superRefine((value, ctx) => {
       if (!production) return;
       for (const key of ["DATAZONE_API_URL", "TRUST_ID_API_URL", "FINPROVE_API_URL"] as const) {
+        if (key === "TRUST_ID_API_URL" && !enableTrustId) continue;
         try {
           const host = new URL(value[key]).hostname;
           if (host === "localhost" || host === "127.0.0.1") {
@@ -105,7 +111,7 @@ export function parsePortalServerEnv(source: NodeJS.ProcessEnv = process.env) {
           message: "refuses the development default secret",
         });
       }
-      if (value.TRUSTID_MODE === "mock") {
+      if (enableTrustId && value.TRUSTID_MODE === "mock") {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["TRUSTID_MODE"],
@@ -185,6 +191,12 @@ export function parsePortalServerEnv(source: NodeJS.ProcessEnv = process.env) {
         : (source.COOKIE_SECURE ?? "").toLowerCase() === "false"
           ? false
           : production,
+    enableTrustId,
+    bypassTrustId,
+    elfcomApiUrl: source.ELFCOM_API_URL ?? "",
+    elfcomBaasApiKey: source.ELFCOM_BAAS_API_KEY ?? "",
+    localAdminEmail: source.LOCAL_ADMIN_EMAIL ?? "",
+    localAdminPassword: source.LOCAL_ADMIN_PASSWORD ?? "",
     trustIdMode: parsed.data.TRUSTID_MODE,
     trustIdApi: parsed.data.TRUST_ID_API_URL,
     trustIdClientId: source.TRUSTID_CLIENT_ID ?? "lifeos_portal_public",

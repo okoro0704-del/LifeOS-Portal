@@ -93,4 +93,23 @@ test("local development still falls back to localhost Finprove", () => {
   });
   assert.equal(env.finproveApi, "http://localhost:4220");
   assert.equal(env.port, 8792);
+  assert.equal(env.enableTrustId, false);
+  assert.equal(env.bypassTrustId, true);
+});
+
+test("production accepts TrustID disabled without a live Trust ID URL", () => {
+  const env = parsePortalServerEnv({
+    NODE_ENV: "production",
+    GATEWAY_MODE: "production",
+    ENABLE_TRUST_ID: "false",
+    DATAZONE_API_URL: "https://datazone.getlifeos.app",
+    FINPROVE_API_URL: "https://finprove.getlifeos.app",
+    PORTAL_SECRET_KEY: "prod-portal-secret-key-32-chars-min",
+    PORTAL_DOMAIN: "https://portal.getlifeos.app",
+    INTERNAL_PROVISION_TOKEN: "prod-provision-token-not-default",
+    DATABASE_URL: "postgres://portal:portal@db.internal:5432/lifeos",
+  });
+  assert.equal(env.enableTrustId, false);
+  assert.equal(env.trustIdMode, "mock");
+  assert.match(env.trustIdApi, /disabled/);
 });

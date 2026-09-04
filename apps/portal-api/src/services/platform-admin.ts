@@ -1,5 +1,6 @@
 import { platformFeeMinor, type PlatformTenantRow, type RoutingEntry } from "@lifeos-portal/shared";
 import { hashSecret, randomToken } from "../lib/crypto.js";
+import { identitySubject } from "../lib/local-auth.js";
 import { HttpError } from "../lib/http.js";
 import { config } from "../config.js";
 import type { PortalStore } from "../store.js";
@@ -70,7 +71,7 @@ export function issueImpersonationToken(store: PortalStore, tenantId: string) {
   return {
     impersonationToken: rawToken,
     tenantId: install.distributorTenantId,
-    ownerTrustId: owner.trustId,
+    ownerTrustId: identitySubject(owner),
     expiresAt: expiresAt.toISOString(),
     businessPortalUrl: config.businessPortalUrl,
   };

@@ -24,6 +24,9 @@ import { registerPlatformAdminRoutes } from "./routes/platform-admin.js";
 import { registerGatewayRoutes } from "./routes/gateway.js";
 import { registerFinproveRoutes } from "./routes/finprove.js";
 import { registerDataZoneAdminRoutes } from "./routes/datazone-admin.js";
+import { registerUserAdminRoutes } from "./routes/users.js";
+import { registerPushRoutes } from "./routes/push.js";
+import { seedLocalAdmin } from "./lib/seed-admin.js";
 
 export type BuildAppOptions = {
   store?: PortalStore;
@@ -51,6 +54,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
           persistPath,
           databaseUrl: env.databaseUrl || undefined,
         }));
+  seedLocalAdmin(store);
   const distributor = opts.distributor ?? createDistributorClient();
   const hos = opts.hos ?? createHospitalityOsClient();
   const eco = opts.eco ?? createEcommerceOsClient();
@@ -96,6 +100,8 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   await registerOrganizationRoutes(app, store);
   await registerTenantRoutes(app, store, distributor);
   await registerPlatformAdminRoutes(app, store, distributor);
+  await registerUserAdminRoutes(app, store);
+  await registerPushRoutes(app, store);
   await registerFinproveRoutes(app);
   await registerGatewayRoutes(app);
   await registerDataZoneAdminRoutes(app, store);

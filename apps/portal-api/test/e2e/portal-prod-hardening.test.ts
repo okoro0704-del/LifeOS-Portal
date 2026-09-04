@@ -3,6 +3,8 @@
  * Injected store — does not open PostgreSQL.
  */
 process.env.NODE_ENV = "production";
+process.env.ENABLE_TRUST_ID = "true";
+process.env.BYPASS_TRUST_ID = "false";
 process.env.GATEWAY_MODE = "production";
 process.env.DATAZONE_API_URL = "https://datazone.getlifeos.app";
 process.env.TRUST_ID_API_URL = "https://trust.getlifeos.app";

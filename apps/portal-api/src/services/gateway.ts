@@ -30,7 +30,7 @@ export const GATEWAY_UPSTREAMS: GatewayUpstream[] = [
     baseUrl: config.trustIdApi,
     prefix: "/api/v1/trust-id",
     healthPath: "/health",
-    bound: true,
+    bound: config.enableTrustId,
   },
   {
     id: "finprove",
@@ -92,6 +92,9 @@ export function engineFromPath(url: string): GatewayEngineId | undefined {
 
 export async function probeUpstream(upstream: GatewayUpstream): Promise<GatewayUpstreamStatus> {
   if (!upstream.bound) {
+    if (upstream.id === "trust-id" && !config.enableTrustId) {
+      return { ...upstream, ok: true, latencyMs: 0, message: "disabled" };
+    }
     return { ...upstream, ok: false, latencyMs: null, message: unboundFor(upstream.id).message };
   }
   if (config.gatewayMode === "local") {

@@ -4,7 +4,7 @@ export function ChooseLanePage() {
   return (
     <div className="page">
       <header className="page-head">
-        <p className="eyebrow">after verification</p>
+        <p className="eyebrow">workspace</p>
         <h1>What do you want to run?</h1>
         <p className="lead">
           The Portal is the LifeOS control plane — not an app store. Specify Personal OS or

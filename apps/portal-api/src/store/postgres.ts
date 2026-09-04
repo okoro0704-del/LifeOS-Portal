@@ -28,7 +28,23 @@ export async function connectPortalDatabase(databaseUrl: string): Promise<Portal
       const result = await pool.query<{ payload: Snapshot }>(
         "SELECT payload FROM portal.snapshots WHERE id = 1",
       );
-      return result.rows[0]?.payload ?? null;
+      const snap = result.rows[0]?.payload ?? null;
+      if (!snap) return null;
+      if (!snap.pushTokens?.length) {
+        const tokens = await pool.query<{
+          user_id: string;
+          push_token: string;
+          app_id: string;
+          updated_at: Date;
+        }>("SELECT user_id, push_token, app_id, updated_at FROM portal.push_tokens");
+        snap.pushTokens = tokens.rows.map((row) => ({
+          userId: row.user_id,
+          pushToken: row.push_token,
+          appId: row.app_id,
+          updatedAt: new Date(row.updated_at).toISOString(),
+        }));
+      }
+      return snap;
     },
     async save(snap) {
       const client = await pool.connect();
@@ -40,6 +56,34 @@ export async function connectPortalDatabase(databaseUrl: string): Promise<Portal
            ON CONFLICT (id) DO UPDATE SET payload = EXCLUDED.payload, updated_at = now()`,
           [JSON.stringify(snap)],
         );
+        await client.query("DELETE FROM portal.users");
+        for (const user of snap.users) {
+          await client.query(
+            `INSERT INTO portal.users (
+              id, email, password_hash, role, trust_id, display_name, suspended, payload, created_at, last_login_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10)`,
+            [
+              user.id,
+              user.email ?? null,
+              user.passwordHash ?? null,
+              user.role ?? "USER",
+              user.trustId || null,
+              user.displayName,
+              Boolean(user.suspended),
+              JSON.stringify(user),
+              user.createdAt,
+              user.lastLoginAt,
+            ],
+          );
+        }
+        await client.query("DELETE FROM portal.push_tokens");
+        for (const token of snap.pushTokens ?? []) {
+          await client.query(
+            `INSERT INTO portal.push_tokens (user_id, push_token, app_id, updated_at)
+             VALUES ($1, $2, $3, $4)`,
+            [token.userId, token.pushToken, token.appId || "life_os", token.updatedAt],
+          );
+        }
         await client.query("DELETE FROM portal.sessions");
         for (const session of snap.sessions) {
           await client.query(

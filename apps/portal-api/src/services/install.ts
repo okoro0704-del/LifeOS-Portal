@@ -11,6 +11,7 @@ import {
 } from "@lifeos-portal/shared";
 import { config } from "../config.js";
 import { HttpError } from "../lib/http.js";
+import { identitySubject } from "../lib/local-auth.js";
 import { newId } from "../lib/crypto.js";
 import type { PortalInstall, PortalStore, PortalUser } from "../store.js";
 import type { DistributorClient } from "./distributor.js";
@@ -165,7 +166,7 @@ export async function installDomainOs(opts: {
 
   const row = opts.store.createInstall({
     ownerUserId: opts.user.id,
-    ownerTrustId: opts.user.trustId,
+    ownerTrustId: identitySubject(opts.user),
     appId: manifest.appId,
     osId,
     verticalId,
@@ -291,7 +292,7 @@ export async function installDomainOs(opts: {
     });
 
     await projectInstallToLifeOsShell({
-      trustId: opts.user.trustId,
+      trustId: identitySubject(opts.user),
       appId: osId,
       tenantId: tenantIdReady ?? boot.tenantId,
       displayName: opts.input.displayName,

@@ -4,8 +4,10 @@ import { createAuthClient } from "./auth-client";
 export const trustIdWeb = import.meta.env.VITE_TRUSTID_WEB ?? "http://localhost:5173";
 export const trustIdApi = import.meta.env.VITE_TRUSTID_API ?? "http://localhost:8787";
 export const portalApiBase = import.meta.env.VITE_PORTAL_API ?? "/api";
-export const trustIdMode =
-  import.meta.env.PROD || import.meta.env.VITE_TRUSTID_MODE === "remote"
+export const enableTrustId = import.meta.env.VITE_ENABLE_TRUST_ID !== "false";
+export const trustIdMode = !enableTrustId
+  ? "disabled"
+  : import.meta.env.PROD || import.meta.env.VITE_TRUSTID_MODE === "remote"
     ? "remote"
     : (import.meta.env.VITE_TRUSTID_MODE ?? "mock");
 
@@ -90,11 +92,74 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const portalApi = {
-  health: () => api<{ ok: boolean }>("/health"),
+  health: () => api<{ ok: boolean; service?: string }>("/health"),
+  readiness: async () => {
+    const headers = new Headers();
+    const token = getStoredSessionToken();
+    if (token) headers.set("X-Portal-Session", token);
+    const res = await fetch(`${portalApiBase}/api/v1/health`, { headers, credentials: "include" });
+    return (await res.json().catch(() => ({}))) as {
+      status?: string;
+      upstreams?: Record<string, string>;
+    };
+  },
   createSession: (accessToken: string) =>
     api<{ sessionToken: string; user: PortalUserPublic }>("/auth/session", {
       method: "POST",
       body: JSON.stringify({ accessToken }),
+    }),
+  login: (email: string, password: string) =>
+    api<{ sessionToken: string; user: PortalUserPublic }>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }),
+  register: (email: string, password: string, displayName?: string) =>
+    api<{ sessionToken: string; user: PortalUserPublic }>("/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ email, password, displayName }),
+    }),
+  updateProfile: (displayName: string) =>
+    api<{ user: PortalUserPublic }>("/auth/me", {
+      method: "PATCH",
+      body: JSON.stringify({ displayName }),
+    }),
+  adminUsers: () => api<{ users: PortalUserPublic[] }>("/v1/admin/users"),
+  adminSuspendUser: (id: string, suspended: boolean) =>
+    api<{ ok: boolean; user: PortalUserPublic }>(`/v1/admin/users/${encodeURIComponent(id)}/suspend`, {
+      method: "POST",
+      body: JSON.stringify({ suspended }),
+    }),
+  adminSetRole: (id: string, role: "USER" | "ADMIN") =>
+    api<{ ok: boolean; user: PortalUserPublic }>(`/v1/admin/users/${encodeURIComponent(id)}/role`, {
+      method: "POST",
+      body: JSON.stringify({ role }),
+    }),
+  gatewayStatus: () =>
+    api<{
+      service: string;
+      upstreams: Array<{
+        id: string;
+        displayName: string;
+        bound: boolean;
+        ok: boolean;
+        message?: string;
+        latencyMs?: number | null;
+      }>;
+    }>("/api/v1/gateway/status"),
+  dataZoneKeys: () => api<{ keys: import("@lifeos-portal/shared").DataZoneApiKey[] }>("/v1/admin/datazone/keys"),
+  mintDataZoneKey: (name: string) =>
+    api<{ apiKey: string; warning: string }>("/v1/admin/datazone/keys", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
+  dataZoneWebhooks: () =>
+    api<{ webhooks: import("@lifeos-portal/shared").DataZoneWebhook[] }>("/v1/admin/datazone/webhooks"),
+  dataZoneProvenance: () =>
+    api<{ assets: import("@lifeos-portal/shared").DataZoneProvenance[] }>("/v1/admin/datazone/provenance"),
+  registerPushToken: (pushToken: string) =>
+    api<{ ok: boolean; appId: string; userId: string; forwarded: boolean }>("/v1/push/register", {
+      method: "POST",
+      body: JSON.stringify({ pushToken }),
     }),
   devSession: (trustId?: string) => {
     if (trustIdMode !== "mock") {
