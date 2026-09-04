@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { PortalOrganization } from "@lifeos-portal/shared";
+import { tenantDeliverables, tenantLaunchUrls, type PortalOrganization } from "@lifeos-portal/shared";
 import { requireSession } from "../lib/auth.js";
 import type { PortalStore } from "../store.js";
 
@@ -22,7 +22,8 @@ export async function registerOrganizationRoutes(app: FastifyInstance, store: Po
         verticalId: i.verticalId,
         hosTenantId: i.hosTenantId,
         role: "owner",
-        launchUrls: i.launchUrls,
+        launchUrls: i.launchUrls ?? tenantLaunchUrls(i.subdomain, i.customDomain),
+        deliverables: tenantDeliverables(i.subdomain, i.customDomain),
       }));
     return { organizations: orgs };
   });

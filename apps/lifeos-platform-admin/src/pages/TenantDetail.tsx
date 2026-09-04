@@ -137,13 +137,13 @@ export function TenantDetailPage() {
             </tbody>
           </table>
 
-          <h2 className="section-title">Launch URLs</h2>
+          <h2 className="section-title">Deliverables</h2>
           <table className="data-table">
             <thead>
               <tr>
                 <th>Brand</th>
-                <th>Staff</th>
-                <th>Guest / storefront</th>
+                <th>Guest app</th>
+                <th>Admin dashboard</th>
               </tr>
             </thead>
             <tbody>
@@ -151,18 +151,18 @@ export function TenantDetailPage() {
                 <tr key={row.installId}>
                   <td>{row.displayName}</td>
                   <td>
-                    {row.staff || row.admin ? (
-                      <a href={row.staff || row.admin} target="_blank" rel="noreferrer">
-                        Open
+                    {row.guest || row.storefront ? (
+                      <a href={row.guest || row.storefront} target="_blank" rel="noreferrer">
+                        Open PWA
                       </a>
                     ) : (
                       "—"
                     )}
                   </td>
                   <td>
-                    {row.guest || row.storefront ? (
-                      <a href={row.guest || row.storefront} target="_blank" rel="noreferrer">
-                        Open
+                    {row.admin || row.staff ? (
+                      <a href={row.admin || row.staff} target="_blank" rel="noreferrer">
+                        Open PWA
                       </a>
                     ) : (
                       "—"

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ApiError, portalApi, type InstallRow } from "../lib/api";
+import { DeliverablesCard, deliverablesFor } from "../components/Deliverables";
 
 export function InstallDetailPage() {
   const { id } = useParams();
@@ -31,16 +32,19 @@ export function InstallDetailPage() {
     );
   }
 
+  const deliverables = deliverablesFor(row);
+
   return (
     <div className="page">
       <header className="page-head">
         <p className="eyebrow">{row.appId}</p>
-        <h1>{row.displayName}</h1>
+        <h1>{row.status === "ready" ? "Your apps are ready" : row.displayName}</h1>
         <p className="lead">
-          {row.verticalId} · {row.subdomain}.lifeos.app · {row.status}
+          {row.displayName} · {row.verticalId} · {row.subdomain}.lifeos.app · {row.status}
         </p>
       </header>
       {row.error ? <p className="banner-error">{row.error}</p> : null}
+      {row.status === "ready" && deliverables ? <DeliverablesCard deliverables={deliverables} /> : null}
       <dl className="meta">
         <div>
           <dt>{row.appId === "ecommerceos" ? "Tenant" : "HOS tenant"}</dt>
@@ -55,41 +59,6 @@ export function InstallDetailPage() {
           <dd>{row.modulesEnabled.join(", ")}</dd>
         </div>
       </dl>
-      {row.status === "ready" && (row.launchUrls || row.storefrontUrl) ? (
-        <div className="actions" data-testid="install-launch-links">
-          {row.storefrontUrl || row.launchUrls?.storefront ? (
-            <a
-              className="btn btn-primary"
-              href={row.storefrontUrl ?? row.launchUrls?.storefront}
-              target="_blank"
-              rel="noreferrer"
-              data-testid="open-storefront"
-            >
-              Open storefront
-            </a>
-          ) : null}
-          {row.adminConsoleUrl || row.launchUrls?.admin ? (
-            <a
-              className="btn btn-ghost"
-              href={row.adminConsoleUrl ?? row.launchUrls?.admin}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Open admin
-            </a>
-          ) : null}
-          {row.launchUrls?.staff && !row.adminConsoleUrl && !row.launchUrls.admin ? (
-            <a className="btn btn-primary" href={row.launchUrls.staff} target="_blank" rel="noreferrer">
-              Open staff
-            </a>
-          ) : null}
-          {row.launchUrls?.guest && !row.storefrontUrl && !row.launchUrls.storefront ? (
-            <a className="btn btn-ghost" href={row.launchUrls.guest} target="_blank" rel="noreferrer">
-              Open guest
-            </a>
-          ) : null}
-        </div>
-      ) : null}
     </div>
   );
 }

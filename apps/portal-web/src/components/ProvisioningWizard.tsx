@@ -373,7 +373,9 @@ export function ProvisioningWizard() {
             placeholder="harbor-market"
             data-testid="wizard-subdomain"
           />
-          <span className="hint">{subdomain || "subdomain"}.lifeos.app</span>
+          <span className="hint">
+            Guest app and admin dashboard will be handed on {(subdomain || "subdomain")}.lifeos.app
+          </span>
         </label>
         {ecommerceLive && hasPhysicalAddress ? (
           <>

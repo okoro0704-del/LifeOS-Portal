@@ -171,7 +171,10 @@ export function InstallVerticalPage() {
             pattern="^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
             required
           />
-          <span className="hint">{subdomain || "subdomain"}.lifeos.app</span>
+          <span className="hint">
+            After install you get a guest PWA and an installable admin dashboard on{" "}
+            {(subdomain || "subdomain")}.lifeos.app
+          </span>
         </label>
         {showShopAddress ? (
           <>

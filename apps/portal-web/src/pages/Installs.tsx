@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError, portalApi, type InstallRow } from "../lib/api";
+import { deliverablesFor } from "../components/Deliverables";
 
 export function InstallsPage() {
   const [rows, setRows] = useState<InstallRow[]>([]);
@@ -31,9 +32,24 @@ export function InstallsPage() {
               <Link to={`/app/installs/${row.id}`}>
                 <strong>{row.displayName}</strong>
                 <span className="muted">
-                  {row.verticalId} · {row.subdomain} · {row.status}
+                  {row.verticalId} · {row.subdomain}.lifeos.app · {row.status}
                 </span>
               </Link>
+              {row.status === "ready"
+                ? (() => {
+                    const apps = deliverablesFor(row);
+                    return apps ? (
+                      <span className="deliverable-links">
+                        <a href={apps.guestApp.url} target="_blank" rel="noreferrer">
+                          Guest app
+                        </a>
+                        <a href={apps.adminDashboard.url} target="_blank" rel="noreferrer">
+                          Admin dashboard
+                        </a>
+                      </span>
+                    ) : null;
+                  })()
+                : null}
             </li>
           ))}
         </ul>

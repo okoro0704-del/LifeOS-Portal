@@ -474,6 +474,20 @@ fieldset {
   gap: 0.75rem;
   flex-wrap: wrap;
 }
+.deliverables {
+  margin: 1.5rem 0 2rem;
+}
+.deliverable-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.45rem;
+}
+.deliverable-links a {
+  display: inline-flex;
+  color: var(--los-accent);
+  text-decoration: underline;
+}
 
 .banner-error {
   background: var(--los-danger-soft);

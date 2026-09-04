@@ -200,6 +200,25 @@ test("guest hotel install works when TrustID is off and distributor is remote", 
     assert.equal(res.statusCode, 201, res.body);
     assert.equal(res.json().install.status, "ready");
     assert.equal(res.json().install.verticalId, "hotel");
+    const install = res.json().install as {
+      deliverables: { hostname: string; guestApp: { url: string }; adminDashboard: { url: string } };
+    };
+    assert.equal(install.deliverables.hostname, `${subdomain}.lifeos.app`);
+    assert.equal(install.deliverables.guestApp.url, `https://${subdomain}.lifeos.app/`);
+    assert.equal(install.deliverables.adminDashboard.url, `https://${subdomain}.lifeos.app/admin`);
+
+    const guestApp = await local.inject({ method: "GET", url: `/t/${subdomain}` });
+    assert.equal(guestApp.statusCode, 200, guestApp.body);
+    assert.match(guestApp.body, /Guest app/);
+    assert.match(guestApp.headers["content-type"] ?? "", /text\/html/);
+
+    const adminApp = await local.inject({ method: "GET", url: `/t/${subdomain}/admin` });
+    assert.equal(adminApp.statusCode, 200, adminApp.body);
+    assert.match(adminApp.body, /Install this admin dashboard/);
+
+    const publicTenant = await local.inject({ method: "GET", url: `/public/tenants/${subdomain}` });
+    assert.equal(publicTenant.statusCode, 200, publicTenant.body);
+    assert.equal(publicTenant.json().tenant.subdomain, subdomain);
   } finally {
     await local.close();
   }

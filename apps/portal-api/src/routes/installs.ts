@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { InstallRecordPublic } from "@lifeos-portal/shared";
+import { tenantDeliverables, type InstallRecordPublic } from "@lifeos-portal/shared";
 import { requireSession } from "../lib/auth.js";
 import { HttpError } from "../lib/http.js";
 import type { PortalInstall, PortalStore } from "../store.js";
@@ -33,6 +33,7 @@ function toPublic(row: PortalInstall): InstallRecordPublic {
     enabledModules: row.enabledModules,
     seedApplied: row.seedApplied,
     launchUrls: row.launchUrls,
+    deliverables: tenantDeliverables(row.subdomain, row.customDomain),
     status: row.status,
     error: row.error,
     createdAt: row.createdAt,

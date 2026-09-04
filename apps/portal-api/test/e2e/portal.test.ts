@@ -196,6 +196,8 @@ test("POST /installs seeds a hotel vertical after Finprove checkout", async () =
       verticalId: string;
       modulesEnabled: string[];
       launchUrls: { staff: string; guest: string };
+      deliverables?: { guestApp: { url: string }; adminDashboard: { url: string } };
+      enabledModules?: string[];
       distributorTenantId: string;
     };
   };
@@ -209,6 +211,8 @@ test("POST /installs seeds a hotel vertical after Finprove checkout", async () =
     assert.ok(body.install.modulesEnabled.includes(m), `missing module ${m}`);
   }
   assert.match(body.install.launchUrls.staff, new RegExp(subdomain));
+  assert.equal(body.install.deliverables?.guestApp.url, `https://${subdomain}.lifeos.app/`);
+  assert.equal(body.install.deliverables?.adminDashboard.url, `https://${subdomain}.lifeos.app/admin`);
 
   const orgs = await app.inject({
     method: "GET",

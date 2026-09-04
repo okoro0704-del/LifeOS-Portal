@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import type { TenantDeliverables } from "@lifeos-portal/shared";
 import { ApiError, portalApi } from "../lib/api";
+import { deliverablesFor } from "../components/Deliverables";
 
 type Org = {
   organizationId: string;
@@ -8,6 +10,7 @@ type Org = {
   appId: string;
   role: string;
   launchUrls?: { staff?: string; guest?: string; storefront?: string; admin?: string };
+  deliverables?: TenantDeliverables;
 };
 
 export function OrganizationsPage() {
@@ -44,15 +47,19 @@ export function OrganizationsPage() {
               <span className="muted">
                 {org.appId} · {org.role}
               </span>
-                {org.launchUrls?.storefront ? (
-                  <a href={org.launchUrls.storefront} target="_blank" rel="noreferrer">
-                    Open storefront
-                  </a>
-                ) : org.launchUrls?.staff ? (
-                  <a href={org.launchUrls.staff} target="_blank" rel="noreferrer">
-                    Open staff
-                  </a>
-                ) : null}
+                {(() => {
+                  const apps = deliverablesFor(org);
+                  return apps ? (
+                    <span className="deliverable-links">
+                      <a href={apps.guestApp.url} target="_blank" rel="noreferrer">
+                        Guest app
+                      </a>
+                      <a href={apps.adminDashboard.url} target="_blank" rel="noreferrer">
+                        Admin dashboard
+                      </a>
+                    </span>
+                  ) : null;
+                })()}
             </li>
           ))}
         </ul>

@@ -20,6 +20,7 @@ import { registerBillingRoutes } from "./routes/billing.js";
 import { registerInstallRoutes } from "./routes/installs.js";
 import { registerOrganizationRoutes } from "./routes/organizations.js";
 import { registerTenantRoutes } from "./routes/tenant.js";
+import { registerTenantAppRoutes } from "./routes/tenant-apps.js";
 import { registerPlatformAdminRoutes } from "./routes/platform-admin.js";
 import { registerGatewayRoutes } from "./routes/gateway.js";
 import { registerFinproveRoutes } from "./routes/finprove.js";
@@ -99,6 +100,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   await registerInstallRoutes(app, store, distributor, hos, eco, tos);
   await registerOrganizationRoutes(app, store);
   await registerTenantRoutes(app, store, distributor);
+  await registerTenantAppRoutes(app, store);
   await registerPlatformAdminRoutes(app, store, distributor);
   await registerUserAdminRoutes(app, store);
   await registerPushRoutes(app, store);

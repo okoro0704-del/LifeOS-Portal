@@ -7,6 +7,7 @@ import {
   getVertical,
   modulesForInstall,
   suiteModulesForVertical,
+  tenantLaunchUrls,
   type InstallHospitalityInput,
 } from "@lifeos-portal/shared";
 import { config } from "../config.js";
@@ -260,12 +261,14 @@ export async function installDomainOs(opts: {
             });
 
     const tenantIdReady = provisioned.tenantId ?? provisioned.hosTenantId;
-    const storefrontUrl = provisioned.storefrontUrl ?? provisioned.launchUrls?.storefront;
-    const adminConsoleUrl = provisioned.adminConsoleUrl ?? provisioned.launchUrls?.admin;
-    const staffUrl =
-      provisioned.launchUrls?.staff ??
-      provisioned.launchUrls?.admin ??
-      `https://${subdomain}.lifeos.app/staff`;
+    const deliverableUrls = tenantLaunchUrls(subdomain, opts.input.customDomain);
+    const storefrontUrl = deliverableUrls.storefront;
+    const adminConsoleUrl = deliverableUrls.admin;
+    const staffUrl = deliverableUrls.staff;
+    const launchUrls = {
+      ...provisioned.launchUrls,
+      ...deliverableUrls,
+    };
 
     const ready = opts.store.updateInstall(row.id, {
       hosTenantId: tenantIdReady,
@@ -275,7 +278,7 @@ export async function installDomainOs(opts: {
       staffId: provisioned.staffId,
       modulesEnabled: provisioned.modulesEnabled,
       seedApplied: provisioned.seedApplied,
-      launchUrls: provisioned.launchUrls,
+      launchUrls,
       storefrontUrl,
       adminConsoleUrl,
       preset: installPreset,

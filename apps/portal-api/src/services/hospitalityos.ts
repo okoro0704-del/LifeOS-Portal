@@ -1,6 +1,7 @@
 import {
   HOSPITALITYOS_DEFAULT_MODULES,
   HOSPITALITYOS_MANIFEST,
+  tenantLaunchUrls,
   type HosProvisionResult,
 } from "@lifeos-portal/shared";
 import { config } from "../config.js";
@@ -32,10 +33,6 @@ export type HosClient = {
   provision(input: HosProvisionInput): Promise<HosProvisionResult>;
 };
 
-function launchUrl(template: string, subdomain: string) {
-  return template.replaceAll("{subdomain}", subdomain);
-}
-
 export function createLocalHospitalityOs(): HosClient {
   return {
     async provision(input) {
@@ -48,10 +45,7 @@ export function createLocalHospitalityOs(): HosClient {
         staffId: newId("stf"),
         modulesEnabled: modules,
         seedApplied: input.seed === "default",
-        launchUrls: {
-          staff: launchUrl(config.staffLaunchUrlTemplate, input.subdomain),
-          guest: launchUrl(config.guestLaunchUrlTemplate, input.subdomain),
-        },
+        launchUrls: tenantLaunchUrls(input.subdomain, input.customDomain),
       };
     },
   };

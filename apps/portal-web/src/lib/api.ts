@@ -206,6 +206,7 @@ export const portalApi = {
         hosTenantId?: string;
         role: string;
         launchUrls?: { staff?: string; guest?: string; storefront?: string; admin?: string };
+        deliverables?: InstallRow["deliverables"];
       }>;
     }>("/organizations"),
 };
@@ -241,6 +242,12 @@ export type InstallRow = {
   storefrontUrl?: string;
   adminConsoleUrl?: string;
   launchUrls?: { staff?: string; guest?: string; storefront?: string; admin?: string };
+  deliverables?: {
+    hostname: string;
+    guestApp: { url: string; kind: "web_pwa"; label: "Guest app" };
+    adminDashboard: { url: string; kind: "pwa"; installOnFirstVisit: true; label: "Admin dashboard" };
+  };
+  customDomain?: string;
   error?: string;
   createdAt: string;
 };

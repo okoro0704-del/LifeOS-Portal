@@ -61,7 +61,16 @@ export {
   type PortalAccountRole,
 } from "./auth.js";
 
-export { GUEST_PORTAL_ORIGIN, PLATFORM_ADMIN_ORIGIN } from "./urls.js";
+export {
+  GUEST_PORTAL_ORIGIN,
+  PLATFORM_ADMIN_ORIGIN,
+  TENANT_APP_ROOT_DOMAIN,
+  tenantAppHostname,
+  tenantDeliverables,
+  tenantLaunchUrls,
+  type TenantDeliverables,
+} from "./urls.js";
+
 
 export {
   PLATFORM_COMMISSION_BPS,

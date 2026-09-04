@@ -1,3 +1,7 @@
+import type { TenantDeliverables } from "./urls.js";
+
+export type { TenantDeliverables } from "./urls.js";
+
 export type InstallStatus =
   | "bootstrapping"
   | "awaiting_domain"
@@ -34,6 +38,7 @@ export type InstallRecordPublic = {
   enabledModules?: string[];
   seedApplied: boolean;
   launchUrls?: LaunchUrls;
+  deliverables?: TenantDeliverables;
   status: InstallStatus;
   error?: string;
   createdAt: string;
@@ -139,4 +144,5 @@ export type PortalOrganization = {
   hosTenantId?: string;
   role: string;
   launchUrls?: LaunchUrls;
+  deliverables?: TenantDeliverables;
 };
