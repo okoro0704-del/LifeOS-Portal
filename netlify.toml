@@ -1,4 +1,5 @@
-# This site is the unified LifeOS Portal (customer + admin), not Business Portal.
+# Guest portal on getlifeos.app (this site).
+# admin.getlifeos.app is proxied to the platform-admin Railway service.
 [build]
   command = "npm --workspace @lifeos-portal/web run build"
   publish = "apps/portal-web/dist"
@@ -6,13 +7,19 @@
 [build.environment]
   VITE_ENABLE_TRUST_ID = "false"
   VITE_BYPASS_AUTH_FOR_TESTING = "true"
-  VITE_DEFAULT_USER_ROLE = "ADMIN"
-  NEXT_PUBLIC_DEFAULT_USER_ROLE = "ADMIN"
+  VITE_DEFAULT_USER_ROLE = "USER"
+  NEXT_PUBLIC_DEFAULT_USER_ROLE = "USER"
   VITE_PORTAL_API = "https://gateway-production-c3f9.up.railway.app"
   VITE_TRUSTID_MODE = "mock"
 
-# React Router SPA fallback. Deep links (/app, /admin)
-# must rewrite to index.html instead of a Netlify 404.
+# Host-specific proxy must come before the SPA fallback.
+[[redirects]]
+  from = "https://admin.getlifeos.app/*"
+  to = "https://platform-admin-production-26aa.up.railway.app/:splat"
+  status = 200
+  force = true
+
+# React Router SPA fallback for the guest portal.
 [[redirects]]
   from = "/*"
   to = "/index.html"

@@ -79,7 +79,7 @@ export async function attachSession(req: FastifyRequest, store: PortalStore) {
     }
   }
   if (isGuestAuthEnabled()) {
-    req.portalUser = ensureGuestUser(store);
+    req.portalUser = ensureGuestUser(store, req.headers.origin ?? req.headers.referer);
   }
 }
 

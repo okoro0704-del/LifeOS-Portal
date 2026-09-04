@@ -1,4 +1,10 @@
-import { platformFeeMinor, type PlatformTenantRow, type RoutingEntry } from "@lifeos-portal/shared";
+import {
+  platformFeeMinor,
+  type PlatformBillingRow,
+  type PlatformTenantRow,
+  type PlatformVerticalRow,
+  type RoutingEntry,
+} from "@lifeos-portal/shared";
 import { hashSecret, randomToken } from "../lib/crypto.js";
 import { identitySubject } from "../lib/local-auth.js";
 import { HttpError } from "../lib/http.js";
@@ -35,6 +41,45 @@ export function searchTenants(store: PortalStore, q?: string): PlatformTenantRow
         createdAt: install.createdAt,
       };
     });
+}
+
+export function listPlatformBillings(store: PortalStore): PlatformBillingRow[] {
+  const installs = store.listAllInstalls();
+  return store.listBillings().map((row) => {
+    const install =
+      installs.find((item) => item.billingId === row.id) ??
+      installs.find((item) => item.ownerUserId === row.ownerUserId && item.verticalId === row.verticalId);
+    return {
+      id: row.id,
+      ownerUserId: row.ownerUserId,
+      tenantName: install?.displayName ?? "Uninstalled license",
+      subdomain: install?.subdomain ?? "",
+      osId: row.osId,
+      verticalId: row.verticalId,
+      amountMinor: row.amountMinor,
+      currency: row.currency,
+      status: row.status,
+      provider: row.provider,
+      providerRef: row.providerRef,
+      createdAt: row.createdAt,
+      paidAt: row.paidAt,
+    };
+  });
+}
+
+export function listPlatformVerticals(store: PortalStore): PlatformVerticalRow[] {
+  return store.listAllInstalls().map((install) => ({
+    installId: install.id,
+    tenantId: install.distributorTenantId,
+    displayName: install.displayName,
+    subdomain: install.subdomain,
+    osId: install.osId,
+    verticalId: install.verticalId,
+    status: install.suspended ? "suspended" : install.status,
+    suspended: Boolean(install.suspended),
+    modulesEnabled: install.modulesEnabled ?? install.enabledModules ?? [],
+    createdAt: install.createdAt,
+  }));
 }
 
 export function routingTable(store: PortalStore): RoutingEntry[] {

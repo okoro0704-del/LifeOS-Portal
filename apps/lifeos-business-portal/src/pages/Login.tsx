@@ -34,7 +34,7 @@ export function LoginPage() {
         <p className="brand-hero">
           LifeOS <span>Business</span>
         </p>
-        <p className="eyebrow">admin.getlifeos.app</p>
+        <p className="eyebrow">business.getlifeos.app</p>
         <h1>Sign in with TrustID</h1>
         <p className="lead">
           Your tenant dashboard is created automatically when you provision the first vertical.

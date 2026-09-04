@@ -5,7 +5,13 @@ import { checkMasterDeviceBinding } from "../services/trustid-stepup.js";
 import { HttpError } from "../lib/http.js";
 import type { PortalStore } from "../store.js";
 import type { DistributorClient } from "../services/distributor.js";
-import { issueImpersonationToken, routingTable, searchTenants } from "../services/platform-admin.js";
+import {
+  issueImpersonationToken,
+  listPlatformBillings,
+  listPlatformVerticals,
+  routingTable,
+  searchTenants,
+} from "../services/platform-admin.js";
 
 export async function registerPlatformAdminRoutes(
   app: FastifyInstance,
@@ -16,6 +22,16 @@ export async function registerPlatformAdminRoutes(
     if (!requirePlatformAdmin(req, reply)) return;
     const query = z.object({ q: z.string().optional() }).parse(req.query);
     return { tenants: searchTenants(store, query.q) };
+  });
+
+  app.get("/v1/admin/billings", async (req, reply) => {
+    if (!requirePlatformAdmin(req, reply)) return;
+    return { billings: listPlatformBillings(store) };
+  });
+
+  app.get("/v1/admin/verticals", async (req, reply) => {
+    if (!requirePlatformAdmin(req, reply)) return;
+    return { verticals: listPlatformVerticals(store) };
   });
 
   app.post("/v1/admin/tenants/:tenantId/suspend", async (req, reply) => {

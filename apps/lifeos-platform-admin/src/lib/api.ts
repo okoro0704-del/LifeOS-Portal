@@ -5,7 +5,9 @@ import {
   type DataZoneTombstone,
   type DataZoneWebhook,
   type GatewayUpstreamStatus,
+  type PlatformBillingRow,
   type PlatformTenantRow,
+  type PlatformVerticalRow,
   type PortalUserPublic,
   type RoutingEntry,
 } from "@lifeos-portal/shared";
@@ -14,8 +16,12 @@ import { createAuthClient } from "./auth-client";
 export const trustIdWeb = import.meta.env.VITE_TRUSTID_WEB ?? "http://localhost:5173";
 export const trustIdApi = import.meta.env.VITE_TRUSTID_API ?? "http://localhost:8787";
 export const portalApiBase = import.meta.env.VITE_PORTAL_API ?? "/api";
-export const trustIdMode =
-  import.meta.env.PROD || import.meta.env.VITE_TRUSTID_MODE === "remote"
+export const enableTrustId = import.meta.env.VITE_ENABLE_TRUST_ID !== "false";
+export const bypassAuthForTesting =
+  import.meta.env.VITE_BYPASS_AUTH_FOR_TESTING !== "false" && !enableTrustId;
+export const trustIdMode = !enableTrustId
+  ? "disabled"
+  : import.meta.env.PROD || import.meta.env.VITE_TRUSTID_MODE === "remote"
     ? "remote"
     : (import.meta.env.VITE_TRUSTID_MODE ?? "mock");
 
@@ -138,6 +144,8 @@ export const portalApi = {
   logout: () => api<{ ok: boolean }>("/auth/logout", { method: "POST" }),
   tenants: (q?: string) =>
     api<{ tenants: PlatformTenantRow[] }>(`/v1/admin/tenants${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  billings: () => api<{ billings: PlatformBillingRow[] }>("/v1/admin/billings"),
+  verticals: () => api<{ verticals: PlatformVerticalRow[] }>("/v1/admin/verticals"),
   suspend: (tenantId: string, suspended: boolean) =>
     api<{ ok: boolean }>(`/v1/admin/tenants/${encodeURIComponent(tenantId)}/suspend`, {
       method: "POST",

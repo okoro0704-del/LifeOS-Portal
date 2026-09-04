@@ -20,7 +20,7 @@ export function RequireAuth() {
         <div className="welcome-inner">
           <p className="eyebrow">restricted</p>
           <h1>Platform operator required</h1>
-          <p className="lead">This TrustID is not authorized for platform.getlifeos.app.</p>
+          <p className="lead">This account is not authorized for admin.getlifeos.app.</p>
         </div>
       </div>
     );

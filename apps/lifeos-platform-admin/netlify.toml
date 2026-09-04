@@ -1,0 +1,16 @@
+# Dedicated Netlify site for admin.getlifeos.app if not proxied from the guest site.
+[build]
+  command = "npm --workspace @lifeos-portal/platform-admin run build"
+  publish = "apps/lifeos-platform-admin/dist"
+
+[build.environment]
+  VITE_ENABLE_TRUST_ID = "false"
+  VITE_BYPASS_AUTH_FOR_TESTING = "true"
+  VITE_DEFAULT_USER_ROLE = "ADMIN"
+  VITE_PORTAL_API = "https://gateway-production-c3f9.up.railway.app"
+  VITE_TRUSTID_MODE = "mock"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

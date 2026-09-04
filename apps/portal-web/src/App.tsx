@@ -1,9 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./hooks/useAuth";
 import { RequireAuth } from "./components/RequireAuth";
-import { RequireAdmin } from "./components/RequireAdmin";
 import { AppShell } from "./components/AppShell";
-import { AdminShell } from "./components/AdminShell";
 import { WelcomePage } from "./pages/Welcome";
 import { LoginPage } from "./pages/Login";
 import { CallbackPage } from "./pages/Callback";
@@ -17,9 +15,6 @@ import { InstallsPage } from "./pages/Installs";
 import { InstallDetailPage } from "./pages/InstallDetail";
 import { OrganizationsPage } from "./pages/Organizations";
 import { ProfilePage } from "./pages/Profile";
-import { AdminMetricsPage } from "./pages/AdminMetrics";
-import { AdminUsersPage } from "./pages/AdminUsers";
-import { AdminDataZonePage } from "./pages/AdminDataZone";
 
 export function App() {
   return (
@@ -42,13 +37,6 @@ export function App() {
               <Route path="installs" element={<InstallsPage />} />
               <Route path="installs/:id" element={<InstallDetailPage />} />
               <Route path="organizations" element={<OrganizationsPage />} />
-            </Route>
-          </Route>
-          <Route element={<RequireAdmin />}>
-            <Route path="/admin" element={<AdminShell />}>
-              <Route index element={<AdminMetricsPage />} />
-              <Route path="users" element={<AdminUsersPage />} />
-              <Route path="datazone" element={<AdminDataZonePage />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

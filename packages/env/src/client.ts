@@ -8,6 +8,7 @@ import { EnvValidationError } from "./server.js";
  */
 export const clientEnvSchema = z.object({
   VITE_PORTAL_API: z.string().min(1).optional(),
+  VITE_PLATFORM_ADMIN_URL: z.string().url().optional(),
   VITE_GATEWAY_URL: z.string().url().optional(),
   VITE_TRUSTID_API: z.string().url().optional(),
   VITE_TRUSTID_WEB: z.string().url().optional(),

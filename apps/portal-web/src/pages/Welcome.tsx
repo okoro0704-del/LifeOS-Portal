@@ -9,26 +9,21 @@ export function WelcomePage() {
         <p className="brand-hero">
           LifeOS <span>Portal</span>
         </p>
-        <h1>License a domain OS. Run the vertical you actually operate.</h1>
+        <h1>Set up your business. Name the brand. Install your vertical.</h1>
         <p className="lead">
-          HospitalityOS (hotels, dining, gyms, and the rest), ServiceOS, ECommerceOS, and
-          TransportationOS. Other shells are planned — they are not installable here yet.
+          HospitalityOS, ServiceOS, ECommerceOS, and TransportationOS. Pick what you run, fill in
+          the brand, and install it.
         </p>
         <div className="actions">
           {bypassAuthForTesting ? (
             <Link className="btn btn-primary" to="/app">
-              Explore portal
+              Set up your business
             </Link>
           ) : (
             <Link className="btn btn-primary" to="/login">
               Sign in
             </Link>
           )}
-          {bypassAuthForTesting ? (
-            <Link className="linkish" to="/admin">
-              Admin dashboard
-            </Link>
-          ) : null}
         </div>
       </div>
     </div>

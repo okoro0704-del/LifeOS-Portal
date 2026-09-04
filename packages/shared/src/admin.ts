@@ -130,6 +130,35 @@ export type RoutingEntry = {
   cacheFlushedAt?: string;
 };
 
+export type PlatformBillingRow = {
+  id: string;
+  ownerUserId: string;
+  tenantName: string;
+  subdomain: string;
+  osId: string;
+  verticalId: string;
+  amountMinor: number;
+  currency: string;
+  status: string;
+  provider: "finprove";
+  providerRef?: string;
+  createdAt: string;
+  paidAt?: string;
+};
+
+export type PlatformVerticalRow = {
+  installId: string;
+  tenantId: string;
+  displayName: string;
+  subdomain: string;
+  osId: string;
+  verticalId: string;
+  status: string;
+  suspended: boolean;
+  modulesEnabled: string[];
+  createdAt: string;
+};
+
 export type PlatformFinanceSummary = {
   currency: string;
   totalGmvMinor: number;

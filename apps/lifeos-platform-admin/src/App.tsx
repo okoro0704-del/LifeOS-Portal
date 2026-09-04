@@ -5,11 +5,8 @@ import { AppShell } from "./components/AppShell";
 import { LoginPage } from "./pages/Login";
 import { CallbackPage } from "./pages/Callback";
 import { TenantsPage } from "./pages/Tenants";
-import { RoutingPage } from "./pages/Routing";
-import { GatewayPage } from "./pages/Gateway";
-import { DataZoneKeysPage } from "./pages/DataZoneKeys";
-import { DataZoneRevocationPage } from "./pages/DataZoneRevocation";
-import { DataZoneProvenancePage } from "./pages/DataZoneProvenance";
+import { BillingsPage } from "./pages/Billings";
+import { VerticalsPage } from "./pages/Verticals";
 
 export function App() {
   return (
@@ -21,11 +18,8 @@ export function App() {
           <Route element={<RequireAuth />}>
             <Route element={<AppShell />}>
               <Route path="/admin/tenants" element={<TenantsPage />} />
-              <Route path="/admin/routing" element={<RoutingPage />} />
-              <Route path="/admin/gateway" element={<GatewayPage />} />
-              <Route path="/admin/datazone/keys" element={<DataZoneKeysPage />} />
-              <Route path="/admin/datazone/revocation" element={<DataZoneRevocationPage />} />
-              <Route path="/admin/datazone/provenance" element={<DataZoneProvenancePage />} />
+              <Route path="/admin/billings" element={<BillingsPage />} />
+              <Route path="/admin/verticals" element={<VerticalsPage />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/admin/tenants" replace />} />

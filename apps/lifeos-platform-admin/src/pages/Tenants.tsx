@@ -6,7 +6,6 @@ export function TenantsPage() {
   const [tenants, setTenants] = useState<PlatformTenantRow[]>([]);
   const [q, setQ] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
 
   async function load(search = q) {
     try {
@@ -37,12 +36,11 @@ export function TenantsPage() {
   return (
     <div className="page marketplace">
       <header className="page-head">
-        <p className="eyebrow">Global matrix</p>
+        <p className="eyebrow">Admin</p>
         <h1>Tenants</h1>
-        <p className="lead">Provisioned tenants, owner Trust IDs, active verticals, and monthly GMV.</p>
+        <p className="lead">Directory of provisioned businesses. Suspend or restore a tenant.</p>
       </header>
       {error ? <p className="banner-error">{error}</p> : null}
-      {note ? <p className="muted">{note}</p> : null}
       <form className="marketplace-search" onSubmit={(e) => void onSearch(e)}>
         <label className="marketplace-search-label" htmlFor="tenant-search">
           Search directory
@@ -86,17 +84,6 @@ export function TenantsPage() {
                   onClick={() => void portalApi.suspend(tenant.tenantId, !tenant.suspended).then(() => load())}
                 >
                   {tenant.suspended ? "Restore" : "Suspend"}
-                </button>
-                <button
-                  className="btn btn-ghost"
-                  type="button"
-                  onClick={() =>
-                    void portalApi.impersonate(tenant.tenantId).then((res) => {
-                      setNote(`Support token for ${res.ownerTrustId} issued. Open ${res.businessPortalUrl}.`);
-                    })
-                  }
-                >
-                  Impersonate
                 </button>
               </td>
             </tr>

@@ -8,7 +8,15 @@ import {
   type ReactNode,
 } from "react";
 import type { PortalUserPublic } from "@lifeos-portal/shared";
-import { ApiError, cacheUser, getCachedUser, getStoredSessionToken, portalApi, storeSessionToken } from "../lib/api";
+import {
+  ApiError,
+  bypassAuthForTesting,
+  cacheUser,
+  getCachedUser,
+  getStoredSessionToken,
+  portalApi,
+  storeSessionToken,
+} from "../lib/api";
 
 type AuthState = {
   user: PortalUserPublic | null;
@@ -27,7 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
-    if (!getStoredSessionToken()) {
+    if (!getStoredSessionToken() && !bypassAuthForTesting) {
       cacheUser(null);
       setUser(null);
       setLoading(false);

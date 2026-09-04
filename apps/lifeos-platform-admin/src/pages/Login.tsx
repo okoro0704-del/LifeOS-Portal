@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { authClient, portalApi, storeSessionToken, trustIdMode, trustIdWeb } from "../lib/api";
+import { authClient, bypassAuthForTesting, portalApi, storeSessionToken, trustIdMode, trustIdWeb } from "../lib/api";
 import { useAuth } from "../hooks/useAuth";
 
 export function LoginPage() {
@@ -34,11 +34,15 @@ export function LoginPage() {
         <p className="brand-hero">
           LifeOS <span>Platform</span>
         </p>
-        <p className="eyebrow">platform.getlifeos.app</p>
+        <p className="eyebrow">admin.getlifeos.app</p>
         <h1>Operator sign-in</h1>
-        <p className="lead">TrustID RBAC gates this surface. Tenant tokens are rejected.</p>
+        <p className="lead">Manage tenants, billings, and their verticals.</p>
         {error ? <p className="banner-error">{error}</p> : null}
-        {trustIdMode === "mock" ? (
+        {bypassAuthForTesting ? (
+          <button className="btn btn-primary" disabled={busy} onClick={() => navigate("/admin/tenants")}>
+            Open platform admin
+          </button>
+        ) : trustIdMode === "mock" ? (
           <button className="btn btn-primary" disabled={busy} onClick={() => void mockEnter()}>
             {busy ? "Entering…" : "Enter as platform operator"}
           </button>
@@ -54,7 +58,7 @@ export function LoginPage() {
             Continue with TrustID
           </button>
         )}
-        {trustIdMode !== "mock" ? (
+        {!bypassAuthForTesting && trustIdMode !== "mock" && trustIdMode !== "disabled" ? (
           <a className="muted small" href={`${trustIdWeb}/register?source=platform-admin`}>
             TrustID
           </a>

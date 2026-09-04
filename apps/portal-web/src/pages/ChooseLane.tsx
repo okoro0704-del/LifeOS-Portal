@@ -7,8 +7,7 @@ export function ChooseLanePage() {
         <p className="eyebrow">workspace</p>
         <h1>What do you want to run?</h1>
         <p className="lead">
-          The Portal is the LifeOS control plane — not an app store. Specify Personal OS or
-          Business OS.
+          Choose the OS you operate, then name the brand and install its vertical.
         </p>
       </header>
       <div className="cards cards--choice">

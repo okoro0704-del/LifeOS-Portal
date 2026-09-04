@@ -14,7 +14,7 @@ export function LoginPage() {
   const [displayName, setDisplayName] = useState("");
 
   useEffect(() => {
-    if (user) navigate(user.role === "ADMIN" ? "/admin" : "/app", { replace: true });
+    if (user) navigate("/app", { replace: true });
   }, [user, navigate]);
 
   async function mockEnter() {
@@ -42,7 +42,7 @@ export function LoginPage() {
           : await portalApi.login(email, password);
       storeSessionToken(data.sessionToken);
       setSession(data.sessionToken, data.user);
-      navigate(data.user.role === "ADMIN" ? "/admin" : "/app", { replace: true });
+      navigate("/app", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-in failed.");
       setBusy(false);

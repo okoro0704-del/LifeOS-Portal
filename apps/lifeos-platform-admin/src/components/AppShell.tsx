@@ -11,14 +11,11 @@ export function AppShell() {
         </p>
         <nav>
           <NavLink to="/admin/tenants">Tenants</NavLink>
-          <NavLink to="/admin/routing">Routing</NavLink>
-          <NavLink to="/admin/gateway">Gateway</NavLink>
-          <NavLink to="/admin/datazone/keys">Data Zone keys</NavLink>
-          <NavLink to="/admin/datazone/revocation">Revocation</NavLink>
-          <NavLink to="/admin/datazone/provenance">Provenance</NavLink>
+          <NavLink to="/admin/billings">Billings</NavLink>
+          <NavLink to="/admin/verticals">Verticals</NavLink>
         </nav>
         <div className="sidebar-foot">
-          <p className="mono muted small">{user?.trustId}</p>
+          <p className="mono muted small">{user?.email || user?.trustId}</p>
           <button type="button" className="linkish" onClick={() => void logout()}>
             Sign out
           </button>

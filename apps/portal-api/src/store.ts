@@ -166,6 +166,7 @@ export type PortalStore = {
   listInstallsByOwner(userId: string): PortalInstall[];
   listAllInstalls(): PortalInstall[];
   createBilling(input: Omit<PortalBilling, "id" | "createdAt"> & { id?: string }): PortalBilling;
+  listBillings(): PortalBilling[];
   getBilling(id: string): PortalBilling | undefined;
   updateBilling(id: string, patch: Partial<PortalBilling>): PortalBilling | undefined;
   grantTenantPortalAccess(input: Omit<TenantPortalAccess, "granted">): TenantPortalAccess;
@@ -482,6 +483,9 @@ export function createStore(opts?: {
       billings.set(row.id, row);
       persist();
       return row;
+    },
+    listBillings() {
+      return [...billings.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     },
     getBilling(id) {
       return billings.get(id);

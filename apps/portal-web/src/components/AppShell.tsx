@@ -17,9 +17,6 @@ export function AppShell() {
           <NavLink to="/app/business">Business OS</NavLink>
           <NavLink to="/app/installs">Installs</NavLink>
           <NavLink to="/app/organizations">Organizations</NavLink>
-          {user?.role === "ADMIN" || user?.roles?.includes("platform_admin") ? (
-            <NavLink to="/admin">Admin</NavLink>
-          ) : null}
         </nav>
         <div className="sidebar-foot">
           <p className="mono muted small">{user?.email || user?.trustId}</p>

@@ -61,6 +61,8 @@ export {
   type PortalAccountRole,
 } from "./auth.js";
 
+export { GUEST_PORTAL_ORIGIN, PLATFORM_ADMIN_ORIGIN } from "./urls.js";
+
 export {
   PLATFORM_COMMISSION_BPS,
   GMV_FROM_LICENSE_MULTIPLIER,
@@ -77,6 +79,8 @@ export {
   type EscrowHold,
   type TenantFinance,
   type PlatformTenantRow,
+  type PlatformBillingRow,
+  type PlatformVerticalRow,
   type RoutingEntry,
   type PlatformFinanceSummary,
 } from "./admin.js";

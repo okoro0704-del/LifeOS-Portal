@@ -63,8 +63,7 @@ export function Marketplace() {
         <p className="eyebrow">Business OS marketplace</p>
         <h1>Find a vertical</h1>
         <p className="lead">
-          Search individual businesses and pre-configured bundles, then install. Build a custom
-          mix only if none of these fit.
+          Find the vertical you run, set the brand name in setup, then install it on your domain.
         </p>
       </header>
 
