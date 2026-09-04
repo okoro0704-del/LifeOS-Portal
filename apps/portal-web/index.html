@@ -13,6 +13,16 @@
       rel="stylesheet"
     />
     <title>LifeOS Portal</title>
+    <script>
+      if (location.hostname === "admin.getlifeos.app") {
+        location.replace(
+          "https://platform-admin-production-26aa.up.railway.app" +
+            location.pathname +
+            location.search +
+            location.hash,
+        );
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

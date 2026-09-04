@@ -203,9 +203,12 @@ test("guest hotel install works when TrustID is off and distributor is remote", 
     const install = res.json().install as {
       deliverables: { hostname: string; guestApp: { url: string }; adminDashboard: { url: string } };
     };
-    assert.equal(install.deliverables.hostname, `${subdomain}.lifeos.app`);
-    assert.equal(install.deliverables.guestApp.url, `https://${subdomain}.lifeos.app/`);
-    assert.equal(install.deliverables.adminDashboard.url, `https://${subdomain}.lifeos.app/admin`);
+    assert.equal(install.deliverables.hostname, "hospitality.getlifeos.app");
+    assert.equal(install.deliverables.guestApp.url, `https://hospitality.getlifeos.app/?tenant=${subdomain}`);
+    assert.equal(
+      install.deliverables.adminDashboard.url,
+      `https://hospitality.getlifeos.app/admin?tenant=${subdomain}`,
+    );
 
     const guestApp = await local.inject({ method: "GET", url: `/t/${subdomain}` });
     assert.equal(guestApp.statusCode, 200, guestApp.body);

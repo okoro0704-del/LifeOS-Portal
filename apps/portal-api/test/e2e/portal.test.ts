@@ -211,8 +211,11 @@ test("POST /installs seeds a hotel vertical after Finprove checkout", async () =
     assert.ok(body.install.modulesEnabled.includes(m), `missing module ${m}`);
   }
   assert.match(body.install.launchUrls.staff, new RegExp(subdomain));
-  assert.equal(body.install.deliverables?.guestApp.url, `https://${subdomain}.lifeos.app/`);
-  assert.equal(body.install.deliverables?.adminDashboard.url, `https://${subdomain}.lifeos.app/admin`);
+  assert.equal(body.install.deliverables?.guestApp.url, `https://hospitality.getlifeos.app/?tenant=${subdomain}`);
+  assert.equal(
+    body.install.deliverables?.adminDashboard.url,
+    `https://hospitality.getlifeos.app/admin?tenant=${subdomain}`,
+  );
 
   const orgs = await app.inject({
     method: "GET",

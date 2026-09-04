@@ -261,7 +261,7 @@ export async function installDomainOs(opts: {
             });
 
     const tenantIdReady = provisioned.tenantId ?? provisioned.hosTenantId;
-    const deliverableUrls = tenantLaunchUrls(subdomain, opts.input.customDomain);
+    const deliverableUrls = tenantLaunchUrls(subdomain, opts.input.customDomain, osId);
     const storefrontUrl = deliverableUrls.storefront;
     const adminConsoleUrl = deliverableUrls.admin;
     const staffUrl = deliverableUrls.staff;

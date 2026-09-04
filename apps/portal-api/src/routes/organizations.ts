@@ -22,8 +22,8 @@ export async function registerOrganizationRoutes(app: FastifyInstance, store: Po
         verticalId: i.verticalId,
         hosTenantId: i.hosTenantId,
         role: "owner",
-        launchUrls: i.launchUrls ?? tenantLaunchUrls(i.subdomain, i.customDomain),
-        deliverables: tenantDeliverables(i.subdomain, i.customDomain),
+        launchUrls: i.launchUrls ?? tenantLaunchUrls(i.subdomain, i.customDomain, i.osId),
+        deliverables: tenantDeliverables(i.subdomain, i.customDomain, i.osId),
       }));
     return { organizations: orgs };
   });

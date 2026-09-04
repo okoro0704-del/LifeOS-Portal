@@ -13,6 +13,8 @@
   VITE_TRUSTID_MODE = "mock"
 
 # Host-specific proxy must come before the SPA fallback.
+# Also listed first in apps/portal-web/public/_redirects so the publish
+# directory cannot override this with /* -> /index.html.
 [[redirects]]
   from = "https://admin.getlifeos.app/*"
   to = "https://platform-admin-production-26aa.up.railway.app/:splat"

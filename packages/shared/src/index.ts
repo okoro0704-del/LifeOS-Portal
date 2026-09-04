@@ -64,6 +64,7 @@ export {
 export {
   GUEST_PORTAL_ORIGIN,
   PLATFORM_ADMIN_ORIGIN,
+  HOSPITALITY_ORIGIN,
   TENANT_APP_ROOT_DOMAIN,
   tenantAppHostname,
   tenantDeliverables,

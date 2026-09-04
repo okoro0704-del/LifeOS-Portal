@@ -34,7 +34,7 @@ export function tenantSubdomainFromHost(hostHeader?: string) {
 }
 
 export function toPublicTenantApp(row: PortalInstall): PublicTenantApp {
-  const deliverables = tenantDeliverables(row.subdomain, row.customDomain);
+  const deliverables = tenantDeliverables(row.subdomain, row.customDomain, row.osId);
   return {
     subdomain: row.subdomain,
     displayName: row.displayName,

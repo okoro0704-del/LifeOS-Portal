@@ -7,11 +7,12 @@ type LaunchUrls = { staff?: string; guest?: string; storefront?: string; admin?:
 export function deliverablesFor(input: {
   subdomain?: string;
   customDomain?: string;
+  osId?: string;
   deliverables?: TenantDeliverables;
   launchUrls?: LaunchUrls;
 }) {
   if (input.deliverables) return input.deliverables;
-  if (input.subdomain) return tenantDeliverables(input.subdomain, input.customDomain);
+  if (input.subdomain) return tenantDeliverables(input.subdomain, input.customDomain, input.osId);
   if (input.launchUrls?.guest || input.launchUrls?.admin) {
     const guest = input.launchUrls.guest ?? input.launchUrls.storefront ?? "";
     const admin = input.launchUrls.admin ?? input.launchUrls.staff ?? "";
