@@ -1,3 +1,18 @@
+# This site is the unified LifeOS Portal (customer + admin), not Business Portal.
+[build]
+  command = "npm --workspace @lifeos-portal/web run build"
+  publish = "apps/portal-web/dist"
+
+[build.environment]
+  VITE_ENABLE_TRUST_ID = "false"
+  VITE_BYPASS_AUTH_FOR_TESTING = "true"
+  VITE_ALLOW_GUEST_DOWNLOADS = "true"
+  VITE_DEFAULT_USER_ROLE = "ADMIN"
+  NEXT_PUBLIC_ALLOW_GUEST_DOWNLOADS = "true"
+  NEXT_PUBLIC_DEFAULT_USER_ROLE = "ADMIN"
+  VITE_PORTAL_API = "https://gateway-production-c3f9.up.railway.app"
+  VITE_TRUSTID_MODE = "mock"
+
 # React Router SPA fallback. Deep links (/app, /admin, /downloads)
 # must rewrite to index.html instead of a Netlify 404.
 [[redirects]]
