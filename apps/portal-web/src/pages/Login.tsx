@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
-import { authClient, enableTrustId, portalApi, storeSessionToken, trustIdMode, trustIdWeb } from "../lib/api";
+import { Link, useNavigate } from "react-router-dom";
+import { authClient, bypassAuthForTesting, enableTrustId, portalApi, storeSessionToken, trustIdMode, trustIdWeb } from "../lib/api";
 import { useAuth } from "../hooks/useAuth";
 
 export function LoginPage() {
@@ -113,6 +113,11 @@ export function LoginPage() {
             Continue with TrustID
           </button>
         )}
+        {bypassAuthForTesting ? (
+          <Link className="muted small" to="/app">
+            Continue as Ecosystem Tester
+          </Link>
+        ) : null}
         {enableTrustId && trustIdMode !== "mock" ? (
           <a className="muted small" href={`${trustIdWeb}/register?source=portal`}>
             Create TrustID

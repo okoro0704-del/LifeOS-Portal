@@ -8,10 +8,12 @@ import {
   PORTAL_LANES,
 } from "@lifeos-portal/shared";
 import { requireSession } from "../lib/auth.js";
+import { isGuestAuthEnabled } from "../lib/guest-auth.js";
+import { config } from "../config.js";
 
 export async function registerCatalogRoutes(app: FastifyInstance) {
   app.get("/catalog", async (req, reply) => {
-    if (!requireSession(req, reply)) return;
+    if (!isGuestAuthEnabled() && config.enableTrustId && !requireSession(req, reply)) return;
     return {
       lanes: PORTAL_LANES,
       businessOs: BUSINESS_OS_CATALOG,

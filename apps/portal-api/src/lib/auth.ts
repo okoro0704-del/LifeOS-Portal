@@ -4,6 +4,7 @@ import type { AuthStatus, PortalUserPublic, TrustIdRole } from "@lifeos-portal/s
 import { config } from "../config.js";
 import { hashSecret } from "./crypto.js";
 import { accountRoleFromRoles } from "./local-auth.js";
+import { ensureGuestUser, isGuestAuthEnabled } from "./guest-auth.js";
 import type { PortalStore, PortalUser } from "../store.js";
 
 declare module "fastify" {
@@ -67,14 +68,19 @@ export function extractSessionToken(req: FastifyRequest): string | null {
 
 export async function attachSession(req: FastifyRequest, store: PortalStore) {
   const token = extractSessionToken(req);
-  if (!token) return;
-  const session = store.getSessionByTokenHash(hashSecret(token));
-  if (!session) return;
-  const user = store.getUser(session.userId);
-  if (!user || user.suspended) return;
-  req.portalUser = user;
-  req.portalSessionToken = token;
-  req.trustIdAccessToken = session.trustIdAccessToken;
+  if (token) {
+    const session = store.getSessionByTokenHash(hashSecret(token));
+    const user = session ? store.getUser(session.userId) : undefined;
+    if (user && !user.suspended) {
+      req.portalUser = user;
+      req.portalSessionToken = token;
+      req.trustIdAccessToken = session?.trustIdAccessToken;
+      return;
+    }
+  }
+  if (isGuestAuthEnabled()) {
+    req.portalUser = ensureGuestUser(store);
+  }
 }
 
 export function requireSession(req: FastifyRequest, reply: FastifyReply) {

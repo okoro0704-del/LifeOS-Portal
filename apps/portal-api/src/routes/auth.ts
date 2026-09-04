@@ -10,6 +10,7 @@ import {
 } from "../lib/auth.js";
 import { hashSecret, publicDisplayName, randomToken } from "../lib/crypto.js";
 import { hashPassword, verifyPassword } from "../lib/password.js";
+import { isGuestAuthEnabled } from "../lib/guest-auth.js";
 import { isLocalAuthEnabled, isTrustIdEnabled, rolesForAccount } from "../lib/local-auth.js";
 import type { PortalStore, PortalUser } from "../store.js";
 import { isDevAuthEnabled } from "../lib/dev-auth.js";
@@ -36,6 +37,8 @@ export async function registerAuthRoutes(app: FastifyInstance, store: PortalStor
       authenticated: status === "authenticated",
       enableTrustId: config.enableTrustId,
       localAuth: isLocalAuthEnabled(),
+      guestAuth: isGuestAuthEnabled(),
+      allowGuestDownloads: config.allowGuestDownloads,
     };
   });
 

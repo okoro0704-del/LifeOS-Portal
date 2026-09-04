@@ -13,6 +13,11 @@ export const clientEnvSchema = z.object({
   VITE_TRUSTID_WEB: z.string().url().optional(),
   VITE_TRUSTID_MODE: z.enum(["mock", "remote"]).optional(),
   VITE_ENABLE_TRUST_ID: z.enum(["true", "false"]).optional(),
+  VITE_BYPASS_AUTH_FOR_TESTING: z.enum(["true", "false"]).optional(),
+  VITE_ALLOW_GUEST_DOWNLOADS: z.enum(["true", "false"]).optional(),
+  VITE_DEFAULT_USER_ROLE: z.enum(["USER", "ADMIN"]).optional(),
+  NEXT_PUBLIC_ALLOW_GUEST_DOWNLOADS: z.enum(["true", "false"]).optional(),
+  NEXT_PUBLIC_DEFAULT_USER_ROLE: z.enum(["USER", "ADMIN"]).optional(),
   VITE_TRUSTID_CLIENT_ID: z.string().min(1).optional(),
   VITE_TRUSTID_REDIRECT_URI: z.string().url().optional(),
 });

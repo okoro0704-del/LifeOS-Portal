@@ -9,6 +9,11 @@ interface ImportMetaEnv {
   readonly VITE_TRUSTID_SCOPES?: string;
   readonly VITE_TRUSTID_MODE?: string;
   readonly VITE_ENABLE_TRUST_ID?: string;
+  readonly VITE_BYPASS_AUTH_FOR_TESTING?: string;
+  readonly VITE_ALLOW_GUEST_DOWNLOADS?: string;
+  readonly VITE_DEFAULT_USER_ROLE?: string;
+  readonly NEXT_PUBLIC_ALLOW_GUEST_DOWNLOADS?: string;
+  readonly NEXT_PUBLIC_DEFAULT_USER_ROLE?: string;
 }
 
 interface ImportMeta {

@@ -20,6 +20,7 @@ import { ProfilePage } from "./pages/Profile";
 import { AdminMetricsPage } from "./pages/AdminMetrics";
 import { AdminUsersPage } from "./pages/AdminUsers";
 import { AdminDataZonePage } from "./pages/AdminDataZone";
+import { DownloadsPage } from "./pages/Downloads";
 
 export function App() {
   return (
@@ -29,12 +30,14 @@ export function App() {
           <Route path="/" element={<WelcomePage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/callback" element={<CallbackPage />} />
+          <Route path="/downloads" element={<DownloadsPage />} />
           <Route path="/dashboard" element={<Navigate to="/app" replace />} />
           <Route element={<RequireAuth />}>
             <Route path="/app" element={<AppShell />}>
               <Route index element={<ChooseLanePage />} />
               <Route path="personal" element={<PersonalOsPage />} />
               <Route path="profile" element={<ProfilePage />} />
+              <Route path="downloads" element={<DownloadsPage />} />
               <Route path="business" element={<Marketplace />} />
               <Route path="business/:osId" element={<ProvisioningWizard />} />
               <Route path="business/:osId/:verticalId/billing" element={<BillingPage />} />

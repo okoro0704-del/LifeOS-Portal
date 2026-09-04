@@ -139,8 +139,9 @@ export type PortalStore = {
     roles?: TrustIdRole[];
   }): PortalUser;
   createLocalUser(input: {
+    id?: string;
     email: string;
-    passwordHash: string;
+    passwordHash?: string | null;
     displayName: string;
     role?: PortalAccountRole;
   }): PortalUser;
@@ -358,16 +359,17 @@ export function createStore(opts?: {
     },
     createLocalUser(input) {
       const email = input.email.trim().toLowerCase();
+      if (input.id && users.has(input.id)) return users.get(input.id)!;
       if (usersByEmail.has(email)) {
         throw new Error("email_taken");
       }
       const now = new Date().toISOString();
       const role = input.role ?? "USER";
       const user: PortalUser = {
-        id: newId("usr"),
+        id: input.id ?? newId("usr"),
         trustId: null,
         email,
-        passwordHash: input.passwordHash,
+        passwordHash: input.passwordHash ?? null,
         role,
         displayName: input.displayName,
         trustTier: null,

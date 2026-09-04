@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { bypassAuthForTesting } from "../lib/api";
 
 export function WelcomePage() {
   return (
@@ -8,14 +9,30 @@ export function WelcomePage() {
         <p className="brand-hero">
           LifeOS <span>Portal</span>
         </p>
-        <h1>Choose an operating system. License a vertical.</h1>
+        <h1>Explore the ecosystem. Download and test every OS.</h1>
         <p className="lead">
-          Sign in, then pick Personal OS or Business OS. HospitalityOS is not a single install —
-          you license hotels, restaurants, lounges, and the rest. Billing comes first.
+          TrustID is disconnected for open testing. Preview customer modules, open the admin
+          dashboard, or download LifeOS, FinanceOS, RealEstateOS, ellFStream, and LiveOS.
         </p>
-        <Link className="btn btn-primary" to="/login">
-          Sign in
-        </Link>
+        <div className="actions">
+          {bypassAuthForTesting ? (
+            <Link className="btn btn-primary" to="/app">
+              Explore portal
+            </Link>
+          ) : (
+            <Link className="btn btn-primary" to="/login">
+              Sign in
+            </Link>
+          )}
+          <Link className="btn btn-ghost" to="/downloads">
+            OS downloads
+          </Link>
+          {bypassAuthForTesting ? (
+            <Link className="linkish" to="/admin">
+              Admin dashboard
+            </Link>
+          ) : null}
+        </div>
       </div>
     </div>
   );
