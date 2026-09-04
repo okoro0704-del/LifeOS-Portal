@@ -6,6 +6,7 @@ import {
 import { config } from "../config.js";
 import { newId } from "../lib/crypto.js";
 import { httpJson } from "../lib/http.js";
+import { isUpstreamUnavailable, useLocalDomainOs } from "../lib/os-mode.js";
 
 export type TosProvisionInput = {
   distributorTenantId: string;
@@ -64,9 +65,15 @@ export function createLocalTransportationOs(): TosClient {
 }
 
 export function createRemoteTransportationOs(): TosClient {
+  const local = createLocalTransportationOs();
   return {
     async provision(input) {
-      const raw = await httpJson<HosProvisionResult & { tenantId?: string }>(
+      if (useLocalDomainOs(config.transportationOsApi)) {
+        return local.provision(input);
+      }
+      let raw: HosProvisionResult & { tenantId?: string };
+      try {
+        raw = await httpJson<HosProvisionResult & { tenantId?: string }>(
         config.transportationOsApi,
         TRANSPORTATIONOS_MANIFEST.install.hosProvisionPath,
         {
@@ -94,7 +101,11 @@ export function createRemoteTransportationOs(): TosClient {
             manifestVersion: TRANSPORTATIONOS_MANIFEST.version,
           }),
         },
-      );
+        );
+      } catch (err) {
+        if (isUpstreamUnavailable(err)) return local.provision(input);
+        throw err;
+      }
       const tenantId = raw.tenantId ?? raw.hosTenantId ?? input.distributorTenantId;
       const riderUrl =
         raw.launchUrls?.staff ?? launchUrl("https://{subdomain}.lifeos.app/rider", input.subdomain);

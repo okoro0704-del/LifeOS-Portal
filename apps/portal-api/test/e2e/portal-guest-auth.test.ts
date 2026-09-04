@@ -161,16 +161,16 @@ test("guest hotel install works when TrustID is off and distributor is remote", 
   const { createStore } = await import("../../src/store.js");
   const { buildApp } = await import("../../src/app.js");
   const { createRemoteDistributor } = await import("../../src/services/distributor.js");
-  const { createLocalHospitalityOs } = await import("../../src/services/hospitalityos.js");
-  const { createLocalEcommerceOs } = await import("../../src/services/ecommerceos.js");
-  const { createLocalTransportationOs } = await import("../../src/services/transportationos.js");
+  const { createRemoteHospitalityOs } = await import("../../src/services/hospitalityos.js");
+  const { createRemoteEcommerceOs } = await import("../../src/services/ecommerceos.js");
+  const { createRemoteTransportationOs } = await import("../../src/services/transportationos.js");
 
   const local = await buildApp({
     store: createStore(),
     distributor: createRemoteDistributor(),
-    hos: createLocalHospitalityOs(),
-    eco: createLocalEcommerceOs(),
-    tos: createLocalTransportationOs(),
+    hos: createRemoteHospitalityOs(),
+    eco: createRemoteEcommerceOs(),
+    tos: createRemoteTransportationOs(),
   });
   await local.ready();
   const headers = { origin: "https://getlifeos.app" };

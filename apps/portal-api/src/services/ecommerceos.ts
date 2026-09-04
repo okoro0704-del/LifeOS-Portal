@@ -6,6 +6,7 @@ import {
 import { config } from "../config.js";
 import { newId } from "../lib/crypto.js";
 import { httpJson } from "../lib/http.js";
+import { isUpstreamUnavailable, useLocalDomainOs } from "../lib/os-mode.js";
 
 export type EcoProvisionInput = {
   distributorTenantId: string;
@@ -73,9 +74,15 @@ export function createLocalEcommerceOs(): EcoClient {
 }
 
 export function createRemoteEcommerceOs(): EcoClient {
+  const local = createLocalEcommerceOs();
   return {
     async provision(input) {
-      const raw = await httpJson<HosProvisionResult & { tenantId?: string }>(
+      if (useLocalDomainOs(config.ecommerceOsApi)) {
+        return local.provision(input);
+      }
+      let raw: HosProvisionResult & { tenantId?: string };
+      try {
+        raw = await httpJson<HosProvisionResult & { tenantId?: string }>(
         config.ecommerceOsApi,
         ECOMMERCEOS_MANIFEST.install.hosProvisionPath,
         {
@@ -103,7 +110,11 @@ export function createRemoteEcommerceOs(): EcoClient {
             walletPayoutAccount: input.walletPayoutAccount,
           }),
         },
-      );
+        );
+      } catch (err) {
+        if (isUpstreamUnavailable(err)) return local.provision(input);
+        throw err;
+      }
       const tenantId = raw.tenantId ?? raw.hosTenantId ?? input.distributorTenantId;
       const storefrontUrl =
         raw.storefrontUrl ??

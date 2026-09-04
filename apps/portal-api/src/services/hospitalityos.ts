@@ -7,6 +7,7 @@ import {
 import { config } from "../config.js";
 import { newId } from "../lib/crypto.js";
 import { httpJson } from "../lib/http.js";
+import { isUpstreamUnavailable, useLocalDomainOs } from "../lib/os-mode.js";
 
 export type HosProvisionInput = {
   distributorTenantId: string;
@@ -52,38 +53,47 @@ export function createLocalHospitalityOs(): HosClient {
 }
 
 export function createRemoteHospitalityOs(): HosClient {
+  const local = createLocalHospitalityOs();
   return {
     async provision(input) {
-      return httpJson<HosProvisionResult>(
-        config.hospitalityOsApi,
-        HOSPITALITYOS_MANIFEST.install.hosProvisionPath,
-        {
-          method: "POST",
-          headers: { Authorization: `Bearer ${config.internalProvisionToken}` },
-          body: JSON.stringify({
-            distributorTenantId: input.distributorTenantId,
-            tenantId: input.distributorTenantId,
-            subdomain: input.subdomain,
-            slug: input.subdomain,
-            displayName: input.displayName,
-            customDomain: input.customDomain,
-            brand: input.brand,
-            oauthDestinations: input.oauthDestinations,
-            modules: input.modules,
-            enabledModules: input.enabledModules,
-            installTemplate: input.installTemplate,
-            localFood: input.localFood,
-            seed: input.seed,
-            trustId: {
-              audience: "hospitalityos",
-              businessPublicId: input.businessPublicId,
-            },
-            adminStaff: input.adminStaff,
-            organization: input.organization,
-            manifestVersion: HOSPITALITYOS_MANIFEST.version,
-          }),
-        },
-      );
+      if (useLocalDomainOs(config.hospitalityOsApi)) {
+        return local.provision(input);
+      }
+      try {
+        return await httpJson<HosProvisionResult>(
+          config.hospitalityOsApi,
+          HOSPITALITYOS_MANIFEST.install.hosProvisionPath,
+          {
+            method: "POST",
+            headers: { Authorization: `Bearer ${config.internalProvisionToken}` },
+            body: JSON.stringify({
+              distributorTenantId: input.distributorTenantId,
+              tenantId: input.distributorTenantId,
+              subdomain: input.subdomain,
+              slug: input.subdomain,
+              displayName: input.displayName,
+              customDomain: input.customDomain,
+              brand: input.brand,
+              oauthDestinations: input.oauthDestinations,
+              modules: input.modules,
+              enabledModules: input.enabledModules,
+              installTemplate: input.installTemplate,
+              localFood: input.localFood,
+              seed: input.seed,
+              trustId: {
+                audience: "hospitalityos",
+                businessPublicId: input.businessPublicId,
+              },
+              adminStaff: input.adminStaff,
+              organization: input.organization,
+              manifestVersion: HOSPITALITYOS_MANIFEST.version,
+            }),
+          },
+        );
+      } catch (err) {
+        if (isUpstreamUnavailable(err)) return local.provision(input);
+        throw err;
+      }
     },
   };
 }
