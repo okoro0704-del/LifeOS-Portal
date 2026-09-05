@@ -77,6 +77,7 @@ export function resolveTestimonials(
   const unique = patrons.filter((row) => {
     const key = row.name.trim().toLowerCase();
     if (!key || seen.has(key)) return false;
+    if (key === "guest" || key === "walk-in" || key === "walkin" || key === "anonymous") return false;
     seen.add(key);
     return true;
   });
