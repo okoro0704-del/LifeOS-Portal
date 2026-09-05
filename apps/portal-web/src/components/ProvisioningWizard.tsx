@@ -10,6 +10,7 @@ import {
   type SuiteVerticalModuleId,
 } from "@lifeos-portal/shared";
 import { getMarketplaceVertical, type HospitalityOSPreset, type ServiceOSPreset, type TransportationPreset } from "../data/verticalCatalog";
+import { readImageDataUrl } from "../lib/images";
 
 const VERTICAL_COPY: Record<SuiteVerticalModuleId, { label: string; hint: string }> = {
   accommodation: {
@@ -52,6 +53,8 @@ export type WizardSelection = {
   displayName?: string;
   subdomain?: string;
   primaryColor?: string;
+  logoUrl?: string;
+  dashboardStyle?: "console" | "greetings";
   walletPayout?: string;
   storeAddress?: string;
   storeCity?: string;
@@ -162,6 +165,8 @@ export function ProvisioningWizard() {
   );
   const [subdomain, setSubdomain] = useState(saved?.subdomain ?? "");
   const [primaryColor, setPrimaryColor] = useState(saved?.primaryColor ?? "#0d7a6f");
+  const [logoUrl, setLogoUrl] = useState(saved?.logoUrl ?? "");
+  const [dashboardStyle, setDashboardStyle] = useState<"console" | "greetings">(saved?.dashboardStyle ?? "console");
   const [walletPayout, setWalletPayout] = useState(saved?.walletPayout ?? "");
   const [storeAddress, setStoreAddress] = useState(saved?.storeAddress ?? "");
   const [storeCity, setStoreCity] = useState(saved?.storeCity ?? "");
@@ -280,6 +285,8 @@ export function ProvisioningWizard() {
       displayName,
       subdomain,
       primaryColor,
+      logoUrl,
+      dashboardStyle,
       walletPayout,
       storeAddress,
       storeCity,
@@ -383,18 +390,38 @@ export function ProvisioningWizard() {
             Guest app and admin dashboard will be handed on {(subdomain || "subdomain")}.getlifeos.app
           </span>
         </label>
-        {hospitalityLive && (templateId === "standalone_hotel" || catalogItem?.verticalId === "hotel") ? (
-          <label>
-            Hotel brand color
-            <input
-              type="color"
-              value={primaryColor}
-              onChange={(e) => setPrimaryColor(e.target.value)}
-              data-testid="wizard-brand-color"
-            />
-            <span className="hint">Applied to this hotel’s guest app and front desk only.</span>
-          </label>
-        ) : null}
+        <label>
+          Brand color
+          <input
+            type="color"
+            value={primaryColor}
+            onChange={(e) => setPrimaryColor(e.target.value)}
+            data-testid="wizard-brand-color"
+          />
+        </label>
+        <label>
+          Logo
+          <input
+            type="file"
+            accept="image/*"
+            data-testid="wizard-logo"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void readImageDataUrl(file, 512).then(setLogoUrl);
+            }}
+          />
+        </label>
+        <label>
+          Dashboard style
+          <select
+            value={dashboardStyle}
+            onChange={(e) => setDashboardStyle(e.target.value as "console" | "greetings")}
+            data-testid="wizard-dashboard-style"
+          >
+            <option value="console">Console — top bar, body, bottom tabs</option>
+            <option value="greetings">Greetings — header that says good morning</option>
+          </select>
+        </label>
         {ecommerceLive && hasPhysicalAddress ? (
           <>
             <label>

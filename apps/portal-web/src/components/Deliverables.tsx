@@ -31,6 +31,11 @@ export function deliverablesFor(input: {
         installOnFirstVisit: true as const,
         label: "Admin dashboard" as const,
       },
+      staffApp: {
+        url: input.launchUrls.staff ?? admin.replace(/\/admin\/?$/, "/staff"),
+        kind: "pwa" as const,
+        label: "Staff login" as const,
+      },
     };
   }
   return null;
@@ -58,8 +63,8 @@ export function DeliverablesCard({
         <p className="eyebrow">your deliverables</p>
         <h2>Apps on {deliverables.hostname}</h2>
         <p className="lead">
-          Both apps live on {deliverables.hostname}. Guests use the home, menu, and orders tabs.
-          Staff sign in on the admin URL to their assigned board.
+          Guests use the public app. Owners sign in on admin. Staff get a separate login URL
+          after you create them.
         </p>
       </header>
       <div className="cards">
@@ -76,8 +81,21 @@ export function DeliverablesCard({
             </button>
           </div>
         </article>
+        <article className="card" data-testid="staff-login-deliverable">
+          <span className="badge">Staff only</span>
+          <h2>Staff login</h2>
+          <p className="mono small">{deliverables.staffApp.url}</p>
+          <div className="actions">
+            <a className="btn btn-primary" href={deliverables.staffApp.url} target="_blank" rel="noreferrer">
+              Open staff login
+            </a>
+            <button className="btn btn-ghost" type="button" onClick={() => void copy("staff", deliverables.staffApp.url)}>
+              {copied === "staff" ? "Copied" : "Copy URL"}
+            </button>
+          </div>
+        </article>
         <article className="card" data-testid="admin-dashboard-deliverable">
-          <span className="badge">PWA · install on first visit</span>
+          <span className="badge">Owner only</span>
           <h2>Admin dashboard</h2>
           <p className="mono small">{deliverables.adminDashboard.url}</p>
           <div className="actions">

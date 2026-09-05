@@ -21,7 +21,10 @@ async function corsPlugin(app: FastifyInstance) {
       let tenantHost = false;
       try {
         const host = new URL(origin).hostname;
-        tenantHost = host.endsWith(".getlifeos.app") && host !== "admin.getlifeos.app" && host !== "www.getlifeos.app";
+        const reserved = host === "admin.getlifeos.app" || host === "www.getlifeos.app" || host === "getlifeos.app";
+        tenantHost =
+          (host.endsWith(".getlifeos.app") && !reserved) ||
+          (!reserved && host.includes(".") && host !== "localhost");
       } catch {
         tenantHost = false;
       }

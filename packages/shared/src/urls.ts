@@ -28,6 +28,11 @@ export type TenantDeliverables = {
     installOnFirstVisit: true;
     label: "Admin dashboard";
   };
+  staffApp: {
+    url: string;
+    kind: "pwa";
+    label: "Staff login";
+  };
 };
 
 export function tenantAppHostname(subdomain: string, customDomain?: string) {
@@ -61,16 +66,21 @@ export function tenantDeliverables(subdomain: string, customDomain?: string): Te
       installOnFirstVisit: true,
       label: "Admin dashboard",
     },
+    staffApp: {
+      url: `${origin}/staff`,
+      kind: "pwa",
+      label: "Staff login",
+    },
   };
 }
 
 export function tenantLaunchUrls(subdomain: string, customDomain?: string) {
-  const { guestApp, adminDashboard } = tenantDeliverables(subdomain, customDomain);
+  const { guestApp, adminDashboard, staffApp } = tenantDeliverables(subdomain, customDomain);
   return {
     guest: guestApp.url,
     storefront: guestApp.url,
     admin: adminDashboard.url,
-    staff: adminDashboard.url,
+    staff: staffApp.url,
   };
 }
 

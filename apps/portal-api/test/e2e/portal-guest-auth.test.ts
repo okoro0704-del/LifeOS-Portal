@@ -446,6 +446,51 @@ test("restaurant and home-kitchen tenant apps serve menus, orders, and staff boa
       payload: { email: "cook@dab.example", password: "venue-owner" },
     });
     assert.equal(cook.statusCode, 200, cook.body);
+
+    const staffLoginOnAdmin = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${restaurantSub}/staff/login`,
+      payload: { email: "counter@harbor.example", password: "counter-pass", surface: "admin" },
+    });
+    assert.equal(staffLoginOnAdmin.statusCode, 403);
+
+    const ownerOnStaff = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${restaurantSub}/staff/login`,
+      payload: { email: "chef@harbor.example", password: "venue-owner", surface: "staff" },
+    });
+    assert.equal(ownerOnStaff.statusCode, 403);
+
+    const site = await local.inject({
+      method: "PATCH",
+      url: `/public/tenants/${restaurantSub}/site`,
+      headers: { "x-hotel-staff": ownerToken },
+      payload: { writeup: "Harbor plates, open late.", phone: "+2348000000000", dashboardStyle: "greetings" },
+    });
+    assert.equal(site.statusCode, 200, site.body);
+    assert.equal(site.json().site.dashboardStyle, "greetings");
+
+    const item = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${restaurantSub}/catalog/items`,
+      headers: { "x-hotel-staff": ownerToken },
+      payload: { name: "Suya wrap", kind: "food", amountMinor: 3000, description: "Street wrap" },
+    });
+    assert.equal(item.statusCode, 201, item.body);
+
+    const staffOrder = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${restaurantSub}/orders`,
+      headers: { "x-hotel-staff": ownerToken },
+      payload: { item: "Suya wrap", guestName: "Walk-in Ada", guestEmail: "walkin@harbor.example" },
+    });
+    assert.equal(staffOrder.statusCode, 201, staffOrder.body);
+    assert.equal(staffOrder.json().order.placedBy, "staff");
+
+    const publicApp = await local.inject({ method: "GET", url: `/public/tenants/${restaurantSub}` });
+    assert.equal(publicApp.json().tenant.branding.writeup, "Harbor plates, open late.");
+    assert.equal(publicApp.json().tenant.branding.staffAppUrl, `https://${restaurantSub}.getlifeos.app/staff`);
+    assert.ok((publicApp.json().menu as Array<{ name: string }>).some((row) => row.name === "Suya wrap"));
   } finally {
     await local.close();
   }

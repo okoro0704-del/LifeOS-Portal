@@ -58,7 +58,20 @@ const installBody = z.object({
   brand: z
     .object({
       primaryColor: z.string().optional(),
-      logoUrl: z.string().url().optional(),
+      logoUrl: z
+        .string()
+        .max(700_000)
+        .refine((value) => value.startsWith("data:image/") || /^https?:\/\//i.test(value))
+        .optional(),
+    })
+    .optional(),
+  dashboardStyle: z.enum(["console", "greetings"]).optional(),
+  site: z
+    .object({
+      writeup: z.string().max(2000).optional(),
+      phone: z.string().max(40).optional(),
+      email: z.string().email().optional(),
+      address: z.string().max(200).optional(),
     })
     .optional(),
   seed: z.enum(["default", "none"]).optional(),

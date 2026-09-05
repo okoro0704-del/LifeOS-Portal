@@ -55,6 +55,8 @@ export type InstallHospitalityInput = {
   customDomain?: string;
   organization?: { slug?: string; name?: string };
   brand?: { primaryColor?: string; logoUrl?: string };
+  dashboardStyle?: "console" | "greetings";
+  site?: { writeup?: string; phone?: string; email?: string; address?: string };
   seed?: "default" | "none";
   enabledModules?: string[];
   pickup?: {

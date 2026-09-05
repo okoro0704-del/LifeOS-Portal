@@ -100,7 +100,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   await registerInstallRoutes(app, store, distributor, hos, eco, tos);
   await registerOrganizationRoutes(app, store);
   await registerTenantRoutes(app, store, distributor);
-  await registerTenantAppRoutes(app, store);
+  await registerTenantAppRoutes(app, store, distributor);
   await registerPlatformAdminRoutes(app, store, distributor);
   await registerUserAdminRoutes(app, store);
   await registerPushRoutes(app, store);

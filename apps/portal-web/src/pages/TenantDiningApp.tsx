@@ -1,9 +1,12 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { GuestBrand } from "../components/GuestBrand";
 import { TenantAppChrome } from "../components/TenantAppChrome";
 import { portalApiBase } from "../lib/api";
+import { TenantOwnerAdmin } from "./TenantOwnerAdmin";
+import { TenantStaffDesk } from "./TenantStaffDesk";
 
-type MenuItem = { id: string; name: string; kind: "food" | "drink"; amountMinor: number; description: string };
+type MenuItem = { id: string; name: string; kind: "food" | "drink"; amountMinor: number; description: string; photoUrl?: string };
 type Order = {
   id: string;
   item: string;
@@ -22,7 +25,19 @@ type DiningPublic = {
     subdomain: string;
     hostname: string;
     verticalId?: string;
-    branding: { name: string; primaryColor: string };
+    branding: {
+      name: string;
+      primaryColor: string;
+      logoUrl?: string;
+      backgroundUrl?: string;
+      heroTitle?: string;
+      writeup?: string;
+      phone?: string;
+      email?: string;
+      address?: string;
+      dashboardStyle?: "console" | "greetings";
+      staffAppUrl?: string;
+    };
     ownerHint?: string;
     mode: "restaurant" | "kitchen";
   };
@@ -41,6 +56,15 @@ function normalizeDining(body: DiningPublic): DiningPublic {
       branding: {
         name: body.tenant?.branding?.name ?? body.tenant?.displayName ?? "Kitchen",
         primaryColor: body.tenant?.branding?.primaryColor ?? (kitchen ? "#e85d04" : "#7c3aed"),
+        logoUrl: body.tenant?.branding?.logoUrl,
+        backgroundUrl: body.tenant?.branding?.backgroundUrl,
+        heroTitle: body.tenant?.branding?.heroTitle,
+        writeup: body.tenant?.branding?.writeup,
+        phone: body.tenant?.branding?.phone,
+        email: body.tenant?.branding?.email,
+        address: body.tenant?.branding?.address,
+        dashboardStyle: body.tenant?.branding?.dashboardStyle,
+        staffAppUrl: body.tenant?.branding?.staffAppUrl,
       },
       ownerHint: body.tenant?.ownerHint,
       mode: kitchen ? "kitchen" : "restaurant",
@@ -93,33 +117,60 @@ export function TenantDiningApp({ subdomain, basename }: { subdomain: string; ba
     "/menu": "Menu",
     "/drinks": "Drinks",
     "/orders": "My orders",
-    "/admin": "Staff",
   };
 
   return (
     <div data-testid="dining-tenant-app">
       <BrowserRouter basename={basename}>
-        <TenantAppChrome
-          brand={data.tenant.branding.name}
-          accent={data.tenant.branding.primaryColor}
-          titles={titles}
-          tabs={[
-            { to: "/", label: "Home", icon: "home" },
-            { to: "/menu", label: "Menu", icon: "food" },
-            { to: "/drinks", label: "Drinks", icon: "drink" },
-            { to: "/orders", label: "Orders", icon: "stay" },
-            { to: "/admin", label: "Staff", icon: "staff" },
-          ]}
-        >
-          <Routes>
-            <Route path="/" element={<DiningHome data={data} subdomain={subdomain} onDone={() => void refresh()} />} />
-            <Route path="/menu" element={<DiningMenu data={data} subdomain={subdomain} kind="food" />} />
-            <Route path="/drinks" element={<DiningMenu data={data} subdomain={subdomain} kind="drink" />} />
-            <Route path="/orders" element={<DiningOrders data={data} subdomain={subdomain} />} />
-            <Route path="/admin" element={<DiningStaff data={data} subdomain={subdomain} />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </TenantAppChrome>
+        <Routes>
+          <Route
+            path="/admin"
+            element={
+              <TenantOwnerAdmin
+                subdomain={subdomain}
+                branding={data.tenant.branding}
+                verticalId={data.tenant.verticalId ?? (kitchen ? "local_food" : "restaurant")}
+                ownerHint={data.tenant.ownerHint}
+                hotel={false}
+              />
+            }
+          />
+          <Route
+            path="/staff"
+            element={
+              <TenantStaffDesk
+                subdomain={subdomain}
+                branding={data.tenant.branding}
+                hotel={false}
+                kitchen={kitchen}
+              />
+            }
+          />
+          <Route
+            path="/*"
+            element={
+              <TenantAppChrome
+                brand={data.tenant.branding.name}
+                accent={data.tenant.branding.primaryColor}
+                titles={titles}
+                tabs={[
+                  { to: "/", label: "Home", icon: "home" },
+                  { to: "/menu", label: "Menu", icon: "food" },
+                  { to: "/drinks", label: "Drinks", icon: "drink" },
+                  { to: "/orders", label: "Orders", icon: "stay" },
+                ]}
+              >
+                <Routes>
+                  <Route path="/" element={<DiningHome data={data} subdomain={subdomain} onDone={() => void refresh()} />} />
+                  <Route path="/menu" element={<DiningMenu data={data} subdomain={subdomain} kind="food" />} />
+                  <Route path="/drinks" element={<DiningMenu data={data} subdomain={subdomain} kind="drink" />} />
+                  <Route path="/orders" element={<DiningOrders data={data} subdomain={subdomain} />} />
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </TenantAppChrome>
+            }
+          />
+        </Routes>
       </BrowserRouter>
     </div>
   );
@@ -203,7 +254,10 @@ function DiningHome({
   const featured = data.menu.slice(0, 4);
   return (
     <div className="tap-home">
-      <p className="tap-hero">{data.tenant.mode === "kitchen" ? "Home kitchen, plated for the street." : "Sit, scan the board, eat."}</p>
+      <GuestBrand
+        brand={data.tenant.branding}
+        fallback={data.tenant.mode === "kitchen" ? "Home kitchen, plated for the street." : "Sit, scan the board, eat."}
+      />
       <GuestFields guest={guest} kitchen={data.tenant.mode === "kitchen"} tables={data.tables} />
       <section className="cards">
         {featured.map((item) => (
@@ -279,6 +333,7 @@ function MenuCard({
   }
   return (
     <article className="card tap-card">
+      {item.photoUrl ? <img className="catalog-photo" src={item.photoUrl} alt={item.name} /> : null}
       <p className="eyebrow">{item.kind}</p>
       <h2>{item.name}</h2>
       <p className="muted">
@@ -343,7 +398,7 @@ function DiningOrders({ data, subdomain }: { data: DiningPublic; subdomain: stri
   );
 }
 
-function DiningStaff({ data, subdomain }: { data: DiningPublic; subdomain: string }) {
+export function DiningStaff({ data, subdomain }: { data: DiningPublic; subdomain: string }) {
   const [session, setSession] = useState<{ token: string; staff: Staff } | null>(null);
   useEffect(() => {
     try {

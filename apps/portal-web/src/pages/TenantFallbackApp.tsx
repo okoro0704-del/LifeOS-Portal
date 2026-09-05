@@ -8,11 +8,8 @@ export function TenantFallbackApp({ subdomain, basename }: { subdomain: string; 
       <TenantAppChrome
         brand={name}
         accent="#5eead4"
-        titles={{ "/": "Home", "/admin": "Staff" }}
-        tabs={[
-          { to: "/", label: "Home", icon: "home" },
-          { to: "/admin", label: "Staff", icon: "staff" },
-        ]}
+        titles={{ "/": "Home", "/admin": "Admin", "/staff": "Staff" }}
+        tabs={[{ to: "/", label: "Home", icon: "home" }]}
       >
         <Routes>
           <Route

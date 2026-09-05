@@ -3,6 +3,7 @@ import { newId, randomToken, hashSecret } from "../lib/crypto.js";
 import { HttpError } from "../lib/http.js";
 import { hashPassword, verifyPassword } from "../lib/password.js";
 import type { PortalInstall, PortalStore } from "../store.js";
+import { publicBranding, type StaffActivity } from "./tenant-site.js";
 
 export type DiningStaffRole = "owner" | "kitchen" | "counter" | "rider";
 export type DiningKind = "food" | "drink";
@@ -14,6 +15,7 @@ export type DiningMenuItem = {
   kind: DiningKind;
   amountMinor: number;
   description: string;
+  photoUrl?: string;
 };
 
 export type DiningOrder = {
@@ -28,6 +30,7 @@ export type DiningOrder = {
   address?: string;
   status: DiningOrderStatus;
   createdAt: string;
+  placedBy?: "guest" | "staff";
 };
 
 export type DiningTable = { id: string; name: string; seats: number };
@@ -49,6 +52,7 @@ type DiningProperty = {
   orders: DiningOrder[];
   staff: DiningStaff[];
   sessions: Array<{ tokenHash: string; staffId: string; expiresAt: string }>;
+  activity: StaffActivity[];
 };
 
 const properties = new Map<string, DiningProperty>();
@@ -105,6 +109,7 @@ function emptyProperty(install: PortalInstall, seed?: { email?: string; name?: s
       },
     ],
     sessions: [],
+    activity: [],
   };
 }
 
@@ -121,7 +126,9 @@ export function seedDiningProperty(
   const slug = install.subdomain.toLowerCase();
   if (properties.has(slug)) return;
   const stored = install.diningOps as DiningProperty | undefined;
-  const row = stored?.menu?.length ? { ...stored, subdomain: slug } : emptyProperty(install, seed);
+  const row = stored?.menu?.length
+    ? { ...stored, subdomain: slug, activity: stored.activity ?? [] }
+    : emptyProperty(install, seed);
   save(store, install, row);
 }
 
@@ -145,12 +152,10 @@ export function diningAppPayload(install: PortalInstall, store?: PortalStore) {
       guestAppUrl: deliverables.guestApp.url,
       adminDashboardUrl: deliverables.adminDashboard.url,
       status: install.status,
-      branding: {
-        name: install.displayName,
-        primaryColor: install.brandPrimaryColor ?? (install.verticalId === "local_food" ? "#e85d04" : "#7c3aed"),
-      },
+      branding: publicBranding(install),
       features: featuresForVertical(install.osId, install.verticalId),
       ownerHint: row.staff.find((staff) => staff.role === "owner")?.email ?? `owner@${row.subdomain}.getlifeos.app`,
+      staffAppUrl: deliverables.staffApp.url,
       mode: install.verticalId === "local_food" ? "kitchen" : "restaurant",
     },
     menu: row.menu,
@@ -178,7 +183,21 @@ export function diningOpsPayload(install: PortalInstall, staff: DiningStaff, sto
     menu: row.menu,
     tables: row.tables,
     team: staff.role === "owner" ? row.staff.map(publicStaff) : undefined,
+    activity: staff.role === "owner" ? row.activity.slice(0, 80) : undefined,
   };
+}
+
+function logDiningActivity(row: DiningProperty, staff: DiningStaff, action: string, detail: string) {
+  row.activity.unshift({
+    id: newId("act"),
+    at: new Date().toISOString(),
+    staffId: staff.id,
+    staffName: staff.name,
+    role: staff.role,
+    action,
+    detail,
+  });
+  row.activity = row.activity.slice(0, 200);
 }
 
 export function placeDiningOrder(
@@ -191,6 +210,7 @@ export function placeDiningOrder(
     tableName?: string;
     address?: string;
     kind?: DiningKind;
+    actor?: DiningStaff;
   },
   store?: PortalStore,
 ) {
@@ -209,8 +229,10 @@ export function placeDiningOrder(
     address: input.address,
     status: "received",
     createdAt: new Date().toISOString(),
+    placedBy: input.actor ? "staff" : "guest",
   };
   row.orders.unshift(order);
+  if (input.actor) logDiningActivity(row, input.actor, "order.create", `${order.item} for ${order.guestName}`);
   save(store, install, row);
   return order;
 }
@@ -229,11 +251,21 @@ export function updateDiningOrderStatus(
   return order;
 }
 
-export function loginDiningStaff(install: PortalInstall, input: { email: string; password: string }, store?: PortalStore) {
+export function loginDiningStaff(
+  install: PortalInstall,
+  input: { email: string; password: string; surface?: "admin" | "staff" },
+  store?: PortalStore,
+) {
   const row = requireProperty(install, store);
   const staff = row.staff.find((item) => item.email === input.email.trim().toLowerCase());
   if (!staff || !verifyPassword(input.password, staff.passwordHash)) {
     throw new HttpError("Staff email or password is wrong.", 401, "unauthorized");
+  }
+  if (input.surface === "admin" && staff.role !== "owner") {
+    throw new HttpError("Use the staff login URL handed to you.", 403, "forbidden");
+  }
+  if (input.surface === "staff" && staff.role === "owner") {
+    throw new HttpError("Owners sign in on the admin dashboard.", 403, "forbidden");
   }
   const token = randomToken();
   row.sessions = row.sessions.filter((item) => Date.parse(item.expiresAt) > Date.now());
@@ -281,8 +313,43 @@ export function createDiningStaff(
     createdAt: new Date().toISOString(),
   };
   row.staff.push(staff);
+  const owner = row.staff.find((item) => item.role === "owner");
+  if (owner) logDiningActivity(row, owner, "staff.create", `${staff.name} · ${staff.role}`);
   save(store, install, row);
   return publicStaff(staff);
+}
+
+export function upsertDiningMenuItem(
+  install: PortalInstall,
+  input: { id?: string; name: string; kind: DiningKind; amountMinor: number; description: string; photoUrl?: string },
+  actor: DiningStaff,
+  store?: PortalStore,
+) {
+  const row = requireProperty(install, store);
+  if (input.id) {
+    const item = row.menu.find((rowItem) => rowItem.id === input.id);
+    if (!item) throw new HttpError("Item not found.", 404, "not_found");
+    item.name = input.name.trim();
+    item.kind = input.kind;
+    item.amountMinor = input.amountMinor;
+    item.description = input.description.trim();
+    if (input.photoUrl !== undefined) item.photoUrl = input.photoUrl;
+    logDiningActivity(row, actor, "menu.update", item.name);
+    save(store, install, row);
+    return item;
+  }
+  const item: DiningMenuItem = {
+    id: newId("mn"),
+    name: input.name.trim(),
+    kind: input.kind,
+    amountMinor: input.amountMinor,
+    description: input.description.trim(),
+    photoUrl: input.photoUrl,
+  };
+  row.menu.unshift(item);
+  logDiningActivity(row, actor, "menu.create", item.name);
+  save(store, install, row);
+  return item;
 }
 
 export function assertDiningRole(staff: DiningStaff, roles: DiningStaffRole[]) {

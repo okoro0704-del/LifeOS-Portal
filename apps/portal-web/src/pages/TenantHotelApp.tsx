@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { GuestBrand } from "../components/GuestBrand";
 import { TenantAppChrome } from "../components/TenantAppChrome";
 import { portalApiBase } from "../lib/api";
+import { TenantOwnerAdmin } from "./TenantOwnerAdmin";
+import { TenantStaffDesk } from "./TenantStaffDesk";
 
-type Room = { id: string; name: string; beds: string; nightlyMinor: number; housekeep: string };
+type Room = { id: string; name: string; beds: string; nightlyMinor: number; housekeep: string; photoUrl?: string };
 type MenuItem = { id: string; name: string; kind: "restaurant" | "bar" | "room_service"; amountMinor: number; description: string };
 type Booking = {
   id: string;
@@ -33,7 +36,19 @@ type HotelPublic = {
     subdomain: string;
     hostname: string;
     features: string[];
-    branding: { name: string; primaryColor: string };
+    branding: {
+      name: string;
+      primaryColor: string;
+      logoUrl?: string;
+      backgroundUrl?: string;
+      heroTitle?: string;
+      writeup?: string;
+      phone?: string;
+      email?: string;
+      address?: string;
+      dashboardStyle?: "console" | "greetings";
+      staffAppUrl?: string;
+    };
     ownerHint?: string;
   };
   rooms: Room[];
@@ -100,39 +115,54 @@ export function TenantHotelApp({ subdomain, basename }: { subdomain: string; bas
   return (
     <div className="hotel-app" style={style} data-testid="hotel-tenant-app">
       <BrowserRouter basename={basename}>
-        <TenantAppChrome
-          brand={data.tenant.branding.name}
-          accent={color}
-          titles={{
-            "/": "Rooms",
-            "/food": "Food",
-            "/drinks": "Drinks",
-            "/stay": "My stay",
-            "/admin": "Staff",
-          }}
-          tabs={[
-            { to: "/", label: "Rooms", icon: "stay" },
-            { to: "/food", label: "Food", icon: "food" },
-            { to: "/drinks", label: "Drinks", icon: "drink" },
-            { to: "/stay", label: "Stay", icon: "home" },
-            { to: "/admin", label: "Staff", icon: "staff" },
-          ]}
-        >
-          <Routes>
-            <Route path="/" element={<GuestRooms data={data} subdomain={subdomain} onDone={() => void refresh()} />} />
-            <Route
-              path="/food"
-              element={<GuestMenu data={data} subdomain={subdomain} kind="restaurant" onDone={() => void refresh()} />}
-            />
-            <Route
-              path="/drinks"
-              element={<GuestMenu data={data} subdomain={subdomain} kind="bar" onDone={() => void refresh()} />}
-            />
-            <Route path="/stay" element={<GuestStay data={data} subdomain={subdomain} />} />
-            <Route path="/admin" element={<StaffGate data={data} subdomain={subdomain} />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </TenantAppChrome>
+        <Routes>
+          <Route
+            path="/admin"
+            element={
+              <TenantOwnerAdmin
+                subdomain={subdomain}
+                branding={data.tenant.branding}
+                verticalId="hotel"
+                ownerHint={data.tenant.ownerHint}
+                hotel
+              />
+            }
+          />
+          <Route
+            path="/staff"
+            element={<TenantStaffDesk subdomain={subdomain} branding={data.tenant.branding} hotel kitchen={false} />}
+          />
+          <Route
+            path="/*"
+            element={
+              <TenantAppChrome
+                brand={data.tenant.branding.name}
+                accent={color}
+                titles={{ "/": "Rooms", "/food": "Food", "/drinks": "Drinks", "/stay": "My stay" }}
+                tabs={[
+                  { to: "/", label: "Rooms", icon: "stay" },
+                  { to: "/food", label: "Food", icon: "food" },
+                  { to: "/drinks", label: "Drinks", icon: "drink" },
+                  { to: "/stay", label: "Stay", icon: "home" },
+                ]}
+              >
+                <Routes>
+                  <Route path="/" element={<GuestRooms data={data} subdomain={subdomain} onDone={() => void refresh()} />} />
+                  <Route
+                    path="/food"
+                    element={<GuestMenu data={data} subdomain={subdomain} kind="restaurant" onDone={() => void refresh()} />}
+                  />
+                  <Route
+                    path="/drinks"
+                    element={<GuestMenu data={data} subdomain={subdomain} kind="bar" onDone={() => void refresh()} />}
+                  />
+                  <Route path="/stay" element={<GuestStay data={data} subdomain={subdomain} />} />
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </TenantAppChrome>
+            }
+          />
+        </Routes>
       </BrowserRouter>
     </div>
   );
@@ -232,6 +262,7 @@ function GuestRooms({
 
   return (
     <main className="page">
+      <GuestBrand brand={data.tenant.branding} fallback="Rooms, food, and a quiet stay." />
       <p className="eyebrow">Rooms</p>
       <h2>Scan available rooms and book</h2>
       <p className="lead">
@@ -260,7 +291,8 @@ function GuestRooms({
       <section className="cards" data-testid="hotel-rooms">
         {rooms.length === 0 ? <p className="muted">No rooms match this filter.</p> : null}
         {rooms.map((room) => (
-          <article className="card" key={room.id}>
+          <article className="card tap-card" key={room.id}>
+            {room.photoUrl ? <img className="catalog-photo" src={room.photoUrl} alt={room.name} /> : null}
             <p className="eyebrow">{room.housekeep}</p>
             <h2>{room.name}</h2>
             <p className="muted">
@@ -461,7 +493,7 @@ function GuestStay({ data, subdomain }: { data: HotelPublic; subdomain: string }
   );
 }
 
-function StaffGate({ data, subdomain }: { data: HotelPublic; subdomain: string }) {
+export function StaffGate({ data, subdomain }: { data: HotelPublic; subdomain: string }) {
   const [session, setSession] = useState<{ token: string; staff: Staff } | null>(null);
 
   useEffect(() => {

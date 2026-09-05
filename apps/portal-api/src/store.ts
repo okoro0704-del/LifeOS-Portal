@@ -71,6 +71,8 @@ export type PortalInstall = {
   launchUrls?: LaunchUrls;
   brandPrimaryColor?: string;
   brandLogoUrl?: string;
+  dashboardStyle?: "console" | "greetings";
+  site?: unknown;
   hotelOps?: unknown;
   diningOps?: unknown;
   status: InstallStatus;

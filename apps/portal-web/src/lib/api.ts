@@ -246,6 +246,7 @@ export type InstallRow = {
     hostname: string;
     guestApp: { url: string; kind: "web_pwa"; label: "Guest app" };
     adminDashboard: { url: string; kind: "pwa"; installOnFirstVisit: true; label: "Admin dashboard" };
+    staffApp: { url: string; kind: "pwa"; label: "Staff login" };
   };
   customDomain?: string;
   error?: string;

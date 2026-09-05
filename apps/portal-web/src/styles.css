@@ -663,6 +663,73 @@ fieldset {
   min-height: 100%;
   background: #070b12;
 }
+.guest-brand {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+.guest-brand-photo {
+  min-height: 180px;
+  border-radius: 22px;
+  background-size: cover;
+  background-position: center;
+  border: 1px solid var(--los-border);
+}
+.guest-logo {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 16px;
+}
+.guest-contacts {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  color: var(--los-muted);
+  display: grid;
+  gap: 0.25rem;
+}
+.catalog-photo {
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+  border-radius: 14px;
+}
+.greet-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.1rem 1.2rem 0.4rem;
+}
+.greet-head p {
+  margin: 0;
+  color: color-mix(in srgb, var(--tap-accent) 70%, #fff);
+  font-weight: 700;
+}
+.greet-head h1 {
+  margin: 0.15rem 0 0;
+  font-size: 1.15rem;
+  font-family: var(--los-font);
+}
+.greet-shell {
+  grid-template-rows: auto 1fr;
+}
+.handoff {
+  white-space: pre-wrap;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.9rem;
+  border-radius: 14px;
+}
+.tap textarea,
+.tap .form select {
+  font: inherit;
+  color: var(--los-text);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--los-border-strong);
+  border-radius: 12px;
+  padding: 0.7rem 0.8rem;
+}
 
 .banner-ok {
   background: var(--los-accent-soft);

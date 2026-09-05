@@ -3,6 +3,7 @@ import { newId, randomToken, hashSecret } from "../lib/crypto.js";
 import { HttpError } from "../lib/http.js";
 import { hashPassword, verifyPassword } from "../lib/password.js";
 import type { PortalInstall, PortalStore } from "../store.js";
+import { publicBranding, type StaffActivity } from "./tenant-site.js";
 
 export type HotelStaffRole = "owner" | "front_desk" | "restaurant" | "bar" | "housekeeping";
 export type HotelHousekeep = "ready" | "occupied" | "dirty" | "cleaning";
@@ -16,6 +17,7 @@ export type HotelRoom = {
   beds: string;
   nightlyMinor: number;
   housekeep: HotelHousekeep;
+  photoUrl?: string;
 };
 
 export type HotelBooking = {
@@ -38,6 +40,7 @@ export type HotelMenuItem = {
   kind: HotelOrderKind;
   amountMinor: number;
   description: string;
+  photoUrl?: string;
 };
 
 export type HotelOrder = {
@@ -51,6 +54,7 @@ export type HotelOrder = {
   guestEmail?: string;
   status: HotelOrderStatus;
   createdAt: string;
+  placedBy?: "guest" | "staff";
 };
 
 export type HotelStaff = {
@@ -76,6 +80,7 @@ export type HotelProperty = {
   menu: HotelMenuItem[];
   staff: HotelStaff[];
   sessions: HotelStaffSession[];
+  activity: StaffActivity[];
 };
 
 export type HotelOwnerSeed = {
@@ -146,6 +151,7 @@ function emptyProperty(slug: string, seed?: HotelOwnerSeed): HotelProperty {
       },
     ],
     sessions: [],
+    activity: [],
   };
 }
 
@@ -164,6 +170,7 @@ export function seedHotelProperty(install: PortalInstall, store?: PortalStore, s
           menu: stored.menu?.length ? stored.menu : SEED_MENU.map((item) => ({ ...item, id: newId("mn") })),
           staff: stored.staff?.length ? stored.staff : emptyProperty(slug, seed).staff,
           sessions: stored.sessions ?? [],
+          activity: stored.activity ?? [],
         }
       : emptyProperty(slug, seed);
   save(store, install, row);
@@ -193,12 +200,10 @@ export function hotelAppPayload(install: PortalInstall, store?: PortalStore) {
       guestAppUrl: deliverables.guestApp.url,
       adminDashboardUrl: deliverables.adminDashboard.url,
       status: install.status,
-      branding: {
-        name: install.displayName,
-        primaryColor: install.brandPrimaryColor ?? "#0d7a6f",
-      },
+      branding: publicBranding(install),
       features: featuresForVertical(install.osId, install.verticalId),
       ownerHint: row.staff.find((staff) => staff.role === "owner")?.email ?? `owner@${row.subdomain}.getlifeos.app`,
+      staffAppUrl: deliverables.staffApp.url,
     },
     rooms: row.rooms,
     menu: row.menu,
@@ -229,7 +234,26 @@ export function hotelOpsPayload(install: PortalInstall, staff: HotelStaff, store
     orders,
     menu: row.menu,
     team: staff.role === "owner" ? row.staff.map(publicStaff) : undefined,
+    activity: staff.role === "owner" ? row.activity.slice(0, 80) : undefined,
   };
+}
+
+function logHotelActivity(
+  row: HotelProperty,
+  staff: HotelStaff,
+  action: string,
+  detail: string,
+) {
+  row.activity.unshift({
+    id: newId("act"),
+    at: new Date().toISOString(),
+    staffId: staff.id,
+    staffName: staff.name,
+    role: staff.role,
+    action,
+    detail,
+  });
+  row.activity = row.activity.slice(0, 200);
 }
 
 export function bookHotelRoom(
@@ -264,7 +288,16 @@ export function bookHotelRoom(
 
 export function placeHotelOrder(
   install: PortalInstall,
-  input: { item: string; quantity?: number; guestName: string; guestEmail?: string; roomName?: string; kind?: HotelOrderKind },
+  input: {
+    item: string;
+    quantity?: number;
+    guestName: string;
+    guestEmail?: string;
+    roomName?: string;
+    kind?: HotelOrderKind;
+    placedBy?: "guest" | "staff";
+    actor?: HotelStaff;
+  },
   store?: PortalStore,
 ) {
   const row = requireProperty(install, store);
@@ -282,8 +315,10 @@ export function placeHotelOrder(
     guestEmail: input.guestEmail?.trim().toLowerCase(),
     status: "received",
     createdAt: new Date().toISOString(),
+    placedBy: input.placedBy ?? (input.actor ? "staff" : "guest"),
   };
   row.orders.unshift(order);
+  if (input.actor) logHotelActivity(row, input.actor, "order.create", `${order.item} for ${order.guestName}`);
   save(store, install, row);
   return order;
 }
@@ -341,6 +376,18 @@ export function updateHotelOrderStatus(
   return order;
 }
 
+export function noteHotelActivity(
+  install: PortalInstall,
+  staff: HotelStaff,
+  action: string,
+  detail: string,
+  store?: PortalStore,
+) {
+  const row = requireProperty(install, store);
+  logHotelActivity(row, staff, action, detail);
+  save(store, install, row);
+}
+
 export function updateRoomHousekeep(
   install: PortalInstall,
   roomId: string,
@@ -357,13 +404,19 @@ export function updateRoomHousekeep(
 
 export function loginHotelStaff(
   install: PortalInstall,
-  input: { email: string; password: string },
+  input: { email: string; password: string; surface?: "admin" | "staff" },
   store?: PortalStore,
 ) {
   const row = requireProperty(install, store);
   const staff = row.staff.find((item) => item.email === input.email.trim().toLowerCase());
   if (!staff || !verifyPassword(input.password, staff.passwordHash)) {
     throw new HttpError("Staff email or password is wrong.", 401, "unauthorized");
+  }
+  if (input.surface === "admin" && staff.role !== "owner") {
+    throw new HttpError("Use the staff login URL handed to you.", 403, "forbidden");
+  }
+  if (input.surface === "staff" && staff.role === "owner") {
+    throw new HttpError("Owners sign in on the admin dashboard.", 403, "forbidden");
   }
   const token = randomToken();
   row.sessions = row.sessions.filter((item) => Date.parse(item.expiresAt) > Date.now());
@@ -407,8 +460,76 @@ export function createHotelStaff(
     createdAt: new Date().toISOString(),
   };
   row.staff.push(staff);
+  const owner = row.staff.find((item) => item.role === "owner");
+  if (owner) logHotelActivity(row, owner, "staff.create", `${staff.name} · ${staff.role}`);
   save(store, install, row);
   return publicStaff(staff);
+}
+
+export function upsertHotelRoom(
+  install: PortalInstall,
+  input: { id?: string; name: string; beds: string; nightlyMinor: number; photoUrl?: string; housekeep?: HotelHousekeep },
+  actor: HotelStaff,
+  store?: PortalStore,
+) {
+  const row = requireProperty(install, store);
+  if (input.id) {
+    const room = row.rooms.find((item) => item.id === input.id);
+    if (!room) throw new HttpError("Room not found.", 404, "not_found");
+    room.name = input.name.trim();
+    room.beds = input.beds.trim();
+    room.nightlyMinor = input.nightlyMinor;
+    if (input.photoUrl !== undefined) room.photoUrl = input.photoUrl;
+    if (input.housekeep) room.housekeep = input.housekeep;
+    logHotelActivity(row, actor, "room.update", room.name);
+    save(store, install, row);
+    return room;
+  }
+  const room: HotelRoom = {
+    id: newId("rm"),
+    name: input.name.trim(),
+    beds: input.beds.trim(),
+    nightlyMinor: input.nightlyMinor,
+    housekeep: input.housekeep ?? "ready",
+    photoUrl: input.photoUrl,
+  };
+  row.rooms.unshift(room);
+  logHotelActivity(row, actor, "room.create", room.name);
+  save(store, install, row);
+  return room;
+}
+
+export function upsertHotelMenuItem(
+  install: PortalInstall,
+  input: { id?: string; name: string; kind: HotelOrderKind; amountMinor: number; description: string; photoUrl?: string },
+  actor: HotelStaff,
+  store?: PortalStore,
+) {
+  const row = requireProperty(install, store);
+  if (input.id) {
+    const item = row.menu.find((rowItem) => rowItem.id === input.id);
+    if (!item) throw new HttpError("Item not found.", 404, "not_found");
+    item.name = input.name.trim();
+    item.kind = input.kind;
+    item.amountMinor = input.amountMinor;
+    item.description = input.description.trim();
+    if (input.photoUrl !== undefined) item.photoUrl = input.photoUrl;
+    logHotelActivity(row, actor, "menu.update", item.name);
+    save(store, install, row);
+    return item;
+  }
+  const item: HotelMenuItem = {
+    id: newId("mn"),
+    name: input.name.trim(),
+    kind: input.kind,
+    amountMinor: input.amountMinor,
+    description: input.description.trim(),
+    photoUrl: input.photoUrl,
+  };
+  row.menu.unshift(item);
+  logHotelActivity(row, actor, "menu.create", item.name);
+  save(store, install, row);
+  return item;
 }
 
 export function assertStaffRole(staff: HotelStaff, roles: HotelStaffRole[]) {

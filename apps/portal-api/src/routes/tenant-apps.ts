@@ -1,7 +1,9 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { PortalStore } from "../store.js";
+import type { DistributorClient } from "../services/distributor.js";
 import { HttpError } from "../lib/http.js";
+import { findInstallByHost, updateTenantSite } from "../services/tenant-site.js";
 import {
   assertDiningRole,
   createDiningStaff,
@@ -13,6 +15,7 @@ import {
   loginDiningStaff,
   placeDiningOrder,
   updateDiningOrderStatus,
+  upsertDiningMenuItem,
 } from "../services/dining-ops.js";
 import {
   assertStaffRole,
@@ -28,6 +31,8 @@ import {
   updateHotelBookingStatus,
   updateHotelOrderStatus,
   updateRoomHousekeep,
+  upsertHotelMenuItem,
+  upsertHotelRoom,
 } from "../services/hotel-ops.js";
 import {
   pngIcon,
@@ -49,7 +54,29 @@ function sendHtml(reply: FastifyReply, html: string) {
   return reply.type("text/html; charset=utf-8").send(html);
 }
 
-export async function registerTenantAppRoutes(app: FastifyInstance, store: PortalStore) {
+const imageField = z
+  .string()
+  .max(700_000)
+  .refine((value) => value.startsWith("data:image/") || /^https?:\/\//i.test(value));
+const fqdn = z
+  .string()
+  .min(4)
+  .regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i);
+
+export async function registerTenantAppRoutes(
+  app: FastifyInstance,
+  store: PortalStore,
+  distributor?: DistributorClient,
+) {
+  app.get("/public/tenants/resolve", async (req, reply) => {
+    const host = String((req.query as { host?: string }).host ?? req.hostname ?? "");
+    const row = findInstallByHost(store, host);
+    if (!row || row.status !== "ready" || row.suspended) {
+      return reply.code(404).send({ error: "not_found", message: "Tenant app is not ready." });
+    }
+    return { tenant: { subdomain: row.subdomain, verticalId: row.verticalId } };
+  });
+
   app.get("/public/tenants/:subdomain", async (req, reply) => {
     const { subdomain } = req.params as { subdomain: string };
     const row = store.getInstallBySubdomain(subdomain.toLowerCase());
@@ -134,7 +161,8 @@ export async function registerTenantAppRoutes(app: FastifyInstance, store: Porta
             kind: z.enum(["food", "drink"]).optional(),
           })
           .parse(req.body);
-        return reply.code(201).send({ order: placeDiningOrder(row, body, store) });
+        const actor = staffToken(req) ? diningStaffFromToken(row, staffToken(req), store) : undefined;
+        return reply.code(201).send({ order: placeDiningOrder(row, { ...body, actor }, store) });
       }
       const body = z
         .object({
@@ -146,7 +174,9 @@ export async function registerTenantAppRoutes(app: FastifyInstance, store: Porta
           kind: z.enum(["restaurant", "bar", "room_service"]).optional(),
         })
         .parse(req.body);
-      return reply.code(201).send({ order: placeHotelOrder(hotelInstall(subdomain), body, store) });
+      const hotel = hotelInstall(subdomain);
+      const actor = staffToken(req) ? staffFromToken(hotel, staffToken(req), store) : undefined;
+      return reply.code(201).send({ order: placeHotelOrder(hotel, { ...body, actor }, store) });
     } catch (err) {
       return sendHotelError(reply, err);
     }
@@ -188,7 +218,9 @@ export async function registerTenantAppRoutes(app: FastifyInstance, store: Porta
     try {
       const { subdomain } = req.params as { subdomain: string };
       const row = readyInstall(subdomain);
-      const body = z.object({ email: z.string().email(), password: z.string().min(1) }).parse(req.body);
+      const body = z
+        .object({ email: z.string().email(), password: z.string().min(1), surface: z.enum(["admin", "staff"]).optional() })
+        .parse(req.body);
       if (isDiningVertical(row.verticalId)) return loginDiningStaff(row, body, store);
       return loginHotelStaff(hotelInstall(subdomain), body, store);
     } catch (err) {
@@ -227,7 +259,10 @@ export async function registerTenantAppRoutes(app: FastifyInstance, store: Porta
             role: z.enum(["kitchen", "counter", "rider"]),
           })
           .parse(req.body);
-        return reply.code(201).send({ staff: createDiningStaff(row, body, store) });
+        return reply.code(201).send({
+          staff: createDiningStaff(row, body, store),
+          loginUrl: diningAppPayload(row, store).tenant.staffAppUrl,
+        });
       }
       const hotel = hotelInstall(subdomain);
       const actor = staffFromToken(hotel, staffToken(req), store);
@@ -240,7 +275,142 @@ export async function registerTenantAppRoutes(app: FastifyInstance, store: Porta
           role: z.enum(["front_desk", "restaurant", "bar", "housekeeping"]),
         })
         .parse(req.body);
-      return reply.code(201).send({ staff: createHotelStaff(hotel, body, store) });
+      return reply.code(201).send({
+        staff: createHotelStaff(hotel, body, store),
+        loginUrl: hotelAppPayload(hotel, store).tenant.staffAppUrl,
+      });
+    } catch (err) {
+      return sendHotelError(reply, err);
+    }
+  });
+
+  app.patch("/public/tenants/:subdomain/site", async (req, reply) => {
+    try {
+      const row = readyInstall((req.params as { subdomain: string }).subdomain);
+      const actor = isDiningVertical(row.verticalId)
+        ? diningStaffFromToken(row, staffToken(req), store)
+        : staffFromToken(hotelInstall(row.subdomain), staffToken(req), store);
+      if (actor.role !== "owner") throw new HttpError("Only the owner can edit the branded app.", 403, "forbidden");
+      const body = z
+        .object({
+          logoUrl: imageField.optional(),
+          primaryColor: z.string().max(20).optional(),
+          backgroundUrl: imageField.optional(),
+          heroTitle: z.string().max(80).optional(),
+          writeup: z.string().max(2000).optional(),
+          phone: z.string().max(40).optional(),
+          email: z.string().email().optional().or(z.literal("")),
+          address: z.string().max(200).optional(),
+          dashboardStyle: z.enum(["console", "greetings"]).optional(),
+        })
+        .parse(req.body);
+      return { site: updateTenantSite(row, body, store) };
+    } catch (err) {
+      return sendHotelError(reply, err);
+    }
+  });
+
+  app.post("/public/tenants/:subdomain/catalog/rooms", async (req, reply) => {
+    try {
+      const hotel = hotelInstall((req.params as { subdomain: string }).subdomain);
+      const actor = staffFromToken(hotel, staffToken(req), store);
+      assertStaffRole(actor, ["front_desk"]);
+      const body = z
+        .object({
+          id: z.string().optional(),
+          name: z.string().min(1),
+          beds: z.string().min(1),
+          nightlyMinor: z.number().int().positive(),
+          photoUrl: imageField.optional(),
+          housekeep: z.enum(["ready", "occupied", "dirty", "cleaning"]).optional(),
+        })
+        .parse(req.body);
+      return reply.code(body.id ? 200 : 201).send({ room: upsertHotelRoom(hotel, body, actor, store) });
+    } catch (err) {
+      return sendHotelError(reply, err);
+    }
+  });
+
+  app.post("/public/tenants/:subdomain/catalog/items", async (req, reply) => {
+    try {
+      const row = readyInstall((req.params as { subdomain: string }).subdomain);
+      if (isDiningVertical(row.verticalId)) {
+        const actor = diningStaffFromToken(row, staffToken(req), store);
+        assertDiningRole(actor, ["kitchen", "counter"]);
+        const body = z
+          .object({
+            id: z.string().optional(),
+            name: z.string().min(1),
+            kind: z.enum(["food", "drink"]),
+            amountMinor: z.number().int().positive(),
+            description: z.string().max(240).optional(),
+            photoUrl: imageField.optional(),
+          })
+          .parse(req.body);
+        return reply
+          .code(body.id ? 200 : 201)
+          .send({ item: upsertDiningMenuItem(row, { ...body, description: body.description ?? "" }, actor, store) });
+      }
+      const hotel = hotelInstall(row.subdomain);
+      const actor = staffFromToken(hotel, staffToken(req), store);
+      assertStaffRole(actor, ["restaurant", "bar"]);
+      const body = z
+        .object({
+          id: z.string().optional(),
+          name: z.string().min(1),
+          kind: z.enum(["restaurant", "bar", "room_service"]),
+          amountMinor: z.number().int().positive(),
+          description: z.string().max(240).optional(),
+          photoUrl: imageField.optional(),
+        })
+        .parse(req.body);
+      return reply
+        .code(body.id ? 200 : 201)
+        .send({ item: upsertHotelMenuItem(hotel, { ...body, description: body.description ?? "" }, actor, store) });
+    } catch (err) {
+      return sendHotelError(reply, err);
+    }
+  });
+
+  app.post("/public/tenants/:subdomain/domain", async (req, reply) => {
+    try {
+      const row = readyInstall((req.params as { subdomain: string }).subdomain);
+      const actor = isDiningVertical(row.verticalId)
+        ? diningStaffFromToken(row, staffToken(req), store)
+        : staffFromToken(hotelInstall(row.subdomain), staffToken(req), store);
+      if (actor.role !== "owner") throw new HttpError("Only the owner can attach a domain.", 403, "forbidden");
+      if (!distributor) throw new HttpError("Domain service is not ready.", 503, "unavailable");
+      const body = z.object({ hostname: fqdn, purchase: z.boolean().optional() }).parse(req.body);
+      const hostname = body.hostname.toLowerCase();
+      if (store.getDomainByHostname(hostname)) throw new HttpError("Domain already attached", 409, "conflict");
+      const provisioned = body.purchase
+        ? await distributor.purchaseDomain({
+            tenantId: row.distributorTenantId,
+            subdomain: row.subdomain,
+            domain: hostname,
+          })
+        : await distributor.provisionCustomDomain({
+            tenantId: row.distributorTenantId,
+            subdomain: row.subdomain,
+            customDomain: hostname,
+          });
+      const domain = store.createDomain({
+        installId: row.id,
+        distributorTenantId: row.distributorTenantId,
+        domainId: provisioned.domainId,
+        kind: "custom",
+        hostname,
+        cnameTarget: provisioned.cnameTarget,
+        dnsRecords: provisioned.dnsRecords,
+        dnsStatus: provisioned.dnsStatus === "ACTIVE" ? "ACTIVE" : "PENDING",
+        sslStatus: provisioned.sslStatus === "ACTIVE" ? "ACTIVE" : "PENDING",
+        purchased: Boolean(body.purchase),
+      });
+      store.updateInstall(row.id, { customDomain: hostname, domainId: provisioned.domainId });
+      return reply.code(201).send({
+        domain,
+        verification: { cnameTarget: provisioned.cnameTarget, dnsRecords: provisioned.dnsRecords },
+      });
     } catch (err) {
       return sendHotelError(reply, err);
     }
@@ -332,7 +502,7 @@ export async function registerTenantAppRoutes(app: FastifyInstance, store: Porta
   });
   app.get("/t/:subdomain/staff", async (req, reply) => {
     const { subdomain } = req.params as { subdomain: string };
-    return reply.redirect(`/t/${encodeURIComponent(subdomain)}/admin`, 302);
+    return sendTenantPage(req, reply, subdomain, "admin", false);
   });
   app.get("/t/:subdomain/manifest.webmanifest", async (req, reply) => {
     const { subdomain } = req.params as { subdomain: string };
@@ -376,7 +546,7 @@ export async function registerTenantAppRoutes(app: FastifyInstance, store: Porta
   app.get("/staff", async (req, reply) => {
     const subdomain = tenantSubdomainFromHost(req.hostname);
     if (!subdomain) return reply.callNotFound();
-    return reply.redirect("/admin", 302);
+    return sendTenantPage(req, reply, subdomain, "admin", true);
   });
   app.get("/manifest.webmanifest", async (req, reply) => {
     const subdomain = tenantSubdomainFromHost(req.hostname);

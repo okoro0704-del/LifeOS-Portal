@@ -10,6 +10,7 @@ import {
 } from "../components/ProvisioningWizard";
 import { engineDisplayName } from "../data/verticalCatalog";
 import { HOSPITALITYOS_INSTALL_TEMPLATES } from "@lifeos-portal/shared";
+import { readImageDataUrl } from "../lib/images";
 
 type SavedBilling = { billingId: string; osId: string; verticalId: string };
 
@@ -39,6 +40,8 @@ export function InstallVerticalPage() {
   const [email, setEmail] = useState("owner@example.com");
   const [ownerName, setOwnerName] = useState("Owner");
   const [primaryColor, setPrimaryColor] = useState("#0d7a6f");
+  const [logoUrl, setLogoUrl] = useState("");
+  const [dashboardStyle, setDashboardStyle] = useState<"console" | "greetings">("console");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,6 +56,8 @@ export function InstallVerticalPage() {
       if (wizard?.storeCountry) setStoreCountry(wizard.storeCountry);
       if (wizard?.walletPayout) setWalletPayout(wizard.walletPayout);
       if (wizard?.primaryColor) setPrimaryColor(wizard.primaryColor);
+      if (wizard?.logoUrl) setLogoUrl(wizard.logoUrl);
+      if (wizard?.dashboardStyle) setDashboardStyle(wizard.dashboardStyle);
     }
   }, [osId, verticalId, vertical]);
 
@@ -137,7 +142,8 @@ export function InstallVerticalPage() {
           osId === "transportationos" ? rentalSettingsFromWizard(wizard, verticalId) : undefined,
         localFoodSettings:
           osId === "hospitalityos" ? localFoodSettingsFromWizard(wizard, verticalId) : undefined,
-        brand: { primaryColor },
+        brand: { primaryColor, logoUrl: logoUrl || undefined },
+        dashboardStyle,
         adminStaff: { email, displayName: ownerName, role: "owner" },
       });
       sessionStorage.removeItem("portal.billing");
@@ -183,12 +189,28 @@ export function InstallVerticalPage() {
             {(subdomain || "subdomain")}.getlifeos.app
           </span>
         </label>
-        {verticalId === "hotel" ? (
-          <label>
-            Hotel brand color
-            <input type="color" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} />
-          </label>
-        ) : null}
+        <label>
+          Brand color
+          <input type="color" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} />
+        </label>
+        <label>
+          Logo
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void readImageDataUrl(file, 512).then(setLogoUrl);
+            }}
+          />
+        </label>
+        <label>
+          Dashboard style
+          <select value={dashboardStyle} onChange={(e) => setDashboardStyle(e.target.value as "console" | "greetings")}>
+            <option value="console">Console — top bar, body, bottom tabs</option>
+            <option value="greetings">Greetings — header that says good morning</option>
+          </select>
+        </label>
         {showShopAddress ? (
           <>
             <label>
