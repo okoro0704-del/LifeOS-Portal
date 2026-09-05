@@ -14,11 +14,22 @@ async function corsPlugin(app: FastifyInstance) {
         callback(null, true);
         return;
       }
-      if (origin === "*" || (env.nodeEnv === "production" && !env.corsOrigins.includes(origin))) {
+      if (origin === "*") {
         callback(new Error("CORS origin not allowed"), false);
         return;
       }
-      callback(null, env.corsOrigins.includes(origin) || env.nodeEnv !== "production");
+      let tenantHost = false;
+      try {
+        const host = new URL(origin).hostname;
+        tenantHost = host.endsWith(".getlifeos.app") && host !== "admin.getlifeos.app" && host !== "www.getlifeos.app";
+      } catch {
+        tenantHost = false;
+      }
+      if (env.nodeEnv === "production" && !env.corsOrigins.includes(origin) && !tenantHost) {
+        callback(new Error("CORS origin not allowed"), false);
+        return;
+      }
+      callback(null, env.corsOrigins.includes(origin) || tenantHost || env.nodeEnv !== "production");
     },
     credentials: true,
     allowedHeaders: [

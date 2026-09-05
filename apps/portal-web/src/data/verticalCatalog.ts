@@ -56,7 +56,7 @@ export const VERTICAL_CATALOG: MarketplaceVertical[] = [
     engine: "hospitalityos",
     category: "hospitality",
     modules: ["accommodation", "billing", "crm"],
-    features: ["Room inventory", "Reservations", "Housekeeping", "Billing & CRM"],
+    features: ["Rooms", "Reservations", "Room service", "Front desk"],
     keywords: ["hotel", "resort", "lodging", "rooms", "stay", "accommodation"],
     verticalId: "hotel",
     templateId: "standalone_hotel",

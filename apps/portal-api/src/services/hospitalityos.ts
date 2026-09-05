@@ -46,7 +46,7 @@ export function createLocalHospitalityOs(): HosClient {
         staffId: newId("stf"),
         modulesEnabled: modules,
         seedApplied: input.seed === "default",
-        launchUrls: tenantLaunchUrls(input.subdomain, input.customDomain, "hospitalityos"),
+        launchUrls: tenantLaunchUrls(input.subdomain, input.customDomain),
       };
     },
   };

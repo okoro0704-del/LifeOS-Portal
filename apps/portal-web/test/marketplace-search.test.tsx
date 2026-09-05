@@ -100,4 +100,23 @@ describe("marketplace search", () => {
     expect(gymBox).toBeChecked();
     expect(screen.getByRole("checkbox", { name: /Hotel \/ Accommodation/i })).not.toBeChecked();
   });
+
+  test("hotel install extracts hotel features only", async () => {
+    const user = userEvent.setup();
+    renderMarketplace();
+
+    const hotelCard = document.querySelector('[data-vertical-id="hotel_resort"]') as HTMLElement;
+    expect(hotelCard).toBeTruthy();
+    await user.click(within(hotelCard).getByRole("button", { name: "Install Vertical" }));
+
+    expect(screen.getByTestId("provisioning-wizard")).toBeInTheDocument();
+    expect(screen.getByTestId("wizard-app-id")).toHaveTextContent("hospitalityos");
+    expect(screen.getByTestId("wizard-modules")).toHaveTextContent("accommodation");
+    expect(screen.getByTestId("wizard-modules")).not.toHaveTextContent("gym_spa");
+    expect(screen.getByTestId("wizard-modules")).not.toHaveTextContent("dining");
+    expect(screen.getByTestId("hotel-only-features")).toHaveTextContent("Rooms");
+    expect(screen.getByTestId("hotel-only-features")).toHaveTextContent("Room service");
+    expect(screen.queryByRole("checkbox", { name: /Gym \/ Fitness \/ Spa/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/getlifeos\.app/)).toBeInTheDocument();
+  });
 });

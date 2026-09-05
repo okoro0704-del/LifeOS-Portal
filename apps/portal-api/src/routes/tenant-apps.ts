@@ -1,5 +1,13 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { z } from "zod";
 import type { PortalStore } from "../store.js";
+import { HttpError } from "../lib/http.js";
+import {
+  bookHotelRoom,
+  hotelAppPayload,
+  placeHotelOrder,
+  updateHotelBookingStatus,
+} from "../services/hotel-ops.js";
 import {
   pngIcon,
   tenantAppHtml,
@@ -27,7 +35,66 @@ export async function registerTenantAppRoutes(app: FastifyInstance, store: Porta
     if (!row || row.status !== "ready" || row.suspended) {
       return reply.code(404).send({ error: "not_found", message: "Tenant app is not ready." });
     }
+    if (row.verticalId === "hotel") return hotelAppPayload(row);
     return { tenant: toPublicTenantApp(row) };
+  });
+
+  app.post("/public/tenants/:subdomain/bookings", async (req, reply) => {
+    const { subdomain } = req.params as { subdomain: string };
+    const row = store.getInstallBySubdomain(subdomain.toLowerCase());
+    if (!row || row.status !== "ready" || row.verticalId !== "hotel") {
+      return reply.code(404).send({ error: "not_found", message: "Hotel is not ready." });
+    }
+    const body = z
+      .object({
+        roomId: z.string().min(1),
+        guestName: z.string().min(1),
+        guestEmail: z.string().email(),
+        checkIn: z.string().min(8),
+        checkOut: z.string().min(8),
+      })
+      .parse(req.body);
+    try {
+      return reply.code(201).send({ booking: bookHotelRoom(row, body) });
+    } catch (err) {
+      if (err instanceof HttpError) return reply.code(err.statusCode).send({ error: err.code, message: err.message });
+      throw err;
+    }
+  });
+
+  app.post("/public/tenants/:subdomain/orders", async (req, reply) => {
+    const { subdomain } = req.params as { subdomain: string };
+    const row = store.getInstallBySubdomain(subdomain.toLowerCase());
+    if (!row || row.status !== "ready" || row.verticalId !== "hotel") {
+      return reply.code(404).send({ error: "not_found", message: "Hotel is not ready." });
+    }
+    const body = z
+      .object({
+        item: z.string().min(1),
+        quantity: z.number().int().positive().max(12).optional(),
+        guestName: z.string().min(1),
+        roomName: z.string().optional(),
+      })
+      .parse(req.body);
+    try {
+      return reply.code(201).send({ order: placeHotelOrder(row, body) });
+    } catch (err) {
+      if (err instanceof HttpError) return reply.code(err.statusCode).send({ error: err.code, message: err.message });
+      throw err;
+    }
+  });
+
+  app.post("/public/tenants/:subdomain/bookings/:bookingId/status", async (req, reply) => {
+    const { subdomain, bookingId } = req.params as { subdomain: string; bookingId: string };
+    const row = store.getInstallBySubdomain(subdomain.toLowerCase());
+    if (!row || row.verticalId !== "hotel") return reply.code(404).send({ error: "not_found" });
+    const body = z.object({ status: z.enum(["confirmed", "checked_in", "checked_out"]) }).parse(req.body);
+    try {
+      return { booking: updateHotelBookingStatus(row, bookingId, body.status) };
+    } catch (err) {
+      if (err instanceof HttpError) return reply.code(err.statusCode).send({ error: err.code, message: err.message });
+      throw err;
+    }
   });
 
   const sendTenantPage = async (

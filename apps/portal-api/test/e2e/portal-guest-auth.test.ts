@@ -203,12 +203,9 @@ test("guest hotel install works when TrustID is off and distributor is remote", 
     const install = res.json().install as {
       deliverables: { hostname: string; guestApp: { url: string }; adminDashboard: { url: string } };
     };
-    assert.equal(install.deliverables.hostname, "hospitality.getlifeos.app");
-    assert.equal(install.deliverables.guestApp.url, `https://hospitality.getlifeos.app/?tenant=${subdomain}`);
-    assert.equal(
-      install.deliverables.adminDashboard.url,
-      `https://hospitality.getlifeos.app/admin?tenant=${subdomain}`,
-    );
+    assert.equal(install.deliverables.hostname, `${subdomain}.getlifeos.app`);
+    assert.equal(install.deliverables.guestApp.url, `https://${subdomain}.getlifeos.app/`);
+    assert.equal(install.deliverables.adminDashboard.url, `https://${subdomain}.getlifeos.app/admin`);
 
     const guestApp = await local.inject({ method: "GET", url: `/t/${subdomain}` });
     assert.equal(guestApp.statusCode, 200, guestApp.body);
@@ -222,6 +219,23 @@ test("guest hotel install works when TrustID is off and distributor is remote", 
     const publicTenant = await local.inject({ method: "GET", url: `/public/tenants/${subdomain}` });
     assert.equal(publicTenant.statusCode, 200, publicTenant.body);
     assert.equal(publicTenant.json().tenant.subdomain, subdomain);
+    assert.deepEqual(publicTenant.json().tenant.features, ["rooms", "reservations", "room_service", "front_desk"]);
+    assert.equal(publicTenant.json().tenant.branding.name, "Guest Hotel");
+    const rooms = publicTenant.json().rooms as Array<{ id: string }>;
+    assert.ok(rooms.length >= 4);
+    const booked = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${subdomain}/bookings`,
+      payload: {
+        roomId: rooms[0].id,
+        guestName: "Ada Guest",
+        guestEmail: "ada@guest.example",
+        checkIn: "2026-09-10",
+        checkOut: "2026-09-12",
+      },
+    });
+    assert.equal(booked.statusCode, 201, booked.body);
+    assert.equal(booked.json().booking.nights, 2);
   } finally {
     await local.close();
   }

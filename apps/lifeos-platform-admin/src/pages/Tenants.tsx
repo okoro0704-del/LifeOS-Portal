@@ -72,7 +72,7 @@ export function TenantsPage() {
                 <Link to={`/admin/tenants/${encodeURIComponent(tenant.tenantId)}`}>
                   <strong>{tenant.displayName}</strong>
                 </Link>
-                <div className="mono muted small">{tenant.subdomain}.lifeos.app</div>
+                <div className="mono muted small">{tenant.subdomain}.getlifeos.app</div>
               </td>
               <td className="mono">{tenant.ownerTrustId}</td>
               <td>

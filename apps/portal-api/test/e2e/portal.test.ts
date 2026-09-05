@@ -211,11 +211,16 @@ test("POST /installs seeds a hotel vertical after Finprove checkout", async () =
     assert.ok(body.install.modulesEnabled.includes(m), `missing module ${m}`);
   }
   assert.match(body.install.launchUrls.staff, new RegExp(subdomain));
-  assert.equal(body.install.deliverables?.guestApp.url, `https://hospitality.getlifeos.app/?tenant=${subdomain}`);
-  assert.equal(
-    body.install.deliverables?.adminDashboard.url,
-    `https://hospitality.getlifeos.app/admin?tenant=${subdomain}`,
-  );
+  assert.equal(body.install.deliverables?.guestApp.url, `https://${subdomain}.getlifeos.app/`);
+  assert.equal(body.install.deliverables?.adminDashboard.url, `https://${subdomain}.getlifeos.app/admin`);
+  assert.equal(body.install.enabledModules?.includes("gym_spa"), false);
+  assert.equal(body.install.enabledModules?.includes("events"), false);
+
+  const hotelApp = await app.inject({ method: "GET", url: `/public/tenants/${subdomain}` });
+  assert.equal(hotelApp.statusCode, 200, hotelApp.body);
+  assert.deepEqual(hotelApp.json().tenant.features, ["rooms", "reservations", "room_service", "front_desk"]);
+  assert.equal(hotelApp.json().tenant.branding.primaryColor, "#0B3D2E");
+  assert.equal(hotelApp.json().tenant.branding.name, "Grand Portal Hotel");
 
   const orgs = await app.inject({
     method: "GET",

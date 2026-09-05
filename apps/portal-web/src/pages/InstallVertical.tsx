@@ -38,6 +38,7 @@ export function InstallVerticalPage() {
   const [walletPayout, setWalletPayout] = useState("");
   const [email, setEmail] = useState("owner@example.com");
   const [ownerName, setOwnerName] = useState("Owner");
+  const [primaryColor, setPrimaryColor] = useState("#0d7a6f");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,6 +52,7 @@ export function InstallVerticalPage() {
       if (wizard?.storeCity) setStoreCity(wizard.storeCity);
       if (wizard?.storeCountry) setStoreCountry(wizard.storeCountry);
       if (wizard?.walletPayout) setWalletPayout(wizard.walletPayout);
+      if (wizard?.primaryColor) setPrimaryColor(wizard.primaryColor);
     }
   }, [osId, verticalId, vertical]);
 
@@ -87,11 +89,13 @@ export function InstallVerticalPage() {
     try {
       const wizard = readWizardSelection();
       const enabledModules =
-        wizard && wizard.verticalId === verticalId
-          ? wizard.enabledModules
-          : osId === "hospitalityos"
-            ? suiteModulesForVertical(verticalId)
-            : [...(vertical?.modules ?? [])];
+        verticalId === "hotel"
+          ? suiteModulesForVertical("hotel")
+          : wizard && wizard.verticalId === verticalId
+            ? wizard.enabledModules
+            : osId === "hospitalityos"
+              ? suiteModulesForVertical(verticalId)
+              : [...(vertical?.modules ?? [])];
       const tosPreset =
         wizard?.preset ??
         (verticalId === "rentals" || verticalId === "logistics" || verticalId === "hub"
@@ -133,6 +137,7 @@ export function InstallVerticalPage() {
           osId === "transportationos" ? rentalSettingsFromWizard(wizard, verticalId) : undefined,
         localFoodSettings:
           osId === "hospitalityos" ? localFoodSettingsFromWizard(wizard, verticalId) : undefined,
+        brand: { primaryColor },
         adminStaff: { email, displayName: ownerName, role: "owner" },
       });
       sessionStorage.removeItem("portal.billing");
@@ -154,7 +159,9 @@ export function InstallVerticalPage() {
             ? "License is paid. Master Distributor bootstraps the domain, then ECommerceOS seeds the storefront."
             : osId === "transportationos"
               ? "License is paid. Master Distributor bootstraps the domain, then TransportationOS seeds this mobility vertical."
-              : "License is paid. Master Distributor bootstraps the domain, then HospitalityOS seeds this vertical — not the entire OS."}
+              : verticalId === "hotel"
+                ? "License is paid. This download creates a hotel app on getlifeos.app — rooms, booking, and room service only. HospitalityOS is not connected."
+                : "License is paid. Master Distributor bootstraps the domain, then this vertical is seeded on its own — not the entire OS."}
         </p>
       </header>
       {error ? <p className="banner-error">{error}</p> : null}
@@ -172,10 +179,16 @@ export function InstallVerticalPage() {
             required
           />
           <span className="hint">
-            After install you get a guest PWA and an installable admin dashboard on{" "}
-            {(subdomain || "subdomain")}.lifeos.app
+            After install you get a hotel guest app and front desk on{" "}
+            {(subdomain || "subdomain")}.getlifeos.app
           </span>
         </label>
+        {verticalId === "hotel" ? (
+          <label>
+            Hotel brand color
+            <input type="color" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} />
+          </label>
+        ) : null}
         {showShopAddress ? (
           <>
             <label>

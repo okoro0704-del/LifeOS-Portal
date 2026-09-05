@@ -489,6 +489,41 @@ fieldset {
   text-decoration: underline;
 }
 
+.hotel-app {
+  min-height: 100%;
+  background: var(--los-bg);
+}
+.hotel-bar {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: end;
+  padding: 1.25rem 1.5rem;
+  background: var(--los-surface);
+  box-shadow: var(--los-shadow);
+}
+.hotel-bar h1 {
+  margin: 0;
+}
+.hotel-nav {
+  display: flex;
+  gap: 0.85rem;
+}
+.hotel-nav a {
+  text-decoration: none;
+  font-weight: 650;
+  color: var(--los-muted);
+}
+.hotel-nav a.active {
+  color: var(--los-accent);
+}
+
+.banner-ok {
+  background: var(--los-accent-soft);
+  color: var(--los-accent-strong);
+  padding: 0.75rem 1rem;
+  border-radius: var(--los-radius-sm);
+}
 .banner-error {
   background: var(--los-danger-soft);
   color: var(--los-danger);

@@ -41,7 +41,7 @@ export function BillingsPage() {
             <tr key={row.id}>
               <td>
                 <strong>{row.tenantName}</strong>
-                {row.subdomain ? <div className="mono muted small">{row.subdomain}.lifeos.app</div> : null}
+                {row.subdomain ? <div className="mono muted small">{row.subdomain}.getlifeos.app</div> : null}
               </td>
               <td>
                 {row.osId} / {row.verticalId}

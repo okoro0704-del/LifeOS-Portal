@@ -33,7 +33,7 @@ export function shellIconForPreset(appId: string, preset?: string | null): strin
  * when LifeOS API is offline in local/dev.
  */
 export async function projectInstallToLifeOsShell(input: ShellProjectInput): Promise<void> {
-  const origin = `https://${input.subdomain}.lifeos.app`;
+  const origin = `https://${input.subdomain}.getlifeos.app`;
   const launchUrl = input.launchUrl || `${origin}/staff`;
   const preset = input.preset ?? null;
   try {

@@ -32,7 +32,7 @@ export function InstallsPage() {
               <Link to={`/app/installs/${row.id}`}>
                 <strong>{row.displayName}</strong>
                 <span className="muted">
-                  {row.verticalId} · {row.subdomain}.lifeos.app · {row.status}
+                  {row.verticalId} · {row.subdomain}.getlifeos.app · {row.status}
                 </span>
               </Link>
               {row.status === "ready"

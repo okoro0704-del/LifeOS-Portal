@@ -27,7 +27,7 @@ export function activateBusinessPortal(opts: {
     businessPortalUrl: config.businessPortalUrl,
   });
 
-  const hostname = `${opts.install.subdomain}.lifeos.app`;
+  const hostname = `${opts.install.subdomain}.getlifeos.app`;
   if (!opts.store.getDomainByHostname(hostname)) {
     opts.store.createDomain({
       installId: opts.install.id,

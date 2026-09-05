@@ -12,7 +12,7 @@ export function deliverablesFor(input: {
   launchUrls?: LaunchUrls;
 }) {
   if (input.deliverables) return input.deliverables;
-  if (input.subdomain) return tenantDeliverables(input.subdomain, input.customDomain, input.osId);
+  if (input.subdomain) return tenantDeliverables(input.subdomain, input.customDomain);
   if (input.launchUrls?.guest || input.launchUrls?.admin) {
     const guest = input.launchUrls.guest ?? input.launchUrls.storefront ?? "";
     const admin = input.launchUrls.admin ?? input.launchUrls.staff ?? "";
@@ -58,8 +58,8 @@ export function DeliverablesCard({
         <p className="eyebrow">your deliverables</p>
         <h2>Apps on {deliverables.hostname}</h2>
         <p className="lead">
-          Both apps live on the subdomain you set. The guest app is a website and a PWA. The admin
-          dashboard is a PWA and asks to install on first visit.
+          Both apps live on {deliverables.hostname}. The guest app is this hotel only — rooms,
+          booking, and room service. The front desk is a PWA and asks to install on first visit.
         </p>
       </header>
       <div className="cards">

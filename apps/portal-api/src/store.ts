@@ -69,6 +69,8 @@ export type PortalInstall = {
   installTemplate?: string;
   seedApplied: boolean;
   launchUrls?: LaunchUrls;
+  brandPrimaryColor?: string;
+  brandLogoUrl?: string;
   status: InstallStatus;
   suspended?: boolean;
   error?: string;

@@ -44,7 +44,7 @@ export function InstallHealthPage() {
                 <Link to={`/admin/tenants/${encodeURIComponent(row.tenantId)}`}>
                   <strong>{row.displayName}</strong>
                 </Link>
-                <div className="mono muted small">{row.subdomain}.lifeos.app</div>
+                <div className="mono muted small">{row.subdomain}.getlifeos.app</div>
               </td>
               <td>
                 {row.osId} / {row.verticalId}

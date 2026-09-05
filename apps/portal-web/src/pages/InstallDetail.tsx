@@ -40,14 +40,14 @@ export function InstallDetailPage() {
         <p className="eyebrow">{row.appId}</p>
         <h1>{row.status === "ready" ? "Your apps are ready" : row.displayName}</h1>
         <p className="lead">
-          {row.displayName} · {row.verticalId} · {row.subdomain}.lifeos.app · {row.status}
+          {row.displayName} · {row.verticalId} · {row.subdomain}.getlifeos.app · {row.status}
         </p>
       </header>
       {row.error ? <p className="banner-error">{row.error}</p> : null}
       {row.status === "ready" && deliverables ? <DeliverablesCard deliverables={deliverables} /> : null}
       <dl className="meta">
         <div>
-          <dt>{row.appId === "ecommerceos" ? "Tenant" : "HOS tenant"}</dt>
+          <dt>Tenant</dt>
           <dd className="mono">{row.hosTenantId ?? "—"}</dd>
         </div>
         <div>

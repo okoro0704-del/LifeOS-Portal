@@ -51,6 +51,7 @@ export type WizardSelection = {
   enabledModules: string[];
   displayName?: string;
   subdomain?: string;
+  primaryColor?: string;
   walletPayout?: string;
   storeAddress?: string;
   storeCity?: string;
@@ -160,6 +161,7 @@ export function ProvisioningWizard() {
     catalogItem?.name ?? saved?.displayName ?? "",
   );
   const [subdomain, setSubdomain] = useState(saved?.subdomain ?? "");
+  const [primaryColor, setPrimaryColor] = useState(saved?.primaryColor ?? "#0d7a6f");
   const [walletPayout, setWalletPayout] = useState(saved?.walletPayout ?? "");
   const [storeAddress, setStoreAddress] = useState(saved?.storeAddress ?? "");
   const [storeCity, setStoreCity] = useState(saved?.storeCity ?? "");
@@ -231,8 +233,11 @@ export function ProvisioningWizard() {
       return [...(catalogItem?.modules ?? saved?.enabledModules ?? [])];
     }
     if (!hospitalityLive) return [...(catalogItem?.modules ?? saved?.enabledModules ?? [])];
+    if (templateId === "standalone_hotel" || catalogItem?.verticalId === "hotel") {
+      return ["accommodation", "billing", "crm"];
+    }
     return normalizeSuiteModules([...verticals, ...SUITE_SHARED_MODULES]);
-  }, [hospitalityLive, ecommerceLive, transportationLive, serviceosLive, verticals, catalogItem, saved?.enabledModules]);
+  }, [hospitalityLive, ecommerceLive, transportationLive, serviceosLive, verticals, catalogItem, saved?.enabledModules, templateId]);
   const folio = folioChargeEnabled(enabledModules);
   const verticalId = ecommerceLive
     ? (catalogItem?.verticalId ?? saved?.verticalId ?? "retail")
@@ -274,6 +279,7 @@ export function ProvisioningWizard() {
       enabledModules,
       displayName,
       subdomain,
+      primaryColor,
       walletPayout,
       storeAddress,
       storeCity,
@@ -374,9 +380,21 @@ export function ProvisioningWizard() {
             data-testid="wizard-subdomain"
           />
           <span className="hint">
-            Guest app and admin dashboard will be handed on {(subdomain || "subdomain")}.lifeos.app
+            Guest app and admin dashboard will be handed on {(subdomain || "subdomain")}.getlifeos.app
           </span>
         </label>
+        {hospitalityLive && (templateId === "standalone_hotel" || catalogItem?.verticalId === "hotel") ? (
+          <label>
+            Hotel brand color
+            <input
+              type="color"
+              value={primaryColor}
+              onChange={(e) => setPrimaryColor(e.target.value)}
+              data-testid="wizard-brand-color"
+            />
+            <span className="hint">Applied to this hotel’s guest app and front desk only.</span>
+          </label>
+        ) : null}
         {ecommerceLive && hasPhysicalAddress ? (
           <>
             <label>
@@ -557,7 +575,21 @@ export function ProvisioningWizard() {
         </label>
       </div>
 
-      {hospitalityLive ? (
+      {hospitalityLive && (templateId === "standalone_hotel" || catalogItem?.verticalId === "hotel") ? (
+        <>
+          <h2 className="section-title">Hotel only</h2>
+          <p className="muted">
+            This download extracts rooms, reservations, room service, and front desk. Gym, cinema,
+            spa, and the rest of HospitalityOS are not included.
+          </p>
+          <ul className="list" data-testid="hotel-only-features">
+            <li>Rooms</li>
+            <li>Reservations</li>
+            <li>Room service</li>
+            <li>Front desk</li>
+          </ul>
+        </>
+      ) : hospitalityLive ? (
         <>
           <h2 className="section-title">Modules</h2>
           <p className="muted">Billing and CRM are always included. Toggle verticals for this property.</p>

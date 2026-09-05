@@ -64,11 +64,13 @@ export {
 export {
   GUEST_PORTAL_ORIGIN,
   PLATFORM_ADMIN_ORIGIN,
-  HOSPITALITY_ORIGIN,
   TENANT_APP_ROOT_DOMAIN,
+  HOTEL_FEATURE_IDS,
   tenantAppHostname,
+  tenantLabelFromHost,
   tenantDeliverables,
   tenantLaunchUrls,
+  featuresForVertical,
   type TenantDeliverables,
 } from "./urls.js";
 

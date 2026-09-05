@@ -1,5 +1,5 @@
 import { deflateSync } from "node:zlib";
-import { tenantDeliverables } from "@lifeos-portal/shared";
+import { tenantDeliverables, tenantLabelFromHost } from "@lifeos-portal/shared";
 import type { PortalInstall } from "../store.js";
 
 export type PublicTenantApp = {
@@ -14,27 +14,12 @@ export type PublicTenantApp = {
   status: string;
 };
 
-const RESERVED_HOSTS = new Set([
-  "lifeos.app",
-  "www.lifeos.app",
-  "host.lifeos.app",
-  "getlifeos.app",
-  "www.getlifeos.app",
-  "admin.getlifeos.app",
-  "track.lifeos.app",
-]);
-
 export function tenantSubdomainFromHost(hostHeader?: string) {
-  const host = hostHeader?.split(":")[0]?.toLowerCase() ?? "";
-  if (!host || RESERVED_HOSTS.has(host) || host.endsWith(".railway.app") || host.endsWith(".netlify.app")) {
-    return undefined;
-  }
-  if (host.endsWith(".lifeos.app")) return host.slice(0, -".lifeos.app".length);
-  return undefined;
+  return tenantLabelFromHost(hostHeader);
 }
 
 export function toPublicTenantApp(row: PortalInstall): PublicTenantApp {
-  const deliverables = tenantDeliverables(row.subdomain, row.customDomain, row.osId);
+  const deliverables = tenantDeliverables(row.subdomain, row.customDomain);
   return {
     subdomain: row.subdomain,
     displayName: row.displayName,

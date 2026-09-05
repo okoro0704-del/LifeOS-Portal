@@ -21,6 +21,7 @@ import type { EcoClient } from "./ecommerceos.js";
 import type { TosClient } from "./transportationos.js";
 import { consumePaidBilling } from "./billing.js";
 import { activateBusinessPortal } from "./tenant-portal.js";
+import { seedHotelProperty } from "./hotel-ops.js";
 import { projectInstallToLifeOsShell, shellIconForPreset } from "./shell-projection.js";
 
 function resolveHosInstallTemplate(verticalId: string, installTemplate?: string, enabledModules?: string[]) {
@@ -63,6 +64,7 @@ function enabledModulesForInstall(osId: string, verticalId: string, extra?: stri
   if (osId === "ecommerceos" || osId === "transportationos") {
     return extra?.length ? extra : [...(getVertical(osId, verticalId)?.modules ?? [])];
   }
+  if (verticalId === "hotel") return suiteModulesForVertical("hotel");
   return suiteModulesForVertical(verticalId, extra);
 }
 
@@ -175,6 +177,8 @@ export async function installDomainOs(opts: {
     displayName: opts.input.displayName,
     subdomain,
     customDomain: opts.input.customDomain,
+    brandPrimaryColor: brand.primaryColor,
+    brandLogoUrl: brand.logoUrl,
     distributorTenantId: tenantId,
     modulesEnabled: modules,
     enabledModules,
@@ -234,34 +238,47 @@ export async function installDomainOs(opts: {
     };
 
     const provisioned =
-      osId === "ecommerceos"
-        ? await opts.eco.provision({
-            ...provisionInput,
-            pickup: opts.input.pickup,
-            walletPayoutAccount: opts.input.walletPayoutAccount,
-          })
-        : osId === "transportationos"
-          ? await opts.tos.provision({
+      verticalId === "hotel"
+        ? {
+            ok: true,
+            tenantId: newId("htl"),
+            hosTenantId: newId("htl"),
+            organizationId: newId("org"),
+            branchId: newId("brn"),
+            staffId: newId("stf"),
+            modulesEnabled: modules,
+            seedApplied: (opts.input.seed ?? "default") === "default",
+            launchUrls: tenantLaunchUrls(subdomain, opts.input.customDomain),
+          }
+        : osId === "ecommerceos"
+          ? await opts.eco.provision({
               ...provisionInput,
-              preset:
-                (installPreset as "logistics" | "rentals" | "hub" | undefined) ??
-                (verticalId === "rentals" || verticalId === "logistics" || verticalId === "hub"
-                  ? verticalId
-                  : "hub"),
-              verticals: transportationFlags(verticalId, opts.input),
-              rentalSettings: opts.input.rentalSettings,
+              pickup: opts.input.pickup,
+              walletPayoutAccount: opts.input.walletPayoutAccount,
             })
-          : await opts.hos.provision({
-              ...provisionInput,
-              installTemplate,
-              localFood:
-                installPreset === "local_food" || verticalId === "local_food"
-                  ? opts.input.localFoodSettings
-                  : undefined,
-            });
+          : osId === "transportationos"
+            ? await opts.tos.provision({
+                ...provisionInput,
+                preset:
+                  (installPreset as "logistics" | "rentals" | "hub" | undefined) ??
+                  (verticalId === "rentals" || verticalId === "logistics" || verticalId === "hub"
+                    ? verticalId
+                    : "hub"),
+                verticals: transportationFlags(verticalId, opts.input),
+                rentalSettings: opts.input.rentalSettings,
+              })
+            : await opts.hos.provision({
+                ...provisionInput,
+                installTemplate,
+                localFood:
+                  installPreset === "local_food" || verticalId === "local_food"
+                    ? opts.input.localFoodSettings
+                    : undefined,
+              });
 
-    const tenantIdReady = provisioned.tenantId ?? provisioned.hosTenantId;
-    const deliverableUrls = tenantLaunchUrls(subdomain, opts.input.customDomain, osId);
+    const tenantIdReady =
+      ("tenantId" in provisioned ? provisioned.tenantId : undefined) ?? provisioned.hosTenantId;
+    const deliverableUrls = tenantLaunchUrls(subdomain, opts.input.customDomain);
     const storefrontUrl = deliverableUrls.storefront;
     const adminConsoleUrl = deliverableUrls.admin;
     const staffUrl = deliverableUrls.staff;
@@ -286,6 +303,7 @@ export async function installDomainOs(opts: {
       error: undefined,
     })!;
     opts.store.updateBilling(billing.id, { status: "consumed", installId: ready.id });
+    seedHotelProperty(ready);
     activateBusinessPortal({
       store: opts.store,
       user: opts.user,

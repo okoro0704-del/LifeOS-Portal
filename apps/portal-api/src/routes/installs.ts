@@ -33,7 +33,7 @@ function toPublic(row: PortalInstall): InstallRecordPublic {
     enabledModules: row.enabledModules,
     seedApplied: row.seedApplied,
     launchUrls: row.launchUrls,
-    deliverables: tenantDeliverables(row.subdomain, row.customDomain, row.osId),
+    deliverables: tenantDeliverables(row.subdomain, row.customDomain),
     status: row.status,
     error: row.error,
     createdAt: row.createdAt,

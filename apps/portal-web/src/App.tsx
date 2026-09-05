@@ -1,4 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { tenantLabelFromHost } from "@lifeos-portal/shared";
 import { AuthProvider } from "./hooks/useAuth";
 import { RequireAuth } from "./components/RequireAuth";
 import { AppShell } from "./components/AppShell";
@@ -15,8 +16,21 @@ import { InstallsPage } from "./pages/Installs";
 import { InstallDetailPage } from "./pages/InstallDetail";
 import { OrganizationsPage } from "./pages/Organizations";
 import { ProfilePage } from "./pages/Profile";
+import { TenantHotelApp } from "./pages/TenantHotelApp";
+
+function tenantFromPath() {
+  const match = window.location.pathname.match(/^\/t\/([^/]+)/);
+  return match?.[1]?.toLowerCase();
+}
 
 export function App() {
+  const hostTenant = tenantLabelFromHost(window.location.hostname);
+  const pathTenant = tenantFromPath();
+  const subdomain = hostTenant || pathTenant;
+  if (subdomain) {
+    return <TenantHotelApp subdomain={subdomain} basename={hostTenant ? "/" : `/t/${subdomain}`} />;
+  }
+
   return (
     <AuthProvider>
       <BrowserRouter>
