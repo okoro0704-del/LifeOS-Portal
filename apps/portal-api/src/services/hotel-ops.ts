@@ -5,7 +5,8 @@ import { hashPassword, verifyPassword } from "../lib/password.js";
 import type { PortalInstall, PortalStore } from "../store.js";
 import { publicBranding, type StaffActivity } from "./tenant-site.js";
 
-export type HotelStaffRole = "owner" | "front_desk" | "restaurant" | "bar" | "housekeeping";
+export type HotelStaffRole = "owner" | "front_desk" | "restaurant" | "bar" | "housekeeping" | "rider";
+export type OrderFulfillment = "walk_in" | "takeaway";
 export type HotelHousekeep = "ready" | "occupied" | "dirty" | "cleaning";
 export type HotelOrderKind = "restaurant" | "bar" | "room_service";
 export type HotelOrderStatus = "received" | "preparing" | "ready" | "delivered";
@@ -52,6 +53,12 @@ export type HotelOrder = {
   roomName?: string;
   guestName: string;
   guestEmail?: string;
+  fulfillment?: OrderFulfillment;
+  tableName?: string;
+  seats?: number;
+  address?: string;
+  lat?: number;
+  lng?: number;
   status: HotelOrderStatus;
   createdAt: string;
   placedBy?: "guest" | "staff";
@@ -72,12 +79,15 @@ export type HotelStaffSession = {
   expiresAt: string;
 };
 
+export type HotelTable = { id: string; name: string; seats: number };
+
 export type HotelProperty = {
   subdomain: string;
   rooms: HotelRoom[];
   bookings: HotelBooking[];
   orders: HotelOrder[];
   menu: HotelMenuItem[];
+  tables: HotelTable[];
   staff: HotelStaff[];
   sessions: HotelStaffSession[];
   activity: StaffActivity[];
@@ -132,6 +142,14 @@ function save(store: PortalStore | undefined, install: PortalInstall, row: Hotel
   if (store) store.updateInstall(install.id, { hotelOps: row });
 }
 
+function seedTables(): HotelTable[] {
+  return ["T1", "T2", "T3", "T4", "T5", "T6"].map((name, i) => ({
+    id: newId("tbl"),
+    name,
+    seats: i < 2 ? 2 : i < 4 ? 4 : 6,
+  }));
+}
+
 function emptyProperty(slug: string, seed?: HotelOwnerSeed): HotelProperty {
   const email = (seed?.email ?? `owner@${slug}.getlifeos.app`).trim().toLowerCase();
   return {
@@ -140,6 +158,7 @@ function emptyProperty(slug: string, seed?: HotelOwnerSeed): HotelProperty {
     bookings: [],
     orders: [],
     menu: SEED_MENU.map((item) => ({ ...item, id: newId("mn") })),
+    tables: seedTables(),
     staff: [
       {
         id: newId("hst"),
@@ -168,6 +187,7 @@ export function seedHotelProperty(install: PortalInstall, store?: PortalStore, s
           bookings: stored.bookings ?? [],
           orders: stored.orders ?? [],
           menu: stored.menu?.length ? stored.menu : SEED_MENU.map((item) => ({ ...item, id: newId("mn") })),
+          tables: stored.tables?.length ? stored.tables : seedTables(),
           staff: stored.staff?.length ? stored.staff : emptyProperty(slug, seed).staff,
           sessions: stored.sessions ?? [],
           activity: stored.activity ?? [],
@@ -212,6 +232,7 @@ export function hotelAppPayload(install: PortalInstall, store?: PortalStore) {
     },
     rooms: row.rooms,
     menu: row.menu,
+    tables: row.tables,
   };
 }
 
@@ -231,13 +252,16 @@ export function hotelOpsPayload(install: PortalInstall, staff: HotelStaff, store
       ? row.orders.filter((item) => item.kind === "restaurant" || item.kind === "room_service")
       : staff.role === "bar"
         ? row.orders.filter((item) => item.kind === "bar")
-        : row.orders;
+        : staff.role === "rider"
+          ? row.orders.filter((item) => item.fulfillment === "takeaway" && (item.status === "ready" || item.status === "delivered"))
+          : row.orders;
   return {
     staff: publicStaff(staff),
     rooms: row.rooms,
     bookings: row.bookings,
     orders,
     menu: row.menu,
+    tables: row.tables,
     team: staff.role === "owner" ? row.staff.map(publicStaff) : undefined,
     activity: staff.role === "owner" ? row.activity.slice(0, 80) : undefined,
   };
@@ -301,6 +325,12 @@ export function placeHotelOrder(
     guestEmail?: string;
     roomName?: string;
     kind?: HotelOrderKind;
+    fulfillment?: OrderFulfillment;
+    tableName?: string;
+    seats?: number;
+    address?: string;
+    lat?: number;
+    lng?: number;
     placedBy?: "guest" | "staff";
     actor?: HotelStaff;
   },
@@ -310,6 +340,14 @@ export function placeHotelOrder(
   const quantity = Math.max(1, Math.min(12, input.quantity ?? 1));
   const menuItem = row.menu.find((item) => item.name === input.item.trim());
   const kind = input.kind ?? menuItem?.kind ?? "room_service";
+  const fulfillment =
+    input.fulfillment ?? (input.address || input.lat != null ? "takeaway" : "walk_in");
+  if (fulfillment === "walk_in" && input.fulfillment === "walk_in" && row.tables.length && !input.tableName?.trim()) {
+    throw new HttpError("Pick a table and chairs for a walk-in order.", 400, "table_required");
+  }
+  if (fulfillment === "takeaway" && !input.address?.trim() && (input.lat == null || input.lng == null)) {
+    throw new HttpError("Takeaway needs a written address or a live map pin.", 400, "location_required");
+  }
   const order: HotelOrder = {
     id: newId("ord"),
     item: input.item.trim(),
@@ -319,6 +357,12 @@ export function placeHotelOrder(
     roomName: input.roomName,
     guestName: input.guestName.trim(),
     guestEmail: input.guestEmail?.trim().toLowerCase(),
+    fulfillment,
+    tableName: input.tableName,
+    seats: input.seats,
+    address: input.address,
+    lat: input.lat,
+    lng: input.lng,
     status: "received",
     createdAt: new Date().toISOString(),
     placedBy: input.placedBy ?? (input.actor ? "staff" : "guest"),

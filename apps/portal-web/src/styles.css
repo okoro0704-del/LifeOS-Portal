@@ -748,12 +748,31 @@ fieldset {
     linear-gradient(180deg, rgba(7, 11, 18, 0.15), rgba(7, 11, 18, 0.82)),
     radial-gradient(800px 280px at 80% 0%, color-mix(in srgb, var(--tap-accent) 35%, transparent), transparent);
   background-size: cover;
+  background-position: center;
   border: 1px solid var(--los-border);
+}
+.site-hero-tall {
+  min-height: min(78dvh, 620px);
+  padding: 2.2rem 1.6rem 2.4rem;
 }
 .site-hero h2 {
   margin: 0.2rem 0 0.5rem;
   font-size: 2rem;
   max-width: 16ch;
+}
+.site-hero-tall h2 {
+  font-size: clamp(2.1rem, 7vw, 3.1rem);
+  max-width: 14ch;
+}
+.site-hero-tall .lead {
+  font-size: 1.12rem;
+  max-width: 38ch;
+}
+.site-hero-meta {
+  display: grid;
+  gap: 0.15rem;
+  margin-top: 0.8rem;
+  font-weight: 700;
 }
 .site-cta {
   display: flex;
@@ -914,6 +933,40 @@ fieldset {
   display: grid;
   gap: 0.8rem;
   margin: 0 0 1rem;
+}
+.fulfillment {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0.6rem 0 1rem;
+  padding: 0.9rem;
+  border-radius: 18px;
+  border: 1px solid var(--los-border);
+  background: rgba(255, 255, 255, 0.04);
+}
+.fulfillment-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+}
+.fulfillment-tabs button {
+  border: 1px solid var(--los-border);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  padding: 0.7rem 0.6rem;
+  border-radius: 14px;
+  cursor: pointer;
+}
+.fulfillment-tabs button.active {
+  background: color-mix(in srgb, var(--tap-accent, var(--los-accent)) 22%, transparent);
+  border-color: var(--tap-accent, var(--los-accent));
+}
+.live-map {
+  width: 100%;
+  min-height: 180px;
+  border: 0;
+  border-radius: 14px;
 }
 .site-strip {
   display: grid;

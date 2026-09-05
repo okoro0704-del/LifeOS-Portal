@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { BusinessHome } from "../components/BusinessHome";
+import { emptyFulfillment, fulfillmentPayload, OrderFulfillment, type FulfillmentChoice } from "../components/OrderFulfillment";
 import { TenantAppChrome } from "../components/TenantAppChrome";
 import { portalApiBase } from "../lib/api";
 import { TenantOwnerAdmin } from "./TenantOwnerAdmin";
@@ -29,7 +30,7 @@ type Order = {
   roomName?: string;
   status: string;
 };
-type Staff = { id: string; name: string; email: string; role: "owner" | "front_desk" | "restaurant" | "bar" | "housekeeping" };
+type Staff = { id: string; name: string; email: string; role: "owner" | "front_desk" | "restaurant" | "bar" | "housekeeping" | "rider" };
 type HotelPublic = {
   tenant: {
     displayName: string;
@@ -54,6 +55,7 @@ type HotelPublic = {
   };
   rooms: Room[];
   menu: MenuItem[];
+  tables?: Array<{ id: string; name: string; seats: number }>;
 };
 
 function money(minor: number) {
@@ -231,56 +233,23 @@ function GuestIdentity({
 
 function HotelHome({ data }: { data: HotelPublic }) {
   const brand = data.tenant.branding;
-  const readyRooms = data.rooms.filter((room) => room.housekeep === "ready").slice(0, 3);
-  const food = data.menu.filter((item) => item.kind === "restaurant").slice(0, 2);
-  const drinks = data.menu.filter((item) => item.kind === "bar").slice(0, 2);
   return (
     <div data-testid="hotel-home">
-    <BusinessHome
-      name={brand.name}
-      hostname={data.tenant.hostname}
-      accent={brand.primaryColor}
-      logoUrl={brand.logoUrl}
-      backgroundUrl={brand.backgroundUrl}
-      heroTitle={brand.heroTitle}
-      writeup={brand.writeup}
-      quotesEyebrow="From guests who stayed here"
-      phone={brand.phone}
-      email={brand.email}
-      address={brand.address}
-      story={`${brand.name} is a stay for people who want a real room, a plated dinner, and a quiet night — booked from this phone, not a brochure.`}
-      primaryCta={{ to: "/rooms", label: "Book a room" }}
-      secondaryCta={{ to: "/rooms", label: "View rooms" }}
-      testimonials={brand.testimonials ?? []}
-      links={[
-        { to: "/rooms", eyebrow: "Stay", title: "Rooms", copy: `${data.rooms.length} rooms on the board. Check dates, then hold one.` },
-        { to: "/food", eyebrow: "Kitchen", title: "Food", copy: `${food[0]?.name ?? "Plates"} and more from the restaurant.` },
-        { to: "/drinks", eyebrow: "Bar", title: "Drinks", copy: `${drinks[0]?.name ?? "House pours"} after dinner or on the terrace.` },
-        { to: "/activities", eyebrow: "You", title: "Activities", copy: "Bookings, kitchen tickets, and self check-in." },
-      ]}
-      featured={
-        readyRooms.length ? (
-          <section>
-            <p className="eyebrow">Tonight</p>
-            <h3>Rooms you can take</h3>
-            <div className="cards">
-              {readyRooms.map((room) => (
-                <article className="card tap-card" key={room.id}>
-                  {room.photoUrl ? <img className="catalog-photo" src={room.photoUrl} alt={room.name} /> : null}
-                  <h2>{room.name}</h2>
-                  <p className="muted">
-                    {room.beds} · {money(room.nightlyMinor)} / night
-                  </p>
-                  <Link className="btn btn-primary" to="/rooms">
-                    Book this room
-                  </Link>
-                </article>
-              ))}
-            </div>
-          </section>
-        ) : null
-      }
-    />
+      <BusinessHome
+        name={brand.name}
+        logoUrl={brand.logoUrl}
+        backgroundUrl={brand.backgroundUrl}
+        heroTitle={brand.heroTitle}
+        writeup={brand.writeup}
+        quotesEyebrow="From guests who stayed here"
+        phone={brand.phone}
+        email={brand.email}
+        address={brand.address}
+        story={`${brand.name} is a stay for people who want a real room, a plated dinner, and a quiet night — booked from this phone, not a brochure.`}
+        primaryCta={{ to: "/rooms", label: "Book a room" }}
+        secondaryCta={{ to: "/food", label: "Order food" }}
+        testimonials={brand.testimonials ?? []}
+      />
     </div>
   );
 }
@@ -400,6 +369,8 @@ function GuestMenu({
   onDone: () => void;
 }) {
   const identity = useGuestIdentity(subdomain);
+  const tables = data.tables ?? [];
+  const [fulfillment, setFulfillment] = useState<FulfillmentChoice>(() => emptyFulfillment(tables));
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const items = data.menu.filter((item) => item.kind === kind || item.kind === "room_service");
@@ -419,6 +390,7 @@ function GuestMenu({
             quantity: 1,
             guestName: identity.guestName || "Guest",
             guestEmail: identity.guestEmail || undefined,
+            ...fulfillmentPayload(fulfillment),
           }),
         }),
       );
@@ -435,9 +407,10 @@ function GuestMenu({
     <main className="page">
       <p className="eyebrow">{kind === "restaurant" ? "Restaurant" : "Bar"}</p>
       <h2>{kind === "restaurant" ? "Order food" : "Order drinks"}</h2>
-      <p className="lead">Kitchen and bar tickets go to the matching staff dashboard.</p>
+      <p className="lead">Walk-in plates go to a table. Takeaway leaves with a rider after you pin a location.</p>
       {notice ? <p className={notice.includes("on the way") ? "banner-ok" : "banner-error"}>{notice}</p> : null}
       <GuestIdentity {...identity} />
+      <OrderFulfillment tables={tables} value={fulfillment} onChange={setFulfillment} />
       <section className="cards">
         {items.map((item) => (
           <article className="card" key={item.id}>

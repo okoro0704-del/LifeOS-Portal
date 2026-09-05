@@ -158,6 +158,10 @@ export async function registerTenantAppRoutes(
             guestEmail: z.string().email().optional(),
             tableName: z.string().optional(),
             address: z.string().optional(),
+            seats: z.number().int().positive().max(20).optional(),
+            fulfillment: z.enum(["walk_in", "takeaway"]).optional(),
+            lat: z.number().min(-90).max(90).optional(),
+            lng: z.number().min(-180).max(180).optional(),
             kind: z.enum(["food", "drink"]).optional(),
           })
           .parse(req.body);
@@ -171,6 +175,12 @@ export async function registerTenantAppRoutes(
           guestName: z.string().min(1),
           guestEmail: z.string().email().optional(),
           roomName: z.string().optional(),
+          tableName: z.string().optional(),
+          address: z.string().optional(),
+          seats: z.number().int().positive().max(20).optional(),
+          fulfillment: z.enum(["walk_in", "takeaway"]).optional(),
+          lat: z.number().min(-90).max(90).optional(),
+          lng: z.number().min(-180).max(180).optional(),
           kind: z.enum(["restaurant", "bar", "room_service"]).optional(),
         })
         .parse(req.body);
@@ -272,7 +282,7 @@ export async function registerTenantAppRoutes(
           name: z.string().min(1),
           email: z.string().email(),
           password: z.string().min(6),
-          role: z.enum(["front_desk", "restaurant", "bar", "housekeeping"]),
+          role: z.enum(["front_desk", "restaurant", "bar", "housekeeping", "rider"]),
         })
         .parse(req.body);
       return reply.code(201).send({

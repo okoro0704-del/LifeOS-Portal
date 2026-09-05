@@ -24,7 +24,19 @@ type Activity = { id: string; at: string; staffName: string; role: string; actio
 type CatalogItem = { id?: string; name: string; kind: string; amountMinor: number; description?: string; photoUrl?: string };
 type Room = { id?: string; name: string; beds: string; nightlyMinor: number; photoUrl?: string; housekeep?: string };
 type Booking = { id: string; roomName: string; guestName: string; checkIn: string; checkOut: string; status: string; totalMinor: number };
-type Order = { id: string; item: string; quantity: number; guestName: string; status: string; amountMinor: number; kind?: string };
+type Order = {
+  id: string;
+  item: string;
+  quantity: number;
+  guestName: string;
+  status: string;
+  amountMinor: number;
+  kind?: string;
+  fulfillment?: string;
+  tableName?: string;
+  seats?: number;
+  address?: string;
+};
 function padQuotes(rows?: Quote[]): Quote[] {
   const next = (rows ?? []).slice(0, 3).map((row) => ({
     name: row.name ?? "",
@@ -315,6 +327,11 @@ function OwnerDesk({
               </strong>
               <span className="muted">
                 {order.guestName} · {order.status}
+                {order.fulfillment === "takeaway" || order.address
+                  ? ` · Takeaway${order.address ? ` · ${order.address}` : ""}`
+                  : order.tableName
+                    ? ` · Walk-in · ${order.tableName}${order.seats ? ` · ${order.seats} chairs` : ""}`
+                    : ""}
               </span>
               <span className="deliverable-links">
                 <button className="btn btn-ghost" type="button" onClick={() => void post(`/orders/${order.id}/status`, { status: "preparing" })}>
@@ -482,6 +499,7 @@ function OwnerDesk({
                 <option value="restaurant">Restaurant</option>
                 <option value="bar">Bar</option>
                 <option value="housekeeping">Housekeeping</option>
+                <option value="rider">Rider</option>
               </>
             ) : verticalId === "local_food" ? (
               <>
@@ -492,6 +510,7 @@ function OwnerDesk({
               <>
                 <option value="kitchen">Kitchen</option>
                 <option value="counter">Counter</option>
+                <option value="rider">Rider</option>
               </>
             )}
           </select>

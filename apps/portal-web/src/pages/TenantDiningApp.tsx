@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { BusinessHome } from "../components/BusinessHome";
+import { emptyFulfillment, fulfillmentLabel, fulfillmentPayload, OrderFulfillment, type FulfillmentChoice } from "../components/OrderFulfillment";
 import { TenantAppChrome } from "../components/TenantAppChrome";
 import { portalApiBase } from "../lib/api";
 import { TenantOwnerAdmin } from "./TenantOwnerAdmin";
@@ -16,6 +17,10 @@ type Order = {
   guestName: string;
   tableName?: string;
   address?: string;
+  seats?: number;
+  fulfillment?: "walk_in" | "takeaway";
+  lat?: number;
+  lng?: number;
   status: string;
 };
 type Staff = { id: string; name: string; email: string; role: "owner" | "kitchen" | "counter" | "rider" };
@@ -178,37 +183,41 @@ export function TenantDiningApp({ subdomain, basename }: { subdomain: string; ba
   );
 }
 
-function useGuest(subdomain: string) {
+function useGuest(subdomain: string, tables: DiningPublic["tables"]) {
   const [guestName, setGuestName] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
-  const [tableName, setTableName] = useState("");
-  const [address, setAddress] = useState("");
+  const [fulfillment, setFulfillment] = useState<FulfillmentChoice>(() => emptyFulfillment(tables));
   useEffect(() => {
     try {
       const raw = localStorage.getItem(guestKey(subdomain));
       if (!raw) return;
-      const parsed = JSON.parse(raw) as { name?: string; email?: string; tableName?: string; address?: string };
+      const parsed = JSON.parse(raw) as { name?: string; email?: string } & Partial<FulfillmentChoice>;
       setGuestName(parsed.name ?? "");
       setGuestEmail(parsed.email ?? "");
-      setTableName(parsed.tableName ?? "");
-      setAddress(parsed.address ?? "");
+      setFulfillment({
+        ...emptyFulfillment(tables),
+        fulfillment: parsed.fulfillment ?? (parsed.address ? "takeaway" : emptyFulfillment(tables).fulfillment),
+        tableName: parsed.tableName ?? emptyFulfillment(tables).tableName,
+        seats: parsed.seats ?? emptyFulfillment(tables).seats,
+        address: parsed.address ?? "",
+        lat: parsed.lat,
+        lng: parsed.lng,
+      });
     } catch {
       /* ignore */
     }
   }, [subdomain]);
   function remember() {
-    localStorage.setItem(guestKey(subdomain), JSON.stringify({ name: guestName, email: guestEmail, tableName, address }));
+    localStorage.setItem(guestKey(subdomain), JSON.stringify({ name: guestName, email: guestEmail, ...fulfillment }));
   }
-  return { guestName, guestEmail, tableName, address, setGuestName, setGuestEmail, setTableName, setAddress, remember };
+  return { guestName, guestEmail, fulfillment, setGuestName, setGuestEmail, setFulfillment, remember };
 }
 
 function GuestFields({
   guest,
-  kitchen,
   tables,
 }: {
   guest: ReturnType<typeof useGuest>;
-  kitchen: boolean;
   tables: DiningPublic["tables"];
 }) {
   return (
@@ -221,24 +230,7 @@ function GuestFields({
         Email
         <input type="email" value={guest.guestEmail} onChange={(e) => guest.setGuestEmail(e.target.value)} />
       </label>
-      {kitchen ? (
-        <label>
-          Delivery address
-          <input value={guest.address} onChange={(e) => guest.setAddress(e.target.value)} placeholder="Street, estate, landmark" />
-        </label>
-      ) : (
-        <label>
-          Table
-          <select value={guest.tableName} onChange={(e) => guest.setTableName(e.target.value)}>
-            <option value="">Walk-in / takeaway</option>
-            {tables.map((table) => (
-              <option key={table.id} value={table.name}>
-                {table.name} · {table.seats} seats
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
+      <OrderFulfillment tables={tables} value={guest.fulfillment} onChange={guest.setFulfillment} />
     </form>
   );
 }
@@ -246,14 +238,10 @@ function GuestFields({
 function DiningHome({ data }: { data: DiningPublic }) {
   const brand = data.tenant.branding;
   const kitchen = data.tenant.mode === "kitchen";
-  const food = data.menu.filter((item) => item.kind === "food").slice(0, 3);
-  const drinks = data.menu.filter((item) => item.kind === "drink").slice(0, 2);
   return (
     <div data-testid="dining-home">
       <BusinessHome
         name={brand.name}
-        hostname={data.tenant.hostname}
-        accent={brand.primaryColor}
         logoUrl={brand.logoUrl}
         backgroundUrl={brand.backgroundUrl}
         heroTitle={brand.heroTitle}
@@ -270,33 +258,6 @@ function DiningHome({ data }: { data: DiningPublic }) {
         primaryCta={{ to: "/menu", label: kitchen ? "Order food" : "See the menu" }}
         secondaryCta={{ to: "/drinks", label: "Open drinks" }}
         testimonials={brand.testimonials ?? []}
-        links={[
-          { to: "/menu", eyebrow: kitchen ? "Kitchen" : "Dining", title: "Menu", copy: `${food[0]?.name ?? "Plates"} and more from the house.` },
-          { to: "/drinks", eyebrow: "Bar", title: "Drinks", copy: `${drinks[0]?.name ?? "House pours"} with the meal or after.` },
-          { to: "/orders", eyebrow: "You", title: "Orders", copy: "Track tickets you already sent to the kitchen." },
-        ]}
-        featured={
-          food.length ? (
-            <section>
-              <p className="eyebrow">On the board</p>
-              <h3>Plates people order</h3>
-              <div className="cards">
-                {food.map((item) => (
-                  <article className="card tap-card" key={item.id}>
-                    {item.photoUrl ? <img className="catalog-photo" src={item.photoUrl} alt={item.name} /> : null}
-                    <h2>{item.name}</h2>
-                    <p className="muted">
-                      {item.description} · {money(item.amountMinor)}
-                    </p>
-                    <Link className="btn btn-primary" to="/menu">
-                      Order from the menu
-                    </Link>
-                  </article>
-                ))}
-              </div>
-            </section>
-          ) : null
-        }
       />
     </div>
   );
@@ -311,11 +272,11 @@ function DiningMenu({
   subdomain: string;
   kind: "food" | "drink";
 }) {
-  const guest = useGuest(subdomain);
+  const guest = useGuest(subdomain, data.tables);
   const items = data.menu.filter((item) => item.kind === kind);
   return (
     <div>
-      <GuestFields guest={guest} kitchen={data.tenant.mode === "kitchen"} tables={data.tables} />
+      <GuestFields guest={guest} tables={data.tables} />
       <section className="cards" data-testid="dining-menu">
         {items.map((item) => (
           <MenuCard key={item.id} item={item} subdomain={subdomain} guest={guest} />
@@ -352,8 +313,7 @@ function MenuCard({
             kind: item.kind,
             guestName: guest.guestName || "Guest",
             guestEmail: guest.guestEmail || undefined,
-            tableName: guest.tableName || undefined,
-            address: guest.address || undefined,
+            ...fulfillmentPayload(guest.fulfillment),
           }),
         }),
       );
@@ -382,7 +342,7 @@ function MenuCard({
 }
 
 function DiningOrders({ data, subdomain }: { data: DiningPublic; subdomain: string }) {
-  const guest = useGuest(subdomain);
+  const guest = useGuest(subdomain, data.tables);
   const [orders, setOrders] = useState<Order[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -403,7 +363,7 @@ function DiningOrders({ data, subdomain }: { data: DiningPublic; subdomain: stri
   return (
     <div>
       <p className="lead">Track tickets for {data.tenant.branding.name}.</p>
-      <GuestFields guest={guest} kitchen={data.tenant.mode === "kitchen"} tables={data.tables} />
+      <GuestFields guest={guest} tables={data.tables} />
       <button
         className="btn btn-ghost"
         type="button"
@@ -423,7 +383,7 @@ function DiningOrders({ data, subdomain }: { data: DiningPublic; subdomain: stri
               {order.item} × {order.quantity}
             </strong>
             <span className="muted">
-              {order.status} · {money(order.amountMinor)}
+              {order.status} · {money(order.amountMinor)} · {fulfillmentLabel(order)}
             </span>
           </li>
         ))}

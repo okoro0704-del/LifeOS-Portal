@@ -230,6 +230,7 @@ test("POST /installs seeds a hotel vertical after Finprove checkout", async () =
   ]);
   assert.equal(hotelApp.json().tenant.branding.primaryColor, "#0B3D2E");
   assert.equal(hotelApp.json().tenant.branding.name, "Grand Portal Hotel");
+  assert.ok((hotelApp.json().tables as unknown[]).length >= 4);
   assert.equal(hotelApp.json().tenant.branding.testimonials.length, 3);
   assert.ok(hotelApp.json().tenant.branding.testimonials[0].quote);
 

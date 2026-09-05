@@ -2,12 +2,9 @@ import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 export type HomeTestimonial = { name: string; quote: string; visit: string };
-export type HomeLink = { to: string; eyebrow: string; title: string; copy: string };
 
 export function BusinessHome({
   name,
-  hostname,
-  accent: _accent,
   logoUrl,
   backgroundUrl,
   heroTitle,
@@ -19,13 +16,9 @@ export function BusinessHome({
   story,
   primaryCta,
   secondaryCta,
-  links,
   testimonials,
-  featured,
 }: {
   name: string;
-  hostname?: string;
-  accent?: string;
   logoUrl?: string;
   backgroundUrl?: string;
   heroTitle?: string;
@@ -36,26 +29,37 @@ export function BusinessHome({
   address?: string;
   story: string;
   primaryCta: { to: string; label: string };
-  secondaryCta: { to: string; label: string };
-  links: HomeLink[];
+  secondaryCta?: { to: string; label: string };
   testimonials: HomeTestimonial[];
   featured?: ReactNode;
 }) {
   return (
     <main className="site-home" data-testid="business-home">
-      <section className="site-hero" style={backgroundUrl ? { backgroundImage: `url(${backgroundUrl})` } : undefined}>
+      <section
+        className="site-hero site-hero-tall"
+        style={backgroundUrl ? { backgroundImage: `url(${backgroundUrl})` } : undefined}
+      >
         <div className="site-hero-copy">
           {logoUrl ? <img className="guest-logo" src={logoUrl} alt={name} /> : null}
-          {hostname ? <p className="eyebrow">{hostname}</p> : <p className="eyebrow">{name}</p>}
+          <p className="eyebrow">Home</p>
           <h2>{heroTitle || `Welcome to ${name}`}</h2>
           <p className="lead">{writeup || story}</p>
+          {phone || email || address ? (
+            <div className="site-hero-meta">
+              {phone ? <p>{phone}</p> : null}
+              {email ? <p>{email}</p> : null}
+              {address ? <p>{address}</p> : null}
+            </div>
+          ) : null}
           <div className="site-cta">
             <Link className="btn btn-primary" to={primaryCta.to}>
               {primaryCta.label}
             </Link>
-            <Link className="btn btn-ghost" to={secondaryCta.to}>
-              {secondaryCta.label}
-            </Link>
+            {secondaryCta ? (
+              <Link className="btn btn-ghost" to={secondaryCta.to}>
+                {secondaryCta.label}
+              </Link>
+            ) : null}
           </div>
         </div>
       </section>
@@ -74,25 +78,6 @@ export function BusinessHome({
           ))}
         </div>
       </section>
-      <section className="site-strip">
-        {links.map((link) => (
-          <article key={link.title}>
-            <p className="eyebrow">{link.eyebrow}</p>
-            <h3>{link.title}</h3>
-            <p className="muted">{link.copy}</p>
-            <Link to={link.to}>Open {link.title.toLowerCase()}</Link>
-          </article>
-        ))}
-      </section>
-      {featured}
-      {phone || email || address ? (
-        <section className="site-contact">
-          <p className="eyebrow">Talk to the house</p>
-          {phone ? <p>{phone}</p> : null}
-          {email ? <p>{email}</p> : null}
-          {address ? <p>{address}</p> : null}
-        </section>
-      ) : null}
     </main>
   );
 }

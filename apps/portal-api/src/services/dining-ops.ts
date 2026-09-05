@@ -8,6 +8,7 @@ import { publicBranding, type StaffActivity } from "./tenant-site.js";
 export type DiningStaffRole = "owner" | "kitchen" | "counter" | "rider";
 export type DiningKind = "food" | "drink";
 export type DiningOrderStatus = "received" | "preparing" | "ready" | "delivered";
+export type OrderFulfillment = "walk_in" | "takeaway";
 
 export type DiningMenuItem = {
   id: string;
@@ -28,6 +29,10 @@ export type DiningOrder = {
   guestEmail?: string;
   tableName?: string;
   address?: string;
+  seats?: number;
+  fulfillment?: OrderFulfillment;
+  lat?: number;
+  lng?: number;
   status: DiningOrderStatus;
   createdAt: string;
   placedBy?: "guest" | "staff";
@@ -95,8 +100,8 @@ function emptyProperty(install: PortalInstall, seed?: { email?: string; name?: s
     verticalId: install.verticalId,
     menu: (kitchen ? KITCHEN_MENU : RESTAURANT_MENU).map((item) => ({ ...item, id: newId("mn") })),
     tables: kitchen
-      ? []
-      : ["T1", "T2", "T3", "T4", "T5", "T6"].map((name, i) => ({ id: newId("tbl"), name, seats: i < 2 ? 2 : 4 })),
+      ? ["Pickup 1", "Pickup 2"].map((name, i) => ({ id: newId("tbl"), name, seats: i === 0 ? 2 : 4 }))
+      : ["T1", "T2", "T3", "T4", "T5", "T6"].map((name, i) => ({ id: newId("tbl"), name, seats: i < 2 ? 2 : i < 4 ? 4 : 6 })),
     orders: [],
     staff: [
       {
@@ -127,7 +132,12 @@ export function seedDiningProperty(
   if (properties.has(slug)) return;
   const stored = install.diningOps as DiningProperty | undefined;
   const row = stored?.menu?.length
-    ? { ...stored, subdomain: slug, activity: stored.activity ?? [] }
+    ? {
+        ...stored,
+        subdomain: slug,
+        activity: stored.activity ?? [],
+        tables: stored.tables?.length ? stored.tables : emptyProperty(install, seed).tables,
+      }
     : emptyProperty(install, seed);
   save(store, install, row);
 }
@@ -178,7 +188,7 @@ export function diningOpsPayload(install: PortalInstall, staff: DiningStaff, sto
     staff.role === "kitchen"
       ? row.orders.filter((item) => item.kind === "food")
       : staff.role === "rider"
-        ? row.orders.filter((item) => item.status === "ready" || item.status === "delivered")
+        ? row.orders.filter((item) => item.fulfillment === "takeaway" && (item.status === "ready" || item.status === "delivered"))
         : row.orders;
   return {
     staff: publicStaff(staff),
@@ -214,6 +224,10 @@ export function placeDiningOrder(
     guestEmail?: string;
     tableName?: string;
     address?: string;
+    seats?: number;
+    fulfillment?: OrderFulfillment;
+    lat?: number;
+    lng?: number;
     kind?: DiningKind;
     actor?: DiningStaff;
   },
@@ -222,6 +236,14 @@ export function placeDiningOrder(
   const row = requireProperty(install, store);
   const menuItem = row.menu.find((item) => item.name === input.item.trim());
   const quantity = Math.max(1, Math.min(12, input.quantity ?? 1));
+  const fulfillment =
+    input.fulfillment ?? (input.address || input.lat != null ? "takeaway" : "walk_in");
+  if (fulfillment === "walk_in" && input.fulfillment === "walk_in" && row.tables.length && !input.tableName?.trim()) {
+    throw new HttpError("Pick a table and chairs for a walk-in order.", 400, "table_required");
+  }
+  if (fulfillment === "takeaway" && !input.address?.trim() && (input.lat == null || input.lng == null)) {
+    throw new HttpError("Takeaway needs a written address or a live map pin.", 400, "location_required");
+  }
   const order: DiningOrder = {
     id: newId("ord"),
     item: input.item.trim(),
@@ -232,6 +254,10 @@ export function placeDiningOrder(
     guestEmail: input.guestEmail?.trim().toLowerCase(),
     tableName: input.tableName,
     address: input.address,
+    seats: input.seats,
+    fulfillment,
+    lat: input.lat,
+    lng: input.lng,
     status: "received",
     createdAt: new Date().toISOString(),
     placedBy: input.actor ? "staff" : "guest",
@@ -316,9 +342,6 @@ export function createDiningStaff(
   const email = input.email.trim().toLowerCase();
   if (row.staff.some((item) => item.email === email)) throw new HttpError("That staff email is already in use.", 409, "conflict");
   if (input.role === "owner") throw new HttpError("Create a department role, not another owner.", 400, "invalid_role");
-  if (install.verticalId === "restaurant" && input.role === "rider") {
-    throw new HttpError("Restaurants use counter staff, not riders.", 400, "invalid_role");
-  }
   if (install.verticalId === "local_food" && input.role === "counter") {
     throw new HttpError("Home kitchens use cook and rider roles.", 400, "invalid_role");
   }

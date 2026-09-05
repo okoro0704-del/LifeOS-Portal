@@ -1,14 +1,29 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { GreetingsHeader } from "../components/GreetingsHeader";
+import { emptyFulfillment, fulfillmentLabel, fulfillmentPayload, OrderFulfillment, type FulfillmentChoice } from "../components/OrderFulfillment";
 import { TenantAppChrome } from "../components/TenantAppChrome";
 import { portalApiBase } from "../lib/api";
 import { readImageDataUrl } from "../lib/images";
 
 type Staff = { id: string; name: string; email: string; role: string };
 type Branding = { name: string; primaryColor: string; dashboardStyle?: "console" | "greetings" };
-type Order = { id: string; item: string; quantity: number; status: string; guestName: string; amountMinor: number };
+type Order = {
+  id: string;
+  item: string;
+  quantity: number;
+  status: string;
+  guestName: string;
+  amountMinor: number;
+  fulfillment?: string;
+  tableName?: string;
+  seats?: number;
+  address?: string;
+  lat?: number;
+  lng?: number;
+};
 type Room = { id: string; name: string; beds: string; housekeep: string; nightlyMinor?: number; photoUrl?: string };
 type MenuItem = { id: string; name: string; kind: string; amountMinor: number };
+type SeatTable = { id: string; name: string; seats: number };
 
 async function readJson(res: Response) {
   const body = await res.json();
@@ -152,11 +167,13 @@ function StaffBoard({
   const [orders, setOrders] = useState<Order[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [menu, setMenu] = useState<MenuItem[]>([]);
+  const [tables, setTables] = useState<SeatTable[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [guestName, setGuestName] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
   const [item, setItem] = useState("");
   const [photoRoom, setPhotoRoom] = useState("");
+  const [fulfillment, setFulfillment] = useState<FulfillmentChoice>(() => emptyFulfillment([]));
 
   async function load() {
     const res = await fetch(`${portalApiBase}/public/tenants/${encodeURIComponent(subdomain)}/ops`, { headers });
@@ -166,6 +183,8 @@ function StaffBoard({
     setOrders(body.orders ?? []);
     setRooms(body.rooms ?? []);
     setMenu(body.menu ?? []);
+    setTables(body.tables ?? []);
+    setFulfillment((current) => (current.tableName || current.address ? current : emptyFulfillment(body.tables ?? [])));
     if (!item && (body.menu?.[0]?.name as string | undefined)) setItem(body.menu[0].name);
   }
 
@@ -194,6 +213,7 @@ function StaffBoard({
           item,
           guestName: guestName || "Walk-in",
           guestEmail: guestEmail || undefined,
+          ...fulfillmentPayload(fulfillment),
         }),
       }),
     );
@@ -218,6 +238,7 @@ function StaffBoard({
           Client email
           <input type="email" value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} />
         </label>
+        <OrderFulfillment tables={tables} value={fulfillment} onChange={setFulfillment} />
         <label>
           Item
           <select value={item} onChange={(e) => setItem(e.target.value)}>
@@ -301,8 +322,13 @@ function StaffBoard({
               {order.item} × {order.quantity}
             </strong>
             <span className="muted">
-              {order.guestName} · {order.status}
+              {order.guestName} · {order.status} · {fulfillmentLabel(order)}
             </span>
+            {order.lat != null && order.lng != null ? (
+              <a href={`https://www.openstreetmap.org/?mlat=${order.lat}&mlon=${order.lng}#map=16/${order.lat}/${order.lng}`} target="_blank" rel="noreferrer">
+                Open map
+              </a>
+            ) : null}
             <span className="deliverable-links">
               <button className="btn btn-ghost" type="button" onClick={() => void setStatus(order.id, "preparing")}>
                 Preparing

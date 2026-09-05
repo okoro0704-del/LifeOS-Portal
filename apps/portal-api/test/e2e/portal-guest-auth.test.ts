@@ -384,9 +384,28 @@ test("restaurant and home-kitchen tenant apps serve menus, orders, and staff boa
     const ticket = await local.inject({
       method: "POST",
       url: `/public/tenants/${restaurantSub}/orders`,
-      payload: { item: "Jollof platter", guestName: "Ada", guestEmail: "ada@harbor.example", tableName: "T2" },
+      payload: { item: "Jollof platter", guestName: "Ada", guestEmail: "ada@harbor.example", tableName: "T2", seats: 2, fulfillment: "walk_in" },
     });
     assert.equal(ticket.statusCode, 201, ticket.body);
+    assert.equal(ticket.json().order.fulfillment, "walk_in");
+    assert.equal(ticket.json().order.tableName, "T2");
+
+    const takeaway = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${restaurantSub}/orders`,
+      payload: {
+        item: "Grilled catch",
+        guestName: "Musa",
+        guestEmail: "musa@harbor.example",
+        fulfillment: "takeaway",
+        address: "14 Harbor Road",
+        lat: 6.4541,
+        lng: 3.3947,
+      },
+    });
+    assert.equal(takeaway.statusCode, 201, takeaway.body);
+    assert.equal(takeaway.json().order.fulfillment, "takeaway");
+    assert.equal(takeaway.json().order.address, "14 Harbor Road");
 
     const owner = await local.inject({
       method: "POST",
@@ -402,6 +421,14 @@ test("restaurant and home-kitchen tenant apps serve menus, orders, and staff boa
       payload: { name: "Pat Counter", email: "counter@harbor.example", password: "counter-pass", role: "counter" },
     });
     assert.equal(counter.statusCode, 201, counter.body);
+    const rider = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${restaurantSub}/staff`,
+      headers: { "x-hotel-staff": ownerToken },
+      payload: { name: "Tunde Rider", email: "rider@harbor.example", password: "rider-pass", role: "rider" },
+    });
+    assert.equal(rider.statusCode, 201, rider.body);
+    assert.equal(rider.json().staff.role, "rider");
 
     const kitchenPay = await local.inject({
       method: "POST",
@@ -437,9 +464,11 @@ test("restaurant and home-kitchen tenant apps serve menus, orders, and staff boa
         guestName: "Ada",
         guestEmail: "ada@dab.example",
         address: "12 Market Street",
+        fulfillment: "takeaway",
       },
     });
     assert.equal(delivery.statusCode, 201, delivery.body);
+    assert.equal(delivery.json().order.fulfillment, "takeaway");
     const cook = await local.inject({
       method: "POST",
       url: `/public/tenants/${kitchenSub}/staff/login`,
