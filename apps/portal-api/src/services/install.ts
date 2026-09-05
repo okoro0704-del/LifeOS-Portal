@@ -22,6 +22,7 @@ import type { TosClient } from "./transportationos.js";
 import { consumePaidBilling } from "./billing.js";
 import { activateBusinessPortal } from "./tenant-portal.js";
 import { seedHotelProperty } from "./hotel-ops.js";
+import { provisionTenantHostname } from "./tenant-hostname.js";
 import { projectInstallToLifeOsShell, shellIconForPreset } from "./shell-projection.js";
 
 function resolveHosInstallTemplate(verticalId: string, installTemplate?: string, enabledModules?: string[]) {
@@ -304,6 +305,11 @@ export async function installDomainOs(opts: {
     })!;
     opts.store.updateBilling(billing.id, { status: "consumed", installId: ready.id });
     seedHotelProperty(ready);
+    try {
+      await provisionTenantHostname(subdomain);
+    } catch {
+      // Hotel app is still reachable at getlifeos.app/t/{subdomain} if DNS lags.
+    }
     activateBusinessPortal({
       store: opts.store,
       user: opts.user,

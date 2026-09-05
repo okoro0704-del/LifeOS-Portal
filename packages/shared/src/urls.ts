@@ -3,7 +3,17 @@ export const GUEST_PORTAL_ORIGIN = "https://getlifeos.app";
 export const PLATFORM_ADMIN_ORIGIN = "https://admin.getlifeos.app";
 export const TENANT_APP_ROOT_DOMAIN = "getlifeos.app";
 
-const RESERVED_TENANT_LABELS = new Set(["www", "admin", "hospitality", "trust", "business", "api"]);
+const RESERVED_TENANT_LABELS = new Set([
+  "www",
+  "admin",
+  "hospitality",
+  "trust",
+  "business",
+  "api",
+  "transportation",
+  "e-commerce",
+  "ecommerce",
+]);
 
 export type TenantDeliverables = {
   hostname: string;
