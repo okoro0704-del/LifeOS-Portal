@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { BrowserRouter, NavLink, Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { TenantAppChrome } from "../components/TenantAppChrome";
 import { portalApiBase } from "../lib/api";
 
 type Room = { id: string; name: string; beds: string; nightlyMinor: number; housekeep: string };
@@ -83,14 +84,14 @@ export function TenantHotelApp({ subdomain, basename }: { subdomain: string; bas
 
   if (error) {
     return (
-      <div className="page hotel-app" style={style}>
+      <div className="tap tap-boot" style={style}>
         <p className="banner-error">{error}</p>
       </div>
     );
   }
   if (!data) {
     return (
-      <div className="page hotel-app" style={style}>
+      <div className="tap tap-boot" style={style}>
         <p className="muted">Opening {subdomain}…</p>
       </div>
     );
@@ -99,35 +100,39 @@ export function TenantHotelApp({ subdomain, basename }: { subdomain: string; bas
   return (
     <div className="hotel-app" style={style} data-testid="hotel-tenant-app">
       <BrowserRouter basename={basename}>
-        <header className="hotel-bar">
-          <div>
-            <p className="eyebrow">{data.tenant.hostname}</p>
-            <h1>{data.tenant.branding.name}</h1>
-          </div>
-          <nav className="hotel-nav">
-            <NavLink to="/" end>
-              Rooms
-            </NavLink>
-            <NavLink to="/food">Food</NavLink>
-            <NavLink to="/drinks">Drinks</NavLink>
-            <NavLink to="/stay">My stay</NavLink>
-            <NavLink to="/admin">Staff</NavLink>
-          </nav>
-        </header>
-        <Routes>
-          <Route path="/" element={<GuestRooms data={data} subdomain={subdomain} onDone={() => void refresh()} />} />
-          <Route
-            path="/food"
-            element={<GuestMenu data={data} subdomain={subdomain} kind="restaurant" onDone={() => void refresh()} />}
-          />
-          <Route
-            path="/drinks"
-            element={<GuestMenu data={data} subdomain={subdomain} kind="bar" onDone={() => void refresh()} />}
-          />
-          <Route path="/stay" element={<GuestStay data={data} subdomain={subdomain} />} />
-          <Route path="/admin" element={<StaffGate data={data} subdomain={subdomain} />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <TenantAppChrome
+          brand={data.tenant.branding.name}
+          accent={color}
+          titles={{
+            "/": "Rooms",
+            "/food": "Food",
+            "/drinks": "Drinks",
+            "/stay": "My stay",
+            "/admin": "Staff",
+          }}
+          tabs={[
+            { to: "/", label: "Rooms", icon: "stay" },
+            { to: "/food", label: "Food", icon: "food" },
+            { to: "/drinks", label: "Drinks", icon: "drink" },
+            { to: "/stay", label: "Stay", icon: "home" },
+            { to: "/admin", label: "Staff", icon: "staff" },
+          ]}
+        >
+          <Routes>
+            <Route path="/" element={<GuestRooms data={data} subdomain={subdomain} onDone={() => void refresh()} />} />
+            <Route
+              path="/food"
+              element={<GuestMenu data={data} subdomain={subdomain} kind="restaurant" onDone={() => void refresh()} />}
+            />
+            <Route
+              path="/drinks"
+              element={<GuestMenu data={data} subdomain={subdomain} kind="bar" onDone={() => void refresh()} />}
+            />
+            <Route path="/stay" element={<GuestStay data={data} subdomain={subdomain} />} />
+            <Route path="/admin" element={<StaffGate data={data} subdomain={subdomain} />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </TenantAppChrome>
       </BrowserRouter>
     </div>
   );

@@ -22,6 +22,7 @@ import type { TosClient } from "./transportationos.js";
 import { consumePaidBilling } from "./billing.js";
 import { activateBusinessPortal } from "./tenant-portal.js";
 import { seedHotelProperty } from "./hotel-ops.js";
+import { isDiningVertical, seedDiningProperty } from "./dining-ops.js";
 import { provisionTenantHostname } from "./tenant-hostname.js";
 import { projectInstallToLifeOsShell, shellIconForPreset } from "./shell-projection.js";
 
@@ -239,11 +240,11 @@ export async function installDomainOs(opts: {
     };
 
     const provisioned =
-      verticalId === "hotel"
+      verticalId === "hotel" || isDiningVertical(verticalId)
         ? {
             ok: true,
-            tenantId: newId("htl"),
-            hosTenantId: newId("htl"),
+            tenantId: newId(verticalId === "hotel" ? "htl" : "din"),
+            hosTenantId: newId(verticalId === "hotel" ? "htl" : "din"),
             organizationId: newId("org"),
             branchId: newId("brn"),
             staffId: newId("stf"),
@@ -305,6 +306,11 @@ export async function installDomainOs(opts: {
     })!;
     opts.store.updateBilling(billing.id, { status: "consumed", installId: ready.id });
     seedHotelProperty(ready, opts.store, {
+      email: opts.input.adminStaff.email,
+      name: opts.input.adminStaff.displayName,
+      password: opts.input.adminStaff.password,
+    });
+    seedDiningProperty(ready, opts.store, {
       email: opts.input.adminStaff.email,
       name: opts.input.adminStaff.displayName,
       password: opts.input.adminStaff.password,

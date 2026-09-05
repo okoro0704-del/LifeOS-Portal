@@ -58,8 +58,8 @@ export function DeliverablesCard({
         <p className="eyebrow">your deliverables</p>
         <h2>Apps on {deliverables.hostname}</h2>
         <p className="lead">
-          Both apps live on {deliverables.hostname}. Guests book rooms, order food and drinks, and
-          self check-in. Staff sign in on the admin URL to their assigned board.
+          Both apps live on {deliverables.hostname}. Guests use the home, menu, and orders tabs.
+          Staff sign in on the admin URL to their assigned board.
         </p>
       </header>
       <div className="cards">

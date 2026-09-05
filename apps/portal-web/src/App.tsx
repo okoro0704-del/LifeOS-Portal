@@ -16,7 +16,7 @@ import { InstallsPage } from "./pages/Installs";
 import { InstallDetailPage } from "./pages/InstallDetail";
 import { OrganizationsPage } from "./pages/Organizations";
 import { ProfilePage } from "./pages/Profile";
-import { TenantHotelApp } from "./pages/TenantHotelApp";
+import { TenantApp } from "./pages/TenantApp";
 
 function tenantFromPath() {
   const match = window.location.pathname.match(/^\/t\/([^/]+)/);
@@ -28,7 +28,7 @@ export function App() {
   const pathTenant = tenantFromPath();
   const subdomain = hostTenant || pathTenant;
   if (subdomain) {
-    return <TenantHotelApp subdomain={subdomain} basename={hostTenant ? "/" : `/t/${subdomain}`} />;
+    return <TenantApp subdomain={subdomain} basename={hostTenant ? "/" : `/t/${subdomain}`} />;
   }
 
   return (

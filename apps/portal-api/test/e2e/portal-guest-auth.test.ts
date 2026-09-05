@@ -335,6 +335,122 @@ test("guest hotel install works when TrustID is off and distributor is remote", 
   }
 });
 
+test("restaurant and home-kitchen tenant apps serve menus, orders, and staff boards", async () => {
+  const { createStore } = await import("../../src/store.js");
+  const { buildApp } = await import("../../src/app.js");
+  const { createRemoteDistributor } = await import("../../src/services/distributor.js");
+  const { createRemoteHospitalityOs } = await import("../../src/services/hospitalityos.js");
+  const { createRemoteEcommerceOs } = await import("../../src/services/ecommerceos.js");
+  const { createRemoteTransportationOs } = await import("../../src/services/transportationos.js");
+
+  const local = await buildApp({
+    store: createStore(),
+    distributor: createRemoteDistributor(),
+    hos: createRemoteHospitalityOs(),
+    eco: createRemoteEcommerceOs(),
+    tos: createRemoteTransportationOs(),
+  });
+  await local.ready();
+  const headers = { origin: "https://getlifeos.app" };
+  try {
+    const restaurantPay = await local.inject({
+      method: "POST",
+      url: "/billing/checkout",
+      headers,
+      payload: { osId: "hospitalityos", verticalId: "restaurant" },
+    });
+    assert.equal(restaurantPay.statusCode, 201, restaurantPay.body);
+    const restaurantSub = `dining-${Date.now().toString(36)}`;
+    const restaurant = await local.inject({
+      method: "POST",
+      url: "/installs",
+      headers,
+      payload: {
+        osId: "hospitalityos",
+        verticalId: "restaurant",
+        billingId: restaurantPay.json().billing.id,
+        displayName: "Harbor Dining",
+        subdomain: restaurantSub,
+        adminStaff: { email: "chef@harbor.example", displayName: "Chef" },
+      },
+    });
+    assert.equal(restaurant.statusCode, 201, restaurant.body);
+    const dining = await local.inject({ method: "GET", url: `/public/tenants/${restaurantSub}` });
+    assert.equal(dining.statusCode, 200, dining.body);
+    assert.equal(dining.json().tenant.mode, "restaurant");
+    assert.deepEqual(dining.json().tenant.features, ["menus", "orders", "tables", "kitchen"]);
+    assert.ok((dining.json().menu as unknown[]).length >= 4);
+
+    const ticket = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${restaurantSub}/orders`,
+      payload: { item: "Jollof platter", guestName: "Ada", guestEmail: "ada@harbor.example", tableName: "T2" },
+    });
+    assert.equal(ticket.statusCode, 201, ticket.body);
+
+    const owner = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${restaurantSub}/staff/login`,
+      payload: { email: "chef@harbor.example", password: "venue-owner" },
+    });
+    assert.equal(owner.statusCode, 200, owner.body);
+    const ownerToken = owner.json().token as string;
+    const counter = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${restaurantSub}/staff`,
+      headers: { "x-hotel-staff": ownerToken },
+      payload: { name: "Pat Counter", email: "counter@harbor.example", password: "counter-pass", role: "counter" },
+    });
+    assert.equal(counter.statusCode, 201, counter.body);
+
+    const kitchenPay = await local.inject({
+      method: "POST",
+      url: "/billing/checkout",
+      headers,
+      payload: { osId: "hospitalityos", verticalId: "local_food" },
+    });
+    assert.equal(kitchenPay.statusCode, 201, kitchenPay.body);
+    const kitchenSub = `dabkit-${Date.now().toString(36)}`;
+    const kitchen = await local.inject({
+      method: "POST",
+      url: "/installs",
+      headers,
+      payload: {
+        osId: "hospitalityos",
+        verticalId: "local_food",
+        billingId: kitchenPay.json().billing.id,
+        displayName: "Dabris Kitchen",
+        subdomain: kitchenSub,
+        adminStaff: { email: "cook@dab.example", displayName: "Cook" },
+      },
+    });
+    assert.equal(kitchen.statusCode, 201, kitchen.body);
+    const kitchenApp = await local.inject({ method: "GET", url: `/public/tenants/${kitchenSub}` });
+    assert.equal(kitchenApp.statusCode, 200, kitchenApp.body);
+    assert.equal(kitchenApp.json().tenant.mode, "kitchen");
+    assert.deepEqual(kitchenApp.json().tenant.features, ["menus", "orders", "delivery", "kitchen"]);
+    const delivery = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${kitchenSub}/orders`,
+      payload: {
+        item: "Ofada rice",
+        guestName: "Ada",
+        guestEmail: "ada@dab.example",
+        address: "12 Market Street",
+      },
+    });
+    assert.equal(delivery.statusCode, 201, delivery.body);
+    const cook = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${kitchenSub}/staff/login`,
+      payload: { email: "cook@dab.example", password: "venue-owner" },
+    });
+    assert.equal(cook.statusCode, 200, cook.body);
+  } finally {
+    await local.close();
+  }
+});
+
 test("catalog is reachable without a session cookie", async () => {
   const res = await app.inject({
     method: "GET",

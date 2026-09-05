@@ -72,6 +72,7 @@ export type PortalInstall = {
   brandPrimaryColor?: string;
   brandLogoUrl?: string;
   hotelOps?: unknown;
+  diningOps?: unknown;
   status: InstallStatus;
   suspended?: boolean;
   error?: string;

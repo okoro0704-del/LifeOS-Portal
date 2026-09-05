@@ -3,6 +3,18 @@ import { z } from "zod";
 import type { PortalStore } from "../store.js";
 import { HttpError } from "../lib/http.js";
 import {
+  assertDiningRole,
+  createDiningStaff,
+  diningAppPayload,
+  diningOpsPayload,
+  diningStaffFromToken,
+  diningStayPayload,
+  isDiningVertical,
+  loginDiningStaff,
+  placeDiningOrder,
+  updateDiningOrderStatus,
+} from "../services/dining-ops.js";
+import {
   assertStaffRole,
   bookHotelRoom,
   createHotelStaff,
@@ -45,8 +57,17 @@ export async function registerTenantAppRoutes(app: FastifyInstance, store: Porta
       return reply.code(404).send({ error: "not_found", message: "Tenant app is not ready." });
     }
     if (row.verticalId === "hotel") return hotelAppPayload(row, store);
+    if (isDiningVertical(row.verticalId)) return diningAppPayload(row, store);
     return { tenant: toPublicTenantApp(row) };
   });
+
+  function readyInstall(subdomain: string) {
+    const row = store.getInstallBySubdomain(subdomain.toLowerCase());
+    if (!row || row.status !== "ready" || row.suspended) {
+      throw new HttpError("Tenant app is not ready.", 404, "not_found");
+    }
+    return row;
+  }
 
   function hotelInstall(subdomain: string, readyOnly = true) {
     const row = store.getInstallBySubdomain(subdomain.toLowerCase());
@@ -70,6 +91,8 @@ export async function registerTenantAppRoutes(app: FastifyInstance, store: Porta
     try {
       const { subdomain } = req.params as { subdomain: string };
       const email = z.string().email().parse((req.query as { email?: string }).email);
+      const row = readyInstall(subdomain);
+      if (isDiningVertical(row.verticalId)) return diningStayPayload(row, email, store);
       return guestStayPayload(hotelInstall(subdomain), email, store);
     } catch (err) {
       return sendHotelError(reply, err);
@@ -97,6 +120,22 @@ export async function registerTenantAppRoutes(app: FastifyInstance, store: Porta
   app.post("/public/tenants/:subdomain/orders", async (req, reply) => {
     try {
       const { subdomain } = req.params as { subdomain: string };
+      const row = store.getInstallBySubdomain(subdomain.toLowerCase());
+      if (!row || row.status !== "ready") throw new HttpError("Tenant app is not ready.", 404, "not_found");
+      if (isDiningVertical(row.verticalId)) {
+        const body = z
+          .object({
+            item: z.string().min(1),
+            quantity: z.number().int().positive().max(12).optional(),
+            guestName: z.string().min(1),
+            guestEmail: z.string().email().optional(),
+            tableName: z.string().optional(),
+            address: z.string().optional(),
+            kind: z.enum(["food", "drink"]).optional(),
+          })
+          .parse(req.body);
+        return reply.code(201).send({ order: placeDiningOrder(row, body, store) });
+      }
       const body = z
         .object({
           item: z.string().min(1),
@@ -148,7 +187,9 @@ export async function registerTenantAppRoutes(app: FastifyInstance, store: Porta
   app.post("/public/tenants/:subdomain/staff/login", async (req, reply) => {
     try {
       const { subdomain } = req.params as { subdomain: string };
+      const row = readyInstall(subdomain);
       const body = z.object({ email: z.string().email(), password: z.string().min(1) }).parse(req.body);
+      if (isDiningVertical(row.verticalId)) return loginDiningStaff(row, body, store);
       return loginHotelStaff(hotelInstall(subdomain), body, store);
     } catch (err) {
       return sendHotelError(reply, err);
@@ -158,9 +199,14 @@ export async function registerTenantAppRoutes(app: FastifyInstance, store: Porta
   app.get("/public/tenants/:subdomain/ops", async (req, reply) => {
     try {
       const { subdomain } = req.params as { subdomain: string };
-      const row = hotelInstall(subdomain);
-      const staff = staffFromToken(row, staffToken(req), store);
-      return hotelOpsPayload(row, staff, store);
+      const row = readyInstall(subdomain);
+      if (isDiningVertical(row.verticalId)) {
+        const staff = diningStaffFromToken(row, staffToken(req), store);
+        return diningOpsPayload(row, staff, store);
+      }
+      const hotel = hotelInstall(subdomain);
+      const staff = staffFromToken(hotel, staffToken(req), store);
+      return hotelOpsPayload(hotel, staff, store);
     } catch (err) {
       return sendHotelError(reply, err);
     }
@@ -169,8 +215,22 @@ export async function registerTenantAppRoutes(app: FastifyInstance, store: Porta
   app.post("/public/tenants/:subdomain/staff", async (req, reply) => {
     try {
       const { subdomain } = req.params as { subdomain: string };
-      const row = hotelInstall(subdomain);
-      const actor = staffFromToken(row, staffToken(req), store);
+      const row = readyInstall(subdomain);
+      if (isDiningVertical(row.verticalId)) {
+        const actor = diningStaffFromToken(row, staffToken(req), store);
+        assertDiningRole(actor, ["owner"]);
+        const body = z
+          .object({
+            name: z.string().min(1),
+            email: z.string().email(),
+            password: z.string().min(6),
+            role: z.enum(["kitchen", "counter", "rider"]),
+          })
+          .parse(req.body);
+        return reply.code(201).send({ staff: createDiningStaff(row, body, store) });
+      }
+      const hotel = hotelInstall(subdomain);
+      const actor = staffFromToken(hotel, staffToken(req), store);
       assertStaffRole(actor, ["owner"]);
       const body = z
         .object({
@@ -180,7 +240,7 @@ export async function registerTenantAppRoutes(app: FastifyInstance, store: Porta
           role: z.enum(["front_desk", "restaurant", "bar", "housekeeping"]),
         })
         .parse(req.body);
-      return reply.code(201).send({ staff: createHotelStaff(row, body, store) });
+      return reply.code(201).send({ staff: createHotelStaff(hotel, body, store) });
     } catch (err) {
       return sendHotelError(reply, err);
     }
@@ -202,6 +262,13 @@ export async function registerTenantAppRoutes(app: FastifyInstance, store: Porta
   app.post("/public/tenants/:subdomain/orders/:orderId/status", async (req, reply) => {
     try {
       const { subdomain, orderId } = req.params as { subdomain: string; orderId: string };
+      const ready = readyInstall(subdomain);
+      if (isDiningVertical(ready.verticalId)) {
+        const actor = diningStaffFromToken(ready, staffToken(req), store);
+        assertDiningRole(actor, ["kitchen", "counter", "rider"]);
+        const body = z.object({ status: z.enum(["received", "preparing", "ready", "delivered"]) }).parse(req.body);
+        return { order: updateDiningOrderStatus(ready, orderId, body.status, store) };
+      }
       const row = hotelInstall(subdomain);
       const actor = staffFromToken(row, staffToken(req), store);
       const body = z.object({ status: z.enum(["received", "preparing", "ready", "delivered"]) }).parse(req.body);

@@ -256,10 +256,33 @@ test("restaurant vertical does not install hotel accommodation as the pack", asy
     },
   });
   assert.equal(res.statusCode, 201, res.body);
-  const body = res.json().install as { modulesEnabled: string[]; enabledModules: string[] };
+  const body = res.json().install as { subdomain: string; modulesEnabled: string[]; enabledModules: string[] };
   assert.ok(body.modulesEnabled.includes("restaurant"));
   assert.equal(body.modulesEnabled.includes("accommodation"), false);
   assert.deepEqual(body.enabledModules, ["dining", "billing", "crm"]);
+
+  const dining = await app.inject({ method: "GET", url: `/public/tenants/${body.subdomain}` });
+  assert.equal(dining.statusCode, 200, dining.body);
+  assert.equal(dining.json().tenant.mode, "restaurant");
+  assert.deepEqual(dining.json().tenant.features, ["menus", "orders", "tables", "kitchen"]);
+  assert.ok((dining.json().menu as unknown[]).length >= 4);
+  assert.ok((dining.json().tables as unknown[]).length >= 4);
+
+  const order = await app.inject({
+    method: "POST",
+    url: `/public/tenants/${body.subdomain}/orders`,
+    payload: { item: "Jollof platter", guestName: "Ada", guestEmail: "ada@dining.example", tableName: "T1" },
+  });
+  assert.equal(order.statusCode, 201, order.body);
+  assert.equal(order.json().order.item, "Jollof platter");
+
+  const login = await app.inject({
+    method: "POST",
+    url: `/public/tenants/${body.subdomain}/staff/login`,
+    payload: { email: "chef@example.com", password: "venue-owner" },
+  });
+  assert.equal(login.statusCode, 200, login.body);
+  assert.equal(login.json().staff.role, "owner");
 });
 
 test("POST /installs rejects duplicate subdomain", async () => {

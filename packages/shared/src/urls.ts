@@ -89,7 +89,8 @@ export function featuresForVertical(_osId: string, verticalId: string) {
   if (verticalId === "hotel") {
     return [...HOTEL_FEATURE_IDS];
   }
-  if (verticalId === "restaurant") return ["menus", "orders", "tables"];
+  if (verticalId === "restaurant") return ["menus", "orders", "tables", "kitchen"];
+  if (verticalId === "local_food") return ["menus", "orders", "delivery", "kitchen"];
   if (verticalId === "shared_homes") return ["units", "stays"];
-  return [];
+  return ["orders"];
 }
