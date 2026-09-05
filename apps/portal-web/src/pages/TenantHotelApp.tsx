@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
-import { GuestBrand } from "../components/GuestBrand";
+import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { TenantAppChrome } from "../components/TenantAppChrome";
 import { portalApiBase } from "../lib/api";
 import { TenantOwnerAdmin } from "./TenantOwnerAdmin";
@@ -138,16 +137,28 @@ export function TenantHotelApp({ subdomain, basename }: { subdomain: string; bas
               <TenantAppChrome
                 brand={data.tenant.branding.name}
                 accent={color}
-                titles={{ "/": "Rooms", "/food": "Food", "/drinks": "Drinks", "/stay": "My stay" }}
+                titles={{
+                  "/": "Home",
+                  "/rooms": "Rooms",
+                  "/food": "Food",
+                  "/drinks": "Drinks",
+                  "/activities": "Activities",
+                  "/stay": "Activities",
+                }}
                 tabs={[
-                  { to: "/", label: "Rooms", icon: "stay" },
+                  { to: "/", label: "Home", icon: "home" },
+                  { to: "/rooms", label: "Rooms", icon: "stay" },
                   { to: "/food", label: "Food", icon: "food" },
                   { to: "/drinks", label: "Drinks", icon: "drink" },
-                  { to: "/stay", label: "Stay", icon: "home" },
+                  { to: "/activities", label: "Activities", icon: "activity" },
                 ]}
               >
                 <Routes>
-                  <Route path="/" element={<GuestRooms data={data} subdomain={subdomain} onDone={() => void refresh()} />} />
+                  <Route path="/" element={<HotelHome data={data} />} />
+                  <Route
+                    path="/rooms"
+                    element={<GuestRooms data={data} subdomain={subdomain} onDone={() => void refresh()} />}
+                  />
                   <Route
                     path="/food"
                     element={<GuestMenu data={data} subdomain={subdomain} kind="restaurant" onDone={() => void refresh()} />}
@@ -156,7 +167,8 @@ export function TenantHotelApp({ subdomain, basename }: { subdomain: string; bas
                     path="/drinks"
                     element={<GuestMenu data={data} subdomain={subdomain} kind="bar" onDone={() => void refresh()} />}
                   />
-                  <Route path="/stay" element={<GuestStay data={data} subdomain={subdomain} />} />
+                  <Route path="/activities" element={<GuestStay data={data} subdomain={subdomain} />} />
+                  <Route path="/stay" element={<Navigate to="/activities" replace />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </TenantAppChrome>
@@ -215,6 +227,91 @@ function GuestIdentity({
   );
 }
 
+function HotelHome({ data }: { data: HotelPublic }) {
+  const brand = data.tenant.branding;
+  const readyRooms = data.rooms.filter((room) => room.housekeep === "ready").slice(0, 3);
+  const food = data.menu.filter((item) => item.kind === "restaurant").slice(0, 2);
+  const drinks = data.menu.filter((item) => item.kind === "bar").slice(0, 2);
+  return (
+    <main className="site-home" data-testid="hotel-home">
+      <section
+        className="site-hero"
+        style={brand.backgroundUrl ? { backgroundImage: `url(${brand.backgroundUrl})` } : undefined}
+      >
+        <div className="site-hero-copy">
+          {brand.logoUrl ? <img className="guest-logo" src={brand.logoUrl} alt={brand.name} /> : null}
+          <p className="eyebrow">{data.tenant.hostname}</p>
+          <h2>{brand.heroTitle || `Welcome to ${brand.name}`}</h2>
+          <p className="lead">
+            {brand.writeup ||
+              `${brand.name} is a stay for people who want a real room, a plated dinner, and a quiet night — booked from this phone, not a brochure.`}
+          </p>
+          <div className="site-cta">
+            <Link className="btn btn-primary" to="/rooms">
+              Book a room
+            </Link>
+            <Link className="btn btn-ghost" to="/rooms">
+              View rooms
+            </Link>
+          </div>
+        </div>
+      </section>
+      <section className="site-strip">
+        <article>
+          <p className="eyebrow">Stay</p>
+          <h3>Rooms</h3>
+          <p className="muted">{data.rooms.length} rooms on the board. Check dates, then hold one.</p>
+          <Link to="/rooms">Open rooms</Link>
+        </article>
+        <article>
+          <p className="eyebrow">Kitchen</p>
+          <h3>Food</h3>
+          <p className="muted">{food[0]?.name ?? "Plates"} and more from the restaurant.</p>
+          <Link to="/food">See the menu</Link>
+        </article>
+        <article>
+          <p className="eyebrow">Bar</p>
+          <h3>Drinks</h3>
+          <p className="muted">{drinks[0]?.name ?? "House pours"} after dinner or on the terrace.</p>
+          <Link to="/drinks">Open the bar</Link>
+        </article>
+        <article>
+          <p className="eyebrow">You</p>
+          <h3>Activities</h3>
+          <p className="muted">Bookings, kitchen tickets, and self check-in.</p>
+          <Link to="/activities">My activities</Link>
+        </article>
+      </section>
+      <section>
+        <p className="eyebrow">Tonight</p>
+        <h3>Rooms you can take</h3>
+        <div className="cards">
+          {readyRooms.map((room) => (
+            <article className="card tap-card" key={room.id}>
+              {room.photoUrl ? <img className="catalog-photo" src={room.photoUrl} alt={room.name} /> : null}
+              <h2>{room.name}</h2>
+              <p className="muted">
+                {room.beds} · {money(room.nightlyMinor)} / night
+              </p>
+              <Link className="btn btn-primary" to="/rooms">
+                Book this room
+              </Link>
+            </article>
+          ))}
+        </div>
+      </section>
+      {brand.phone || brand.email || brand.address ? (
+        <section className="site-contact">
+          <p className="eyebrow">Talk to the house</p>
+          {brand.phone ? <p>{brand.phone}</p> : null}
+          {brand.email ? <p>{brand.email}</p> : null}
+          {brand.address ? <p>{brand.address}</p> : null}
+        </section>
+      ) : null}
+    </main>
+  );
+}
+
 function GuestRooms({
   data,
   subdomain,
@@ -251,7 +348,7 @@ function GuestRooms({
           }),
         }),
       );
-      setNotice(`Room reserved for ${body.booking.nights} night(s). Use My stay to check in.`);
+      setNotice(`Room reserved for ${body.booking.nights} night(s). Open Activities to check in.`);
       onDone();
     } catch (err) {
       setNotice(err instanceof Error ? err.message : "Could not book");
@@ -262,7 +359,6 @@ function GuestRooms({
 
   return (
     <main className="page">
-      <GuestBrand brand={data.tenant.branding} fallback="Rooms, food, and a quiet stay." />
       <p className="eyebrow">Rooms</p>
       <h2>Scan available rooms and book</h2>
       <p className="lead">
@@ -432,9 +528,9 @@ function GuestStay({ data, subdomain }: { data: HotelPublic; subdomain: string }
 
   return (
     <main className="page">
-      <p className="eyebrow">My stay</p>
-      <h2>Self check-in and check-out</h2>
-      <p className="lead">Use the email on your reservation. Front desk can also check you in.</p>
+      <p className="eyebrow">Activities</p>
+      <h2>Your bookings and orders</h2>
+      <p className="lead">Every reservation and kitchen ticket for this stay lives here. Check in when you arrive.</p>
       {notice ? <p className={notice.includes("checked") ? "banner-ok" : "banner-error"}>{notice}</p> : null}
       <GuestIdentity {...identity} />
       <div className="actions">

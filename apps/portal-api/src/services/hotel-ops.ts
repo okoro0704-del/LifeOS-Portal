@@ -240,16 +240,16 @@ export function hotelOpsPayload(install: PortalInstall, staff: HotelStaff, store
 
 function logHotelActivity(
   row: HotelProperty,
-  staff: HotelStaff,
+  actor: { id?: string; name: string; role: string },
   action: string,
   detail: string,
 ) {
   row.activity.unshift({
     id: newId("act"),
     at: new Date().toISOString(),
-    staffId: staff.id,
-    staffName: staff.name,
-    role: staff.role,
+    staffId: actor.id ?? "guest",
+    staffName: actor.name,
+    role: actor.role,
     action,
     detail,
   });
@@ -282,6 +282,7 @@ export function bookHotelRoom(
   };
   room.housekeep = "occupied";
   row.bookings.unshift(booking);
+  logHotelActivity(row, { name: booking.guestName, role: "guest" }, "booking.create", `${booking.roomName} · ${booking.checkIn} → ${booking.checkOut}`);
   save(store, install, row);
   return booking;
 }
@@ -318,7 +319,12 @@ export function placeHotelOrder(
     placedBy: input.placedBy ?? (input.actor ? "staff" : "guest"),
   };
   row.orders.unshift(order);
-  if (input.actor) logHotelActivity(row, input.actor, "order.create", `${order.item} for ${order.guestName}`);
+  logHotelActivity(
+    row,
+    input.actor ?? { name: order.guestName, role: "guest" },
+    "order.create",
+    `${order.item} for ${order.guestName}`,
+  );
   save(store, install, row);
   return order;
 }
@@ -337,6 +343,7 @@ export function updateHotelBookingStatus(
   if (status === "checked_in" && room) room.housekeep = "occupied";
   if (status === "checked_out" && room) room.housekeep = "dirty";
   if (status === "confirmed" && room && room.housekeep === "dirty") room.housekeep = "occupied";
+  logHotelActivity(row, { name: booking.guestName, role: "guest" }, `booking.${status}`, `${booking.roomName} · ${booking.guestName}`);
   save(store, install, row);
   return booking;
 }
@@ -372,6 +379,7 @@ export function updateHotelOrderStatus(
   const order = row.orders.find((item) => item.id === orderId);
   if (!order) throw new HttpError("Order not found.", 404, "not_found");
   order.status = status;
+  logHotelActivity(row, { name: order.guestName, role: "staff" }, `order.${status}`, `${order.item} · ${order.guestName}`);
   save(store, install, row);
   return order;
 }

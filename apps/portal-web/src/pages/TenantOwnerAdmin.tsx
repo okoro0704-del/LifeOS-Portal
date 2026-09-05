@@ -21,7 +21,10 @@ type Branding = {
 type Staff = { id: string; name: string; email: string; role: string };
 type Activity = { id: string; at: string; staffName: string; role: string; action: string; detail: string };
 type CatalogItem = { id?: string; name: string; kind: string; amountMinor: number; description?: string; photoUrl?: string };
-type Room = { id?: string; name: string; beds: string; nightlyMinor: number; photoUrl?: string };
+type Room = { id?: string; name: string; beds: string; nightlyMinor: number; photoUrl?: string; housekeep?: string };
+type Booking = { id: string; roomName: string; guestName: string; checkIn: string; checkOut: string; status: string; totalMinor: number };
+type Order = { id: string; item: string; quantity: number; guestName: string; status: string; amountMinor: number; kind?: string };
+type AdminPanel = "today" | "brand" | "catalog" | "staff" | "domain" | "activity" | null;
 
 async function readJson(res: Response) {
   const body = await res.json();
@@ -176,6 +179,7 @@ function OwnerDesk({
   onLogout: () => void;
 }) {
   const headers = { "Content-Type": "application/json", "X-Hotel-Staff": session.token };
+  const [panel, setPanel] = useState<AdminPanel>(null);
   const [heroTitle, setHeroTitle] = useState(branding.heroTitle ?? "");
   const [writeup, setWriteup] = useState(branding.writeup ?? "");
   const [phone, setPhone] = useState(branding.phone ?? "");
@@ -187,10 +191,17 @@ function OwnerDesk({
   const [backgroundUrl, setBackgroundUrl] = useState(branding.backgroundUrl ?? "");
   const [team, setTeam] = useState<Staff[]>([]);
   const [activity, setActivity] = useState<Activity[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [domain, setDomain] = useState("");
   const [handoff, setHandoff] = useState<string | null>(null);
   const staffUrl = branding.staffAppUrl ?? `${window.location.origin}/staff`;
+  const inHouse = bookings.filter((row) => row.status === "checked_in").length;
+  const arriving = bookings.filter((row) => row.status === "confirmed").length;
+  const openTickets = orders.filter((row) => row.status !== "delivered").length;
+  const dirtyRooms = rooms.filter((row) => row.housekeep === "dirty" || row.housekeep === "cleaning").length;
 
   async function load() {
     const res = await fetch(`${portalApiBase}/public/tenants/${encodeURIComponent(subdomain)}/ops`, { headers });
@@ -199,11 +210,25 @@ function OwnerDesk({
     if (!res.ok) throw new Error(body.message || "Could not load admin");
     setTeam(body.team ?? []);
     setActivity(body.activity ?? []);
+    setBookings(body.bookings ?? []);
+    setOrders(body.orders ?? []);
+    setRooms(body.rooms ?? []);
   }
 
   useEffect(() => {
     void load().catch((err) => setNotice(err.message));
   }, [subdomain, session.token]);
+
+  async function post(path: string, payload: unknown) {
+    await readJson(
+      await fetch(`${portalApiBase}/public/tenants/${encodeURIComponent(subdomain)}${path}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      }),
+    );
+    await load();
+  }
 
   async function saveSite(event: FormEvent) {
     event.preventDefault();
@@ -225,6 +250,7 @@ function OwnerDesk({
       }),
     );
     setNotice("Branded app copy saved.");
+    setPanel(null);
   }
 
   return (
@@ -237,8 +263,100 @@ function OwnerDesk({
           </button>
         </p>
       )}
-      {notice ? <p className={notice.includes("saved") || notice.includes("created") ? "banner-ok" : "banner-error"}>{notice}</p> : null}
+      {notice ? <p className={notice.includes("saved") || notice.includes("created") || notice.includes("Domain") ? "banner-ok" : "banner-error"}>{notice}</p> : null}
 
+      <section className="today-hub" data-testid="admin-today">
+        <p className="eyebrow">Today</p>
+        <h3>Daily source of truth</h3>
+        <div className="today-stats">
+          {hotel ? <span>{arriving} arriving</span> : null}
+          {hotel ? <span>{inHouse} in house</span> : null}
+          <span>{openTickets} open tickets</span>
+          {hotel ? <span>{dirtyRooms} rooms to turn</span> : null}
+        </div>
+        {hotel ? (
+          <>
+            <h4>Bookings</h4>
+            <ul className="list">
+              {bookings.length === 0 ? <li className="muted">No bookings yet.</li> : null}
+              {bookings.slice(0, 6).map((booking) => (
+                <li key={booking.id}>
+                  <strong>
+                    {booking.guestName} · {booking.roomName}
+                  </strong>
+                  <span className="muted">
+                    {booking.status} · {booking.checkIn} → {booking.checkOut}
+                  </span>
+                  <span className="deliverable-links">
+                    <button className="btn btn-ghost" type="button" onClick={() => void post(`/bookings/${booking.id}/status`, { status: "checked_in" })}>
+                      Check in
+                    </button>
+                    <button className="btn btn-ghost" type="button" onClick={() => void post(`/bookings/${booking.id}/status`, { status: "checked_out" })}>
+                      Check out
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : null}
+        <h4>Orders</h4>
+        <ul className="list">
+          {orders.length === 0 ? <li className="muted">No guest or staff orders yet.</li> : null}
+          {orders.slice(0, 8).map((order) => (
+            <li key={order.id}>
+              <strong>
+                {order.item} × {order.quantity}
+              </strong>
+              <span className="muted">
+                {order.guestName} · {order.status}
+              </span>
+              <span className="deliverable-links">
+                <button className="btn btn-ghost" type="button" onClick={() => void post(`/orders/${order.id}/status`, { status: "preparing" })}>
+                  Prep
+                </button>
+                <button className="btn btn-ghost" type="button" onClick={() => void post(`/orders/${order.id}/status`, { status: "ready" })}>
+                  Ready
+                </button>
+                <button className="btn btn-primary" type="button" onClick={() => void post(`/orders/${order.id}/status`, { status: "delivered" })}>
+                  Done
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {panel ? (
+        <button className="btn btn-ghost" type="button" onClick={() => setPanel(null)}>
+          Back to icons
+        </button>
+      ) : (
+        <div className="admin-tiles" data-testid="admin-tiles">
+          <button type="button" onClick={() => setPanel("brand")}>
+            <span>Aa</span>
+            Brand
+          </button>
+          <button type="button" onClick={() => setPanel("catalog")}>
+            <span>+</span>
+            {hotel ? "Rooms & menu" : "Food & drinks"}
+          </button>
+          <button type="button" onClick={() => setPanel("staff")}>
+            <span>◉</span>
+            Staff
+          </button>
+          <button type="button" onClick={() => setPanel("domain")}>
+            <span>◎</span>
+            Domain
+          </button>
+          <button type="button" onClick={() => setPanel("activity")}>
+            <span>☰</span>
+            Activity
+          </button>
+        </div>
+      )}
+
+      {panel === "brand" ? (
       <form className="form tap-form" onSubmit={(e) => void saveSite(e)}>
         <h3>Branded app write-up</h3>
         <label>
@@ -298,9 +416,12 @@ function OwnerDesk({
           Save branded app
         </button>
       </form>
+      ) : null}
 
-      <CatalogEditor subdomain={subdomain} headers={headers} hotel={hotel} />
+      {panel === "catalog" ? <CatalogEditor subdomain={subdomain} headers={headers} hotel={hotel} /> : null}
 
+      {panel === "staff" ? (
+      <>
       <form
         className="form tap-form"
         onSubmit={(e) => {
@@ -378,7 +499,10 @@ function OwnerDesk({
           </li>
         ))}
       </ul>
+      </>
+      ) : null}
 
+      {panel === "domain" ? (
       <form
         className="form tap-form"
         onSubmit={(e) => {
@@ -420,14 +544,17 @@ function OwnerDesk({
           </button>
         </div>
       </form>
+      ) : null}
 
-      <h3>Staff activity</h3>
+      {panel === "activity" ? (
+      <>
+      <h3>Guest and staff activity</h3>
       <ul className="list">
         {activity.length === 0 ? <li className="muted">No staff activity yet.</li> : null}
         {activity.map((row) => (
           <li key={row.id}>
             <strong>
-              {row.staffName} · {row.action}
+              {row.staffName} · {row.role} · {row.action}
             </strong>
             <span className="muted">
               {row.detail} · {new Date(row.at).toLocaleString()}
@@ -435,6 +562,8 @@ function OwnerDesk({
           </li>
         ))}
       </ul>
+      </>
+      ) : null}
     </div>
   );
 }

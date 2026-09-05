@@ -183,7 +183,9 @@ export function diningOpsPayload(install: PortalInstall, staff: DiningStaff, sto
     menu: row.menu,
     tables: row.tables,
     team: staff.role === "owner" ? row.staff.map(publicStaff) : undefined,
-    activity: staff.role === "owner" ? row.activity.slice(0, 80) : undefined,
+    activity: staff.role === "owner" ? (row.activity ?? []).slice(0, 80) : undefined,
+    bookings: [],
+    rooms: [],
   };
 }
 
@@ -233,6 +235,19 @@ export function placeDiningOrder(
   };
   row.orders.unshift(order);
   if (input.actor) logDiningActivity(row, input.actor, "order.create", `${order.item} for ${order.guestName}`);
+  else {
+    row.activity = row.activity ?? [];
+    row.activity.unshift({
+      id: newId("act"),
+      at: new Date().toISOString(),
+      staffId: "guest",
+      staffName: order.guestName,
+      role: "guest",
+      action: "order.create",
+      detail: `${order.item} for ${order.guestName}`,
+    });
+    row.activity = row.activity.slice(0, 200);
+  }
   save(store, install, row);
   return order;
 }

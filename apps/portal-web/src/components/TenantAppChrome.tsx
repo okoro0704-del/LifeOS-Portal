@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 
-export type TenantTab = { to: string; label: string; icon: "home" | "food" | "drink" | "stay" | "staff" | "menu" };
+export type TenantTab = { to: string; label: string; icon: "home" | "food" | "drink" | "stay" | "staff" | "menu" | "activity" };
 
 const ICONS: Record<TenantTab["icon"], ReactNode> = {
   home: (
@@ -32,6 +32,11 @@ const ICONS: Record<TenantTab["icon"], ReactNode> = {
   staff: (
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm-7 8a7 7 0 0 1 14 0" />
+    </svg>
+  ),
+  activity: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7 3v3M17 3v3M4 8h16M6 12h6M6 16h10M5 5h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" />
     </svg>
   ),
 };

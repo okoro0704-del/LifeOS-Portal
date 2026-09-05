@@ -731,6 +731,103 @@ fieldset {
   padding: 0.7rem 0.8rem;
 }
 
+.site-home {
+  display: grid;
+  gap: 1.4rem;
+}
+.site-hero {
+  min-height: 280px;
+  border-radius: 24px;
+  padding: 1.4rem;
+  display: grid;
+  align-content: end;
+  background:
+    linear-gradient(180deg, rgba(7, 11, 18, 0.15), rgba(7, 11, 18, 0.82)),
+    radial-gradient(800px 280px at 80% 0%, color-mix(in srgb, var(--tap-accent) 35%, transparent), transparent);
+  background-size: cover;
+  border: 1px solid var(--los-border);
+}
+.site-hero h2 {
+  margin: 0.2rem 0 0.5rem;
+  font-size: 2rem;
+  max-width: 16ch;
+}
+.site-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin-top: 1rem;
+}
+.site-strip {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+}
+.site-strip article {
+  padding: 0.9rem;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--los-border);
+}
+.site-strip h3,
+.site-contact p,
+.today-hub h3 {
+  margin: 0.2rem 0 0.35rem;
+}
+.site-strip a {
+  font-weight: 700;
+}
+.today-hub {
+  padding: 1rem;
+  border-radius: 20px;
+  border: 1px solid var(--los-border);
+  background: rgba(255, 255, 255, 0.03);
+  margin-bottom: 1rem;
+}
+.today-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.6rem 0 1rem;
+}
+.today-stats span {
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tap-accent) 16%, transparent);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.admin-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.7rem;
+  margin: 0.8rem 0 1.2rem;
+}
+.admin-tiles button {
+  display: grid;
+  gap: 0.35rem;
+  justify-items: center;
+  padding: 1rem 0.4rem;
+  border: 1px solid var(--los-border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--los-text);
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.admin-tiles button span {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--tap-accent) 22%, transparent);
+  color: var(--tap-accent);
+  font-size: 1.1rem;
+}
+
 .banner-ok {
   background: var(--los-accent-soft);
   color: var(--los-accent-strong);
