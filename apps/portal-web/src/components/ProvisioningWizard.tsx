@@ -585,8 +585,11 @@ export function ProvisioningWizard() {
           <ul className="list" data-testid="hotel-only-features">
             <li>Rooms</li>
             <li>Reservations</li>
+            <li>Restaurant and bar</li>
             <li>Room service</li>
+            <li>Self check-in</li>
             <li>Front desk</li>
+            <li>Housekeeping</li>
           </ul>
         </>
       ) : hospitalityLive ? (

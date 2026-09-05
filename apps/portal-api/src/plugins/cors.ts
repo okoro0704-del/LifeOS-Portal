@@ -39,6 +39,7 @@ async function corsPlugin(app: FastifyInstance) {
       "X-TrustID-Biometric",
       "X-TrustID-Master-Device",
       "X-Api-Key",
+      "X-Hotel-Staff",
     ],
   });
 }

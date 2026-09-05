@@ -3,10 +3,19 @@ import { z } from "zod";
 import type { PortalStore } from "../store.js";
 import { HttpError } from "../lib/http.js";
 import {
+  assertStaffRole,
   bookHotelRoom,
+  createHotelStaff,
+  guestSelfCheck,
+  guestStayPayload,
   hotelAppPayload,
+  hotelOpsPayload,
+  loginHotelStaff,
   placeHotelOrder,
+  staffFromToken,
   updateHotelBookingStatus,
+  updateHotelOrderStatus,
+  updateRoomHousekeep,
 } from "../services/hotel-ops.js";
 import {
   pngIcon,
@@ -35,65 +44,191 @@ export async function registerTenantAppRoutes(app: FastifyInstance, store: Porta
     if (!row || row.status !== "ready" || row.suspended) {
       return reply.code(404).send({ error: "not_found", message: "Tenant app is not ready." });
     }
-    if (row.verticalId === "hotel") return hotelAppPayload(row);
+    if (row.verticalId === "hotel") return hotelAppPayload(row, store);
     return { tenant: toPublicTenantApp(row) };
   });
 
-  app.post("/public/tenants/:subdomain/bookings", async (req, reply) => {
-    const { subdomain } = req.params as { subdomain: string };
+  function hotelInstall(subdomain: string, readyOnly = true) {
     const row = store.getInstallBySubdomain(subdomain.toLowerCase());
-    if (!row || row.status !== "ready" || row.verticalId !== "hotel") {
-      return reply.code(404).send({ error: "not_found", message: "Hotel is not ready." });
+    if (!row || row.verticalId !== "hotel" || (readyOnly && (row.status !== "ready" || row.suspended))) {
+      throw new HttpError("Hotel is not ready.", 404, "not_found");
     }
-    const body = z
-      .object({
-        roomId: z.string().min(1),
-        guestName: z.string().min(1),
-        guestEmail: z.string().email(),
-        checkIn: z.string().min(8),
-        checkOut: z.string().min(8),
-      })
-      .parse(req.body);
+    return row;
+  }
+
+  function staffToken(req: FastifyRequest) {
+    const header = req.headers["x-hotel-staff"];
+    return typeof header === "string" ? header : undefined;
+  }
+
+  function sendHotelError(reply: FastifyReply, err: unknown) {
+    if (err instanceof HttpError) return reply.code(err.statusCode).send({ error: err.code, message: err.message });
+    throw err;
+  }
+
+  app.get("/public/tenants/:subdomain/stay", async (req, reply) => {
     try {
-      return reply.code(201).send({ booking: bookHotelRoom(row, body) });
+      const { subdomain } = req.params as { subdomain: string };
+      const email = z.string().email().parse((req.query as { email?: string }).email);
+      return guestStayPayload(hotelInstall(subdomain), email, store);
     } catch (err) {
-      if (err instanceof HttpError) return reply.code(err.statusCode).send({ error: err.code, message: err.message });
-      throw err;
+      return sendHotelError(reply, err);
+    }
+  });
+
+  app.post("/public/tenants/:subdomain/bookings", async (req, reply) => {
+    try {
+      const { subdomain } = req.params as { subdomain: string };
+      const body = z
+        .object({
+          roomId: z.string().min(1),
+          guestName: z.string().min(1),
+          guestEmail: z.string().email(),
+          checkIn: z.string().min(8),
+          checkOut: z.string().min(8),
+        })
+        .parse(req.body);
+      return reply.code(201).send({ booking: bookHotelRoom(hotelInstall(subdomain), body, store) });
+    } catch (err) {
+      return sendHotelError(reply, err);
     }
   });
 
   app.post("/public/tenants/:subdomain/orders", async (req, reply) => {
-    const { subdomain } = req.params as { subdomain: string };
-    const row = store.getInstallBySubdomain(subdomain.toLowerCase());
-    if (!row || row.status !== "ready" || row.verticalId !== "hotel") {
-      return reply.code(404).send({ error: "not_found", message: "Hotel is not ready." });
-    }
-    const body = z
-      .object({
-        item: z.string().min(1),
-        quantity: z.number().int().positive().max(12).optional(),
-        guestName: z.string().min(1),
-        roomName: z.string().optional(),
-      })
-      .parse(req.body);
     try {
-      return reply.code(201).send({ order: placeHotelOrder(row, body) });
+      const { subdomain } = req.params as { subdomain: string };
+      const body = z
+        .object({
+          item: z.string().min(1),
+          quantity: z.number().int().positive().max(12).optional(),
+          guestName: z.string().min(1),
+          guestEmail: z.string().email().optional(),
+          roomName: z.string().optional(),
+          kind: z.enum(["restaurant", "bar", "room_service"]).optional(),
+        })
+        .parse(req.body);
+      return reply.code(201).send({ order: placeHotelOrder(hotelInstall(subdomain), body, store) });
     } catch (err) {
-      if (err instanceof HttpError) return reply.code(err.statusCode).send({ error: err.code, message: err.message });
-      throw err;
+      return sendHotelError(reply, err);
+    }
+  });
+
+  app.post("/public/tenants/:subdomain/stay/check-in", async (req, reply) => {
+    try {
+      const { subdomain } = req.params as { subdomain: string };
+      const body = z
+        .object({
+          guestEmail: z.string().email(),
+          guestName: z.string().optional(),
+          bookingId: z.string().optional(),
+        })
+        .parse(req.body);
+      return { booking: guestSelfCheck(hotelInstall(subdomain), { ...body, status: "checked_in" }, store) };
+    } catch (err) {
+      return sendHotelError(reply, err);
+    }
+  });
+
+  app.post("/public/tenants/:subdomain/stay/check-out", async (req, reply) => {
+    try {
+      const { subdomain } = req.params as { subdomain: string };
+      const body = z
+        .object({
+          guestEmail: z.string().email(),
+          guestName: z.string().optional(),
+          bookingId: z.string().optional(),
+        })
+        .parse(req.body);
+      return { booking: guestSelfCheck(hotelInstall(subdomain), { ...body, status: "checked_out" }, store) };
+    } catch (err) {
+      return sendHotelError(reply, err);
+    }
+  });
+
+  app.post("/public/tenants/:subdomain/staff/login", async (req, reply) => {
+    try {
+      const { subdomain } = req.params as { subdomain: string };
+      const body = z.object({ email: z.string().email(), password: z.string().min(1) }).parse(req.body);
+      return loginHotelStaff(hotelInstall(subdomain), body, store);
+    } catch (err) {
+      return sendHotelError(reply, err);
+    }
+  });
+
+  app.get("/public/tenants/:subdomain/ops", async (req, reply) => {
+    try {
+      const { subdomain } = req.params as { subdomain: string };
+      const row = hotelInstall(subdomain);
+      const staff = staffFromToken(row, staffToken(req), store);
+      return hotelOpsPayload(row, staff, store);
+    } catch (err) {
+      return sendHotelError(reply, err);
+    }
+  });
+
+  app.post("/public/tenants/:subdomain/staff", async (req, reply) => {
+    try {
+      const { subdomain } = req.params as { subdomain: string };
+      const row = hotelInstall(subdomain);
+      const actor = staffFromToken(row, staffToken(req), store);
+      assertStaffRole(actor, ["owner"]);
+      const body = z
+        .object({
+          name: z.string().min(1),
+          email: z.string().email(),
+          password: z.string().min(6),
+          role: z.enum(["front_desk", "restaurant", "bar", "housekeeping"]),
+        })
+        .parse(req.body);
+      return reply.code(201).send({ staff: createHotelStaff(row, body, store) });
+    } catch (err) {
+      return sendHotelError(reply, err);
     }
   });
 
   app.post("/public/tenants/:subdomain/bookings/:bookingId/status", async (req, reply) => {
-    const { subdomain, bookingId } = req.params as { subdomain: string; bookingId: string };
-    const row = store.getInstallBySubdomain(subdomain.toLowerCase());
-    if (!row || row.verticalId !== "hotel") return reply.code(404).send({ error: "not_found" });
-    const body = z.object({ status: z.enum(["confirmed", "checked_in", "checked_out"]) }).parse(req.body);
     try {
-      return { booking: updateHotelBookingStatus(row, bookingId, body.status) };
+      const { subdomain, bookingId } = req.params as { subdomain: string; bookingId: string };
+      const row = hotelInstall(subdomain, false);
+      const actor = staffFromToken(row, staffToken(req), store);
+      assertStaffRole(actor, ["front_desk"]);
+      const body = z.object({ status: z.enum(["confirmed", "checked_in", "checked_out"]) }).parse(req.body);
+      return { booking: updateHotelBookingStatus(row, bookingId, body.status, store) };
     } catch (err) {
-      if (err instanceof HttpError) return reply.code(err.statusCode).send({ error: err.code, message: err.message });
-      throw err;
+      return sendHotelError(reply, err);
+    }
+  });
+
+  app.post("/public/tenants/:subdomain/orders/:orderId/status", async (req, reply) => {
+    try {
+      const { subdomain, orderId } = req.params as { subdomain: string; orderId: string };
+      const row = hotelInstall(subdomain);
+      const actor = staffFromToken(row, staffToken(req), store);
+      const body = z.object({ status: z.enum(["received", "preparing", "ready", "delivered"]) }).parse(req.body);
+      const ops = hotelOpsPayload(row, actor, store);
+      const order = ops.orders.find((item) => item.id === orderId);
+      if (!order) throw new HttpError("Order not found.", 404, "not_found");
+      if (actor.role === "restaurant") assertStaffRole(actor, ["restaurant"]);
+      if (actor.role === "bar") assertStaffRole(actor, ["bar"]);
+      if (actor.role === "housekeeping" || actor.role === "front_desk") {
+        throw new HttpError("This dashboard is not assigned to you.", 403, "forbidden");
+      }
+      return { order: updateHotelOrderStatus(row, orderId, body.status, store) };
+    } catch (err) {
+      return sendHotelError(reply, err);
+    }
+  });
+
+  app.post("/public/tenants/:subdomain/rooms/:roomId/housekeep", async (req, reply) => {
+    try {
+      const { subdomain, roomId } = req.params as { subdomain: string; roomId: string };
+      const row = hotelInstall(subdomain);
+      const actor = staffFromToken(row, staffToken(req), store);
+      assertStaffRole(actor, ["housekeeping"]);
+      const body = z.object({ housekeep: z.enum(["ready", "occupied", "dirty", "cleaning"]) }).parse(req.body);
+      return { room: updateRoomHousekeep(row, roomId, body.housekeep, store) };
+    } catch (err) {
+      return sendHotelError(reply, err);
     }
   });
 

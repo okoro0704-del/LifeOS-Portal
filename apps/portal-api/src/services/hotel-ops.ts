@@ -1,14 +1,21 @@
 import { featuresForVertical, tenantDeliverables } from "@lifeos-portal/shared";
-import { newId } from "../lib/crypto.js";
+import { newId, randomToken, hashSecret } from "../lib/crypto.js";
 import { HttpError } from "../lib/http.js";
-import type { PortalInstall } from "../store.js";
+import { hashPassword, verifyPassword } from "../lib/password.js";
+import type { PortalInstall, PortalStore } from "../store.js";
+
+export type HotelStaffRole = "owner" | "front_desk" | "restaurant" | "bar" | "housekeeping";
+export type HotelHousekeep = "ready" | "occupied" | "dirty" | "cleaning";
+export type HotelOrderKind = "restaurant" | "bar" | "room_service";
+export type HotelOrderStatus = "received" | "preparing" | "ready" | "delivered";
+export type HotelBookingStatus = "confirmed" | "checked_in" | "checked_out";
 
 export type HotelRoom = {
   id: string;
   name: string;
   beds: string;
   nightlyMinor: number;
-  available: boolean;
+  housekeep: HotelHousekeep;
 };
 
 export type HotelBooking = {
@@ -21,35 +28,85 @@ export type HotelBooking = {
   checkOut: string;
   nights: number;
   totalMinor: number;
-  status: "confirmed" | "checked_in" | "checked_out";
+  status: HotelBookingStatus;
   createdAt: string;
+};
+
+export type HotelMenuItem = {
+  id: string;
+  name: string;
+  kind: HotelOrderKind;
+  amountMinor: number;
+  description: string;
 };
 
 export type HotelOrder = {
   id: string;
   item: string;
+  kind: HotelOrderKind;
   quantity: number;
   amountMinor: number;
   roomName?: string;
   guestName: string;
-  status: "received" | "preparing" | "delivered";
+  guestEmail?: string;
+  status: HotelOrderStatus;
   createdAt: string;
 };
 
-type HotelProperty = {
+export type HotelStaff = {
+  id: string;
+  name: string;
+  email: string;
+  passwordHash: string;
+  role: HotelStaffRole;
+  createdAt: string;
+};
+
+export type HotelStaffSession = {
+  tokenHash: string;
+  staffId: string;
+  expiresAt: string;
+};
+
+export type HotelProperty = {
   subdomain: string;
   rooms: HotelRoom[];
   bookings: HotelBooking[];
   orders: HotelOrder[];
+  menu: HotelMenuItem[];
+  staff: HotelStaff[];
+  sessions: HotelStaffSession[];
+};
+
+export type HotelOwnerSeed = {
+  email?: string;
+  name?: string;
+  password?: string;
 };
 
 const properties = new Map<string, HotelProperty>();
+const DEFAULT_OWNER_PASSWORD = "hotel-owner";
 
-const SEED_ROOMS: Array<Omit<HotelRoom, "id" | "available">> = [
-  { name: "Deluxe King", beds: "1 king", nightlyMinor: 18000 },
-  { name: "Twin Garden", beds: "2 twins", nightlyMinor: 14000 },
-  { name: "Junior Suite", beds: "1 king + sofa", nightlyMinor: 26000 },
-  { name: "Standard Queen", beds: "1 queen", nightlyMinor: 11000 },
+const SEED_ROOMS: Array<Omit<HotelRoom, "id">> = [
+  { name: "Deluxe King", beds: "1 king", nightlyMinor: 18000, housekeep: "ready" },
+  { name: "Twin Garden", beds: "2 twins", nightlyMinor: 14000, housekeep: "ready" },
+  { name: "Junior Suite", beds: "1 king + sofa", nightlyMinor: 26000, housekeep: "ready" },
+  { name: "Standard Queen", beds: "1 queen", nightlyMinor: 11000, housekeep: "ready" },
+  { name: "Family Twin", beds: "2 queens", nightlyMinor: 20000, housekeep: "ready" },
+  { name: "Executive King", beds: "1 king", nightlyMinor: 22000, housekeep: "ready" },
+];
+
+const SEED_MENU: Array<Omit<HotelMenuItem, "id">> = [
+  { name: "Club sandwich", kind: "restaurant", amountMinor: 3500, description: "Chicken, bacon, and fries" },
+  { name: "Continental breakfast", kind: "restaurant", amountMinor: 2800, description: "Eggs, toast, fruit, and tea" },
+  { name: "Grilled catch", kind: "restaurant", amountMinor: 6200, description: "Day catch with jollof rice" },
+  { name: "Jollof platter", kind: "restaurant", amountMinor: 4500, description: "Smoky rice, plantain, and stew" },
+  { name: "Still water", kind: "bar", amountMinor: 800, description: "Chilled 75cl" },
+  { name: "Lager", kind: "bar", amountMinor: 1500, description: "Draft pint" },
+  { name: "Red wine", kind: "bar", amountMinor: 3200, description: "House glass" },
+  { name: "Mojito", kind: "bar", amountMinor: 2800, description: "Mint, lime, rum" },
+  { name: "Ginger beer", kind: "bar", amountMinor: 1200, description: "Non-alcoholic" },
+  { name: "Late-night soup", kind: "room_service", amountMinor: 2400, description: "Pepper soup to the room" },
 ];
 
 function nightsBetween(checkIn: string, checkOut: string) {
@@ -61,26 +118,70 @@ function nightsBetween(checkIn: string, checkOut: string) {
   return Math.max(1, Math.round((end - start) / 86_400_000));
 }
 
-export function seedHotelProperty(install: PortalInstall) {
+function publicStaff(staff: HotelStaff) {
+  return { id: staff.id, name: staff.name, email: staff.email, role: staff.role, createdAt: staff.createdAt };
+}
+
+function save(store: PortalStore | undefined, install: PortalInstall, row: HotelProperty) {
+  properties.set(row.subdomain, row);
+  if (store) store.updateInstall(install.id, { hotelOps: row });
+}
+
+function emptyProperty(slug: string, seed?: HotelOwnerSeed): HotelProperty {
+  const email = (seed?.email ?? `owner@${slug}.getlifeos.app`).trim().toLowerCase();
+  return {
+    subdomain: slug,
+    rooms: SEED_ROOMS.map((room) => ({ ...room, id: newId("rm") })),
+    bookings: [],
+    orders: [],
+    menu: SEED_MENU.map((item) => ({ ...item, id: newId("mn") })),
+    staff: [
+      {
+        id: newId("hst"),
+        name: seed?.name?.trim() || "Hotel owner",
+        email,
+        passwordHash: hashPassword(seed?.password?.trim() || DEFAULT_OWNER_PASSWORD),
+        role: "owner",
+        createdAt: new Date().toISOString(),
+      },
+    ],
+    sessions: [],
+  };
+}
+
+export function seedHotelProperty(install: PortalInstall, store?: PortalStore, seed?: HotelOwnerSeed) {
   if (install.verticalId !== "hotel") return;
   const slug = install.subdomain.toLowerCase();
   if (properties.has(slug)) return;
-  properties.set(slug, {
-    subdomain: slug,
-    rooms: SEED_ROOMS.map((room) => ({ ...room, id: newId("rm"), available: true })),
-    bookings: [],
-    orders: [],
-  });
+  const stored = install.hotelOps as HotelProperty | undefined;
+  const row =
+    stored && Array.isArray(stored.rooms)
+      ? {
+          subdomain: slug,
+          rooms: stored.rooms,
+          bookings: stored.bookings ?? [],
+          orders: stored.orders ?? [],
+          menu: stored.menu?.length ? stored.menu : SEED_MENU.map((item) => ({ ...item, id: newId("mn") })),
+          staff: stored.staff?.length ? stored.staff : emptyProperty(slug, seed).staff,
+          sessions: stored.sessions ?? [],
+        }
+      : emptyProperty(slug, seed);
+  save(store, install, row);
 }
 
 function property(subdomain: string) {
   return properties.get(subdomain.toLowerCase());
 }
 
-export function hotelAppPayload(install: PortalInstall) {
-  seedHotelProperty(install);
-  const slug = install.subdomain.toLowerCase();
-  const row = property(slug);
+function requireProperty(install: PortalInstall, store?: PortalStore) {
+  seedHotelProperty(install, store);
+  const row = property(install.subdomain);
+  if (!row) throw new HttpError("Hotel is not ready.", 404, "not_found");
+  return row;
+}
+
+export function hotelAppPayload(install: PortalInstall, store?: PortalStore) {
+  const row = requireProperty(install, store);
   const deliverables = tenantDeliverables(install.subdomain, install.customDomain);
   return {
     tenant: {
@@ -97,29 +198,57 @@ export function hotelAppPayload(install: PortalInstall) {
         primaryColor: install.brandPrimaryColor ?? "#0d7a6f",
       },
       features: featuresForVertical(install.osId, install.verticalId),
+      ownerHint: row.staff.find((staff) => staff.role === "owner")?.email ?? `owner@${row.subdomain}.getlifeos.app`,
     },
-    rooms: row?.rooms ?? [],
-    bookings: row?.bookings ?? [],
-    orders: row?.orders ?? [],
+    rooms: row.rooms,
+    menu: row.menu,
+  };
+}
+
+export function guestStayPayload(install: PortalInstall, guestEmail: string, store?: PortalStore) {
+  const row = requireProperty(install, store);
+  const email = guestEmail.trim().toLowerCase();
+  return {
+    bookings: row.bookings.filter((item) => item.guestEmail === email),
+    orders: row.orders.filter((item) => item.guestEmail === email),
+  };
+}
+
+export function hotelOpsPayload(install: PortalInstall, staff: HotelStaff, store?: PortalStore) {
+  const row = requireProperty(install, store);
+  const orders =
+    staff.role === "restaurant"
+      ? row.orders.filter((item) => item.kind === "restaurant" || item.kind === "room_service")
+      : staff.role === "bar"
+        ? row.orders.filter((item) => item.kind === "bar")
+        : row.orders;
+  return {
+    staff: publicStaff(staff),
+    rooms: row.rooms,
+    bookings: row.bookings,
+    orders,
+    menu: row.menu,
+    team: staff.role === "owner" ? row.staff.map(publicStaff) : undefined,
   };
 }
 
 export function bookHotelRoom(
   install: PortalInstall,
   input: { roomId: string; guestName: string; guestEmail: string; checkIn: string; checkOut: string },
+  store?: PortalStore,
 ) {
-  seedHotelProperty(install);
-  const row = property(install.subdomain);
-  if (!row) throw new HttpError("Hotel is not ready.", 404, "not_found");
+  const row = requireProperty(install, store);
   const room = row.rooms.find((item) => item.id === input.roomId);
-  if (!room || !room.available) throw new HttpError("That room is not available.", 409, "room_unavailable");
+  if (!room || room.housekeep !== "ready") {
+    throw new HttpError("That room is not available.", 409, "room_unavailable");
+  }
   const nights = nightsBetween(input.checkIn, input.checkOut);
   const booking: HotelBooking = {
     id: newId("bkg"),
     roomId: room.id,
     roomName: room.name,
     guestName: input.guestName.trim(),
-    guestEmail: input.guestEmail.trim(),
+    guestEmail: input.guestEmail.trim().toLowerCase(),
     checkIn: input.checkIn,
     checkOut: input.checkOut,
     nights,
@@ -127,49 +256,164 @@ export function bookHotelRoom(
     status: "confirmed",
     createdAt: new Date().toISOString(),
   };
-  room.available = false;
+  room.housekeep = "occupied";
   row.bookings.unshift(booking);
+  save(store, install, row);
   return booking;
 }
 
 export function placeHotelOrder(
   install: PortalInstall,
-  input: { item: string; quantity?: number; guestName: string; roomName?: string },
+  input: { item: string; quantity?: number; guestName: string; guestEmail?: string; roomName?: string; kind?: HotelOrderKind },
+  store?: PortalStore,
 ) {
-  seedHotelProperty(install);
-  const row = property(install.subdomain);
-  if (!row) throw new HttpError("Hotel is not ready.", 404, "not_found");
+  const row = requireProperty(install, store);
   const quantity = Math.max(1, Math.min(12, input.quantity ?? 1));
-  const menu: Record<string, number> = {
-    "Club sandwich": 3500,
-    "Continental breakfast": 2800,
-    "Grilled catch": 6200,
-    "Still water": 800,
-  };
-  const item = input.item.trim();
-  const amountMinor = (menu[item] ?? 2500) * quantity;
+  const menuItem = row.menu.find((item) => item.name === input.item.trim());
+  const kind = input.kind ?? menuItem?.kind ?? "room_service";
   const order: HotelOrder = {
     id: newId("ord"),
-    item,
+    item: input.item.trim(),
+    kind,
     quantity,
-    amountMinor,
+    amountMinor: (menuItem?.amountMinor ?? 2500) * quantity,
     roomName: input.roomName,
     guestName: input.guestName.trim(),
+    guestEmail: input.guestEmail?.trim().toLowerCase(),
     status: "received",
     createdAt: new Date().toISOString(),
   };
   row.orders.unshift(order);
+  save(store, install, row);
   return order;
 }
 
-export function updateHotelBookingStatus(install: PortalInstall, bookingId: string, status: HotelBooking["status"]) {
-  const row = property(install.subdomain);
-  const booking = row?.bookings.find((item) => item.id === bookingId);
+export function updateHotelBookingStatus(
+  install: PortalInstall,
+  bookingId: string,
+  status: HotelBookingStatus,
+  store?: PortalStore,
+) {
+  const row = requireProperty(install, store);
+  const booking = row.bookings.find((item) => item.id === bookingId);
   if (!booking) throw new HttpError("Booking not found.", 404, "not_found");
   booking.status = status;
-  if (status === "checked_out") {
-    const room = row?.rooms.find((item) => item.id === booking.roomId);
-    if (room) room.available = true;
-  }
+  const room = row.rooms.find((item) => item.id === booking.roomId);
+  if (status === "checked_in" && room) room.housekeep = "occupied";
+  if (status === "checked_out" && room) room.housekeep = "dirty";
+  if (status === "confirmed" && room && room.housekeep === "dirty") room.housekeep = "occupied";
+  save(store, install, row);
   return booking;
 }
+
+export function guestSelfCheck(
+  install: PortalInstall,
+  input: { guestEmail: string; guestName?: string; bookingId?: string; status: "checked_in" | "checked_out" },
+  store?: PortalStore,
+) {
+  const row = requireProperty(install, store);
+  const email = input.guestEmail.trim().toLowerCase();
+  const booking = input.bookingId
+    ? row.bookings.find((item) => item.id === input.bookingId && item.guestEmail === email)
+    : row.bookings.find(
+        (item) =>
+          item.guestEmail === email &&
+          (input.status === "checked_in" ? item.status === "confirmed" : item.status === "checked_in"),
+      );
+  if (!booking) throw new HttpError("No matching stay was found.", 404, "not_found");
+  if (input.guestName && booking.guestName.toLowerCase() !== input.guestName.trim().toLowerCase()) {
+    throw new HttpError("Name does not match this stay.", 403, "forbidden");
+  }
+  return updateHotelBookingStatus(install, booking.id, input.status, store);
+}
+
+export function updateHotelOrderStatus(
+  install: PortalInstall,
+  orderId: string,
+  status: HotelOrderStatus,
+  store?: PortalStore,
+) {
+  const row = requireProperty(install, store);
+  const order = row.orders.find((item) => item.id === orderId);
+  if (!order) throw new HttpError("Order not found.", 404, "not_found");
+  order.status = status;
+  save(store, install, row);
+  return order;
+}
+
+export function updateRoomHousekeep(
+  install: PortalInstall,
+  roomId: string,
+  housekeep: HotelHousekeep,
+  store?: PortalStore,
+) {
+  const row = requireProperty(install, store);
+  const room = row.rooms.find((item) => item.id === roomId);
+  if (!room) throw new HttpError("Room not found.", 404, "not_found");
+  room.housekeep = housekeep;
+  save(store, install, row);
+  return room;
+}
+
+export function loginHotelStaff(
+  install: PortalInstall,
+  input: { email: string; password: string },
+  store?: PortalStore,
+) {
+  const row = requireProperty(install, store);
+  const staff = row.staff.find((item) => item.email === input.email.trim().toLowerCase());
+  if (!staff || !verifyPassword(input.password, staff.passwordHash)) {
+    throw new HttpError("Staff email or password is wrong.", 401, "unauthorized");
+  }
+  const token = randomToken();
+  row.sessions = row.sessions.filter((item) => Date.parse(item.expiresAt) > Date.now());
+  row.sessions.push({
+    tokenHash: hashSecret(token),
+    staffId: staff.id,
+    expiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(),
+  });
+  save(store, install, row);
+  return { token, staff: publicStaff(staff) };
+}
+
+export function staffFromToken(install: PortalInstall, token: string | undefined, store?: PortalStore) {
+  if (!token) throw new HttpError("Staff login required.", 401, "unauthorized");
+  const row = requireProperty(install, store);
+  const session = row.sessions.find(
+    (item) => item.tokenHash === hashSecret(token) && Date.parse(item.expiresAt) > Date.now(),
+  );
+  const staff = session ? row.staff.find((item) => item.id === session.staffId) : undefined;
+  if (!staff) throw new HttpError("Staff login required.", 401, "unauthorized");
+  return staff;
+}
+
+export function createHotelStaff(
+  install: PortalInstall,
+  input: { name: string; email: string; password: string; role: HotelStaffRole },
+  store?: PortalStore,
+) {
+  const row = requireProperty(install, store);
+  const email = input.email.trim().toLowerCase();
+  if (row.staff.some((item) => item.email === email)) {
+    throw new HttpError("That staff email is already in use.", 409, "conflict");
+  }
+  if (input.role === "owner") throw new HttpError("Create a department role, not another owner.", 400, "invalid_role");
+  const staff: HotelStaff = {
+    id: newId("hst"),
+    name: input.name.trim(),
+    email,
+    passwordHash: hashPassword(input.password),
+    role: input.role,
+    createdAt: new Date().toISOString(),
+  };
+  row.staff.push(staff);
+  save(store, install, row);
+  return publicStaff(staff);
+}
+
+export function assertStaffRole(staff: HotelStaff, roles: HotelStaffRole[]) {
+  if (staff.role === "owner") return;
+  if (!roles.includes(staff.role)) throw new HttpError("This dashboard is not assigned to you.", 403, "forbidden");
+}
+
+export const DEFAULT_HOTEL_OWNER_PASSWORD = DEFAULT_OWNER_PASSWORD;

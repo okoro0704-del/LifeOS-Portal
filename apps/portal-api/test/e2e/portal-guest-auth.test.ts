@@ -219,7 +219,16 @@ test("guest hotel install works when TrustID is off and distributor is remote", 
     const publicTenant = await local.inject({ method: "GET", url: `/public/tenants/${subdomain}` });
     assert.equal(publicTenant.statusCode, 200, publicTenant.body);
     assert.equal(publicTenant.json().tenant.subdomain, subdomain);
-    assert.deepEqual(publicTenant.json().tenant.features, ["rooms", "reservations", "room_service", "front_desk"]);
+    assert.deepEqual(publicTenant.json().tenant.features, [
+      "rooms",
+      "reservations",
+      "restaurant",
+      "bar",
+      "room_service",
+      "self_checkin",
+      "front_desk",
+      "housekeeping",
+    ]);
     assert.equal(publicTenant.json().tenant.branding.name, "Guest Hotel");
     const rooms = publicTenant.json().rooms as Array<{ id: string }>;
     assert.ok(rooms.length >= 4);
@@ -236,6 +245,91 @@ test("guest hotel install works when TrustID is off and distributor is remote", 
     });
     assert.equal(booked.statusCode, 201, booked.body);
     assert.equal(booked.json().booking.nights, 2);
+
+    const food = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${subdomain}/orders`,
+      payload: {
+        item: "Jollof platter",
+        kind: "restaurant",
+        guestName: "Ada Guest",
+        guestEmail: "ada@guest.example",
+      },
+    });
+    assert.equal(food.statusCode, 201, food.body);
+    assert.equal(food.json().order.kind, "restaurant");
+
+    const drink = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${subdomain}/orders`,
+      payload: { item: "Mojito", kind: "bar", guestName: "Ada Guest", guestEmail: "ada@guest.example" },
+    });
+    assert.equal(drink.statusCode, 201, drink.body);
+
+    const checkedIn = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${subdomain}/stay/check-in`,
+      payload: { guestEmail: "ada@guest.example", guestName: "Ada Guest" },
+    });
+    assert.equal(checkedIn.statusCode, 200, checkedIn.body);
+    assert.equal(checkedIn.json().booking.status, "checked_in");
+
+    const ownerLogin = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${subdomain}/staff/login`,
+      payload: { email: "owner@guest-hotel.example", password: "hotel-owner" },
+    });
+    assert.equal(ownerLogin.statusCode, 200, ownerLogin.body);
+    assert.equal(ownerLogin.json().staff.role, "owner");
+    const ownerToken = ownerLogin.json().token as string;
+
+    const created = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${subdomain}/staff`,
+      headers: { "x-hotel-staff": ownerToken },
+      payload: {
+        name: "Mina Desk",
+        email: "front@guest-hotel.example",
+        password: "desk-pass",
+        role: "front_desk",
+      },
+    });
+    assert.equal(created.statusCode, 201, created.body);
+
+    const housekeeper = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${subdomain}/staff`,
+      headers: { "x-hotel-staff": ownerToken },
+      payload: {
+        name: "Ken Clean",
+        email: "clean@guest-hotel.example",
+        password: "clean-pass",
+        role: "housekeeping",
+      },
+    });
+    assert.equal(housekeeper.statusCode, 201, housekeeper.body);
+
+    const checkedOut = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${subdomain}/stay/check-out`,
+      payload: { guestEmail: "ada@guest.example" },
+    });
+    assert.equal(checkedOut.statusCode, 200, checkedOut.body);
+
+    const hkLogin = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${subdomain}/staff/login`,
+      payload: { email: "clean@guest-hotel.example", password: "clean-pass" },
+    });
+    const dirtyRoom = checkedOut.json().booking.roomId as string;
+    const cleaned = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${subdomain}/rooms/${dirtyRoom}/housekeep`,
+      headers: { "x-hotel-staff": hkLogin.json().token as string },
+      payload: { housekeep: "ready" },
+    });
+    assert.equal(cleaned.statusCode, 200, cleaned.body);
+    assert.equal(cleaned.json().room.housekeep, "ready");
   } finally {
     await local.close();
   }

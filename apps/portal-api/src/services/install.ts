@@ -304,7 +304,11 @@ export async function installDomainOs(opts: {
       error: undefined,
     })!;
     opts.store.updateBilling(billing.id, { status: "consumed", installId: ready.id });
-    seedHotelProperty(ready);
+    seedHotelProperty(ready, opts.store, {
+      email: opts.input.adminStaff.email,
+      name: opts.input.adminStaff.displayName,
+      password: opts.input.adminStaff.password,
+    });
     try {
       await provisionTenantHostname(subdomain);
     } catch {

@@ -74,7 +74,16 @@ export function tenantLaunchUrls(subdomain: string, customDomain?: string) {
   };
 }
 
-export const HOTEL_FEATURE_IDS = ["rooms", "reservations", "room_service", "front_desk"] as const;
+export const HOTEL_FEATURE_IDS = [
+  "rooms",
+  "reservations",
+  "restaurant",
+  "bar",
+  "room_service",
+  "self_checkin",
+  "front_desk",
+  "housekeeping",
+] as const;
 
 export function featuresForVertical(_osId: string, verticalId: string) {
   if (verticalId === "hotel") {

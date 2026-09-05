@@ -58,8 +58,8 @@ export function DeliverablesCard({
         <p className="eyebrow">your deliverables</p>
         <h2>Apps on {deliverables.hostname}</h2>
         <p className="lead">
-          Both apps live on {deliverables.hostname}. The guest app is this hotel only — rooms,
-          booking, and room service. The front desk is a PWA and asks to install on first visit.
+          Both apps live on {deliverables.hostname}. Guests book rooms, order food and drinks, and
+          self check-in. Staff sign in on the admin URL to their assigned board.
         </p>
       </header>
       <div className="cards">

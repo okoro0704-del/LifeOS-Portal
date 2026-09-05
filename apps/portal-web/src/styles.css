@@ -507,7 +507,12 @@ fieldset {
 }
 .hotel-nav {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.85rem;
+}
+.hotel-app .hint {
+  color: var(--los-muted);
+  font-size: 0.92rem;
 }
 .hotel-nav a {
   text-decoration: none;
