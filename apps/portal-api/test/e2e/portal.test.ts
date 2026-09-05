@@ -230,6 +230,8 @@ test("POST /installs seeds a hotel vertical after Finprove checkout", async () =
   ]);
   assert.equal(hotelApp.json().tenant.branding.primaryColor, "#0B3D2E");
   assert.equal(hotelApp.json().tenant.branding.name, "Grand Portal Hotel");
+  assert.equal(hotelApp.json().tenant.branding.testimonials.length, 3);
+  assert.ok(hotelApp.json().tenant.branding.testimonials[0].quote);
 
   const orgs = await app.inject({
     method: "GET",
@@ -264,6 +266,7 @@ test("restaurant vertical does not install hotel accommodation as the pack", asy
   const dining = await app.inject({ method: "GET", url: `/public/tenants/${body.subdomain}` });
   assert.equal(dining.statusCode, 200, dining.body);
   assert.equal(dining.json().tenant.mode, "restaurant");
+  assert.equal(dining.json().tenant.branding.testimonials.length, 3);
   assert.deepEqual(dining.json().tenant.features, ["menus", "orders", "tables", "kitchen"]);
   assert.ok((dining.json().menu as unknown[]).length >= 4);
   assert.ok((dining.json().tables as unknown[]).length >= 4);

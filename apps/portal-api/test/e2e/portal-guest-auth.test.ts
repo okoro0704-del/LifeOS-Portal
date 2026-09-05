@@ -465,10 +465,20 @@ test("restaurant and home-kitchen tenant apps serve menus, orders, and staff boa
       method: "PATCH",
       url: `/public/tenants/${restaurantSub}/site`,
       headers: { "x-hotel-staff": ownerToken },
-      payload: { writeup: "Harbor plates, open late.", phone: "+2348000000000", dashboardStyle: "greetings" },
+      payload: {
+        writeup: "Harbor plates, open late.",
+        phone: "+2348000000000",
+        dashboardStyle: "greetings",
+        testimonials: [
+          { name: "Ada K.", quote: "Harbor plates, then I booked the same table again.", visit: "Dinner for two" },
+          { name: "Musa O.", quote: "Cold chapman, no fuss. This is my Friday spot.", visit: "Friday night" },
+          { name: "Chioma B.", quote: "Walked in, ordered from the phone, food came fast.", visit: "Regular" },
+        ],
+      },
     });
     assert.equal(site.statusCode, 200, site.body);
     assert.equal(site.json().site.dashboardStyle, "greetings");
+    assert.equal(site.json().site.testimonials[0].name, "Ada K.");
 
     const item = await local.inject({
       method: "POST",
@@ -489,6 +499,8 @@ test("restaurant and home-kitchen tenant apps serve menus, orders, and staff boa
 
     const publicApp = await local.inject({ method: "GET", url: `/public/tenants/${restaurantSub}` });
     assert.equal(publicApp.json().tenant.branding.writeup, "Harbor plates, open late.");
+    assert.equal(publicApp.json().tenant.branding.testimonials[0].name, "Ada K.");
+    assert.equal(publicApp.json().tenant.branding.testimonials.length, 3);
     assert.equal(publicApp.json().tenant.branding.staffAppUrl, `https://${restaurantSub}.getlifeos.app/staff`);
     assert.ok((publicApp.json().menu as Array<{ name: string }>).some((row) => row.name === "Suya wrap"));
   } finally {

@@ -200,7 +200,12 @@ export function hotelAppPayload(install: PortalInstall, store?: PortalStore) {
       guestAppUrl: deliverables.guestApp.url,
       adminDashboardUrl: deliverables.adminDashboard.url,
       status: install.status,
-      branding: publicBranding(install),
+      branding: publicBranding(
+        install,
+        row.bookings.map((item) => ({ name: item.guestName, visit: `Stayed in ${item.roomName}` })).concat(
+          row.orders.map((item) => ({ name: item.guestName, visit: `Ordered ${item.item}` })),
+        ),
+      ),
       features: featuresForVertical(install.osId, install.verticalId),
       ownerHint: row.staff.find((staff) => staff.role === "owner")?.email ?? `owner@${row.subdomain}.getlifeos.app`,
       staffAppUrl: deliverables.staffApp.url,

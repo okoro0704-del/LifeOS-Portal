@@ -1,9 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { GreetingsHeader } from "../components/GreetingsHeader";
-import { TenantAppChrome } from "../components/TenantAppChrome";
+import { AdminSiteShell, type AdminNavId } from "../components/AdminSiteShell";
 import { portalApiBase } from "../lib/api";
 import { readImageDataUrl } from "../lib/images";
 
+type Quote = { name: string; quote: string; visit: string };
 type Branding = {
   name: string;
   primaryColor: string;
@@ -15,6 +15,7 @@ type Branding = {
   email?: string;
   address?: string;
   dashboardStyle?: "console" | "greetings";
+  testimonials?: Quote[];
   staffAppUrl?: string;
 };
 
@@ -24,7 +25,15 @@ type CatalogItem = { id?: string; name: string; kind: string; amountMinor: numbe
 type Room = { id?: string; name: string; beds: string; nightlyMinor: number; photoUrl?: string; housekeep?: string };
 type Booking = { id: string; roomName: string; guestName: string; checkIn: string; checkOut: string; status: string; totalMinor: number };
 type Order = { id: string; item: string; quantity: number; guestName: string; status: string; amountMinor: number; kind?: string };
-type AdminPanel = "today" | "brand" | "catalog" | "staff" | "domain" | "activity" | null;
+function padQuotes(rows?: Quote[]): Quote[] {
+  const next = (rows ?? []).slice(0, 3).map((row) => ({
+    name: row.name ?? "",
+    quote: row.quote ?? "",
+    visit: row.visit ?? "",
+  }));
+  while (next.length < 3) next.push({ name: "", quote: "", visit: "" });
+  return next;
+}
 
 async function readJson(res: Response) {
   const body = await res.json();
@@ -69,7 +78,7 @@ export function TenantOwnerAdmin({
     );
   }
 
-  const desk = (
+  return (
     <OwnerDesk
       subdomain={subdomain}
       branding={branding}
@@ -81,34 +90,6 @@ export function TenantOwnerAdmin({
         setSession(null);
       }}
     />
-  );
-
-  if (branding.dashboardStyle === "greetings") {
-    return (
-      <div className="tap greet-shell" style={{ ["--tap-accent" as string]: branding.primaryColor }}>
-        <GreetingsHeader
-          name={session.staff.name}
-          brand={branding.name}
-          role="admin"
-          onLogout={() => {
-            localStorage.removeItem(`owner.admin.${subdomain}`);
-            setSession(null);
-          }}
-        />
-        <div className="tap-body">{desk}</div>
-      </div>
-    );
-  }
-
-  return (
-    <TenantAppChrome
-      brand={branding.name}
-      accent={branding.primaryColor}
-      titles={{ "/admin": "Admin" }}
-      tabs={[{ to: "/admin", label: "Admin", icon: "staff" }]}
-    >
-      {desk}
-    </TenantAppChrome>
   );
 }
 
@@ -142,23 +123,35 @@ function OwnerLogin({
     }
   }
   return (
-    <div className="tap tap-boot" style={{ ["--tap-accent" as string]: branding.primaryColor }}>
-      <form className="form tap-form" onSubmit={(e) => void submit(e)}>
-        <p className="tap-hero">{branding.name} admin</p>
-        <p className="lead">Owners only. Staff use the separate login URL you hand them.</p>
-        {error ? <p className="banner-error">{error}</p> : null}
-        <label>
-          Owner email
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-        </label>
-        <label>
-          Password
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-        </label>
-        <button className="btn btn-primary" type="submit">
-          Open admin
-        </button>
-      </form>
+    <div className="admin-site" style={{ ["--tap-accent" as string]: branding.primaryColor }} data-testid="admin-login">
+      <header className="admin-site-top">
+        <div className="admin-site-brand">
+          {branding.logoUrl ? <img src={branding.logoUrl} alt="" /> : <span>{branding.name.slice(0, 1)}</span>}
+          <div>
+            <p>{branding.name}</p>
+            <strong>Admin</strong>
+          </div>
+        </div>
+      </header>
+      <main className="admin-site-body">
+        <form className="form tap-form admin-login-card" onSubmit={(e) => void submit(e)}>
+          <p className="eyebrow">Owner sign in</p>
+          <h2>{branding.name}</h2>
+          <p className="lead">This page is the house website for owners. Staff use the separate login URL you hand them.</p>
+          {error ? <p className="banner-error">{error}</p> : null}
+          <label>
+            Owner email
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          </label>
+          <label>
+            Password
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          </label>
+          <button className="btn btn-primary" type="submit">
+            Open admin
+          </button>
+        </form>
+      </main>
     </div>
   );
 }
@@ -179,7 +172,7 @@ function OwnerDesk({
   onLogout: () => void;
 }) {
   const headers = { "Content-Type": "application/json", "X-Hotel-Staff": session.token };
-  const [panel, setPanel] = useState<AdminPanel>(null);
+  const [panel, setPanel] = useState<AdminNavId>("today");
   const [heroTitle, setHeroTitle] = useState(branding.heroTitle ?? "");
   const [writeup, setWriteup] = useState(branding.writeup ?? "");
   const [phone, setPhone] = useState(branding.phone ?? "");
@@ -189,6 +182,7 @@ function OwnerDesk({
   const [style, setStyle] = useState(branding.dashboardStyle ?? "console");
   const [logoUrl, setLogoUrl] = useState(branding.logoUrl ?? "");
   const [backgroundUrl, setBackgroundUrl] = useState(branding.backgroundUrl ?? "");
+  const [quotes, setQuotes] = useState<Quote[]>(padQuotes(branding.testimonials));
   const [team, setTeam] = useState<Staff[]>([]);
   const [activity, setActivity] = useState<Activity[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -246,25 +240,36 @@ function OwnerDesk({
           dashboardStyle: style,
           logoUrl: logoUrl || undefined,
           backgroundUrl: backgroundUrl || undefined,
+          testimonials: quotes.filter((row) => row.name.trim() && row.quote.trim()).slice(0, 3),
         }),
       }),
     );
     setNotice("Branded app copy saved.");
-    setPanel(null);
+    setPanel("today");
   }
 
   return (
+    <AdminSiteShell
+      brand={branding.name}
+      logoUrl={branding.logoUrl}
+      accent={branding.primaryColor}
+      staff={session.staff}
+      nav={[
+        { id: "today", label: "Today" },
+        { id: "brand", label: "Brand" },
+        { id: "catalog", label: hotel ? "Rooms & menu" : "Menu" },
+        { id: "staff", label: "Staff" },
+        { id: "domain", label: "Domain" },
+        { id: "activity", label: "Activity" },
+      ]}
+      active={panel}
+      onNav={setPanel}
+      onLogout={onLogout}
+    >
     <div className="admin-desk" data-testid="owner-admin">
-      {branding.dashboardStyle === "greetings" ? null : (
-        <p className="lead">
-          {session.staff.name} · owner
-          <button className="btn btn-ghost" type="button" onClick={onLogout}>
-            Sign out
-          </button>
-        </p>
-      )}
       {notice ? <p className={notice.includes("saved") || notice.includes("created") || notice.includes("Domain") ? "banner-ok" : "banner-error"}>{notice}</p> : null}
 
+      {panel === "today" ? (
       <section className="today-hub" data-testid="admin-today">
         <p className="eyebrow">Today</p>
         <h3>Daily source of truth</h3>
@@ -326,35 +331,7 @@ function OwnerDesk({
           ))}
         </ul>
       </section>
-
-      {panel ? (
-        <button className="btn btn-ghost" type="button" onClick={() => setPanel(null)}>
-          Back to icons
-        </button>
-      ) : (
-        <div className="admin-tiles" data-testid="admin-tiles">
-          <button type="button" onClick={() => setPanel("brand")}>
-            <span>Aa</span>
-            Brand
-          </button>
-          <button type="button" onClick={() => setPanel("catalog")}>
-            <span>+</span>
-            {hotel ? "Rooms & menu" : "Food & drinks"}
-          </button>
-          <button type="button" onClick={() => setPanel("staff")}>
-            <span>◉</span>
-            Staff
-          </button>
-          <button type="button" onClick={() => setPanel("domain")}>
-            <span>◎</span>
-            Domain
-          </button>
-          <button type="button" onClick={() => setPanel("activity")}>
-            <span>☰</span>
-            Activity
-          </button>
-        </div>
-      )}
+      ) : null}
 
       {panel === "brand" ? (
       <form className="form tap-form" onSubmit={(e) => void saveSite(e)}>
@@ -367,6 +344,43 @@ function OwnerDesk({
           About this place
           <textarea value={writeup} onChange={(e) => setWriteup(e.target.value)} rows={4} />
         </label>
+        <p className="eyebrow">Patrons on the home page</p>
+        {quotes.map((row, index) => (
+          <fieldset className="quote-fields" key={index}>
+            <legend>Testimonial {index + 1}</legend>
+            <label>
+              Name
+              <input
+                value={row.name}
+                onChange={(e) =>
+                  setQuotes((current) => current.map((item, i) => (i === index ? { ...item, name: e.target.value } : item)))
+                }
+                placeholder="Ada K."
+              />
+            </label>
+            <label>
+              Quote
+              <textarea
+                value={row.quote}
+                rows={3}
+                onChange={(e) =>
+                  setQuotes((current) => current.map((item, i) => (i === index ? { ...item, quote: e.target.value } : item)))
+                }
+                placeholder="I keep coming back because the kitchen tastes like a real home pot."
+              />
+            </label>
+            <label>
+              Visit
+              <input
+                value={row.visit}
+                onChange={(e) =>
+                  setQuotes((current) => current.map((item, i) => (i === index ? { ...item, visit: e.target.value } : item)))
+                }
+                placeholder="Dinner for two"
+              />
+            </label>
+          </fieldset>
+        ))}
         <label>
           Phone
           <input value={phone} onChange={(e) => setPhone(e.target.value)} />
@@ -565,6 +579,7 @@ function OwnerDesk({
       </>
       ) : null}
     </div>
+    </AdminSiteShell>
   );
 }
 

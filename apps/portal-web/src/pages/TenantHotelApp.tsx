@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { BusinessHome } from "../components/BusinessHome";
 import { TenantAppChrome } from "../components/TenantAppChrome";
 import { portalApiBase } from "../lib/api";
 import { TenantOwnerAdmin } from "./TenantOwnerAdmin";
@@ -46,6 +47,7 @@ type HotelPublic = {
       email?: string;
       address?: string;
       dashboardStyle?: "console" | "greetings";
+      testimonials?: Array<{ name: string; quote: string; visit: string }>;
       staffAppUrl?: string;
     };
     ownerHint?: string;
@@ -233,82 +235,53 @@ function HotelHome({ data }: { data: HotelPublic }) {
   const food = data.menu.filter((item) => item.kind === "restaurant").slice(0, 2);
   const drinks = data.menu.filter((item) => item.kind === "bar").slice(0, 2);
   return (
-    <main className="site-home" data-testid="hotel-home">
-      <section
-        className="site-hero"
-        style={brand.backgroundUrl ? { backgroundImage: `url(${brand.backgroundUrl})` } : undefined}
-      >
-        <div className="site-hero-copy">
-          {brand.logoUrl ? <img className="guest-logo" src={brand.logoUrl} alt={brand.name} /> : null}
-          <p className="eyebrow">{data.tenant.hostname}</p>
-          <h2>{brand.heroTitle || `Welcome to ${brand.name}`}</h2>
-          <p className="lead">
-            {brand.writeup ||
-              `${brand.name} is a stay for people who want a real room, a plated dinner, and a quiet night — booked from this phone, not a brochure.`}
-          </p>
-          <div className="site-cta">
-            <Link className="btn btn-primary" to="/rooms">
-              Book a room
-            </Link>
-            <Link className="btn btn-ghost" to="/rooms">
-              View rooms
-            </Link>
-          </div>
-        </div>
-      </section>
-      <section className="site-strip">
-        <article>
-          <p className="eyebrow">Stay</p>
-          <h3>Rooms</h3>
-          <p className="muted">{data.rooms.length} rooms on the board. Check dates, then hold one.</p>
-          <Link to="/rooms">Open rooms</Link>
-        </article>
-        <article>
-          <p className="eyebrow">Kitchen</p>
-          <h3>Food</h3>
-          <p className="muted">{food[0]?.name ?? "Plates"} and more from the restaurant.</p>
-          <Link to="/food">See the menu</Link>
-        </article>
-        <article>
-          <p className="eyebrow">Bar</p>
-          <h3>Drinks</h3>
-          <p className="muted">{drinks[0]?.name ?? "House pours"} after dinner or on the terrace.</p>
-          <Link to="/drinks">Open the bar</Link>
-        </article>
-        <article>
-          <p className="eyebrow">You</p>
-          <h3>Activities</h3>
-          <p className="muted">Bookings, kitchen tickets, and self check-in.</p>
-          <Link to="/activities">My activities</Link>
-        </article>
-      </section>
-      <section>
-        <p className="eyebrow">Tonight</p>
-        <h3>Rooms you can take</h3>
-        <div className="cards">
-          {readyRooms.map((room) => (
-            <article className="card tap-card" key={room.id}>
-              {room.photoUrl ? <img className="catalog-photo" src={room.photoUrl} alt={room.name} /> : null}
-              <h2>{room.name}</h2>
-              <p className="muted">
-                {room.beds} · {money(room.nightlyMinor)} / night
-              </p>
-              <Link className="btn btn-primary" to="/rooms">
-                Book this room
-              </Link>
-            </article>
-          ))}
-        </div>
-      </section>
-      {brand.phone || brand.email || brand.address ? (
-        <section className="site-contact">
-          <p className="eyebrow">Talk to the house</p>
-          {brand.phone ? <p>{brand.phone}</p> : null}
-          {brand.email ? <p>{brand.email}</p> : null}
-          {brand.address ? <p>{brand.address}</p> : null}
-        </section>
-      ) : null}
-    </main>
+    <div data-testid="hotel-home">
+    <BusinessHome
+      name={brand.name}
+      hostname={data.tenant.hostname}
+      accent={brand.primaryColor}
+      logoUrl={brand.logoUrl}
+      backgroundUrl={brand.backgroundUrl}
+      heroTitle={brand.heroTitle}
+      writeup={brand.writeup}
+      quotesEyebrow="From guests who stayed here"
+      phone={brand.phone}
+      email={brand.email}
+      address={brand.address}
+      story={`${brand.name} is a stay for people who want a real room, a plated dinner, and a quiet night — booked from this phone, not a brochure.`}
+      primaryCta={{ to: "/rooms", label: "Book a room" }}
+      secondaryCta={{ to: "/rooms", label: "View rooms" }}
+      testimonials={brand.testimonials ?? []}
+      links={[
+        { to: "/rooms", eyebrow: "Stay", title: "Rooms", copy: `${data.rooms.length} rooms on the board. Check dates, then hold one.` },
+        { to: "/food", eyebrow: "Kitchen", title: "Food", copy: `${food[0]?.name ?? "Plates"} and more from the restaurant.` },
+        { to: "/drinks", eyebrow: "Bar", title: "Drinks", copy: `${drinks[0]?.name ?? "House pours"} after dinner or on the terrace.` },
+        { to: "/activities", eyebrow: "You", title: "Activities", copy: "Bookings, kitchen tickets, and self check-in." },
+      ]}
+      featured={
+        readyRooms.length ? (
+          <section>
+            <p className="eyebrow">Tonight</p>
+            <h3>Rooms you can take</h3>
+            <div className="cards">
+              {readyRooms.map((room) => (
+                <article className="card tap-card" key={room.id}>
+                  {room.photoUrl ? <img className="catalog-photo" src={room.photoUrl} alt={room.name} /> : null}
+                  <h2>{room.name}</h2>
+                  <p className="muted">
+                    {room.beds} · {money(room.nightlyMinor)} / night
+                  </p>
+                  <Link className="btn btn-primary" to="/rooms">
+                    Book this room
+                  </Link>
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null
+      }
+    />
+    </div>
   );
 }
 

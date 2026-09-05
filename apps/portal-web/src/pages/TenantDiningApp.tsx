@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
-import { GuestBrand } from "../components/GuestBrand";
+import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom";
+import { BusinessHome } from "../components/BusinessHome";
 import { TenantAppChrome } from "../components/TenantAppChrome";
 import { portalApiBase } from "../lib/api";
 import { TenantOwnerAdmin } from "./TenantOwnerAdmin";
@@ -36,6 +36,7 @@ type DiningPublic = {
       email?: string;
       address?: string;
       dashboardStyle?: "console" | "greetings";
+      testimonials?: Array<{ name: string; quote: string; visit: string }>;
       staffAppUrl?: string;
     };
     ownerHint?: string;
@@ -64,6 +65,7 @@ function normalizeDining(body: DiningPublic): DiningPublic {
         email: body.tenant?.branding?.email,
         address: body.tenant?.branding?.address,
         dashboardStyle: body.tenant?.branding?.dashboardStyle,
+        testimonials: body.tenant?.branding?.testimonials,
         staffAppUrl: body.tenant?.branding?.staffAppUrl,
       },
       ownerHint: body.tenant?.ownerHint,
@@ -113,7 +115,7 @@ export function TenantDiningApp({ subdomain, basename }: { subdomain: string; ba
 
   const kitchen = data.tenant.mode === "kitchen";
   const titles = {
-    "/": kitchen ? "Home kitchen" : "Dining room",
+    "/": "Home",
     "/menu": "Menu",
     "/drinks": "Drinks",
     "/orders": "My orders",
@@ -161,7 +163,7 @@ export function TenantDiningApp({ subdomain, basename }: { subdomain: string; ba
                 ]}
               >
                 <Routes>
-                  <Route path="/" element={<DiningHome data={data} subdomain={subdomain} onDone={() => void refresh()} />} />
+                  <Route path="/" element={<DiningHome data={data} />} />
                   <Route path="/menu" element={<DiningMenu data={data} subdomain={subdomain} kind="food" />} />
                   <Route path="/drinks" element={<DiningMenu data={data} subdomain={subdomain} kind="drink" />} />
                   <Route path="/orders" element={<DiningOrders data={data} subdomain={subdomain} />} />
@@ -241,29 +243,61 @@ function GuestFields({
   );
 }
 
-function DiningHome({
-  data,
-  subdomain,
-  onDone,
-}: {
-  data: DiningPublic;
-  subdomain: string;
-  onDone: () => void;
-}) {
-  const guest = useGuest(subdomain);
-  const featured = data.menu.slice(0, 4);
+function DiningHome({ data }: { data: DiningPublic }) {
+  const brand = data.tenant.branding;
+  const kitchen = data.tenant.mode === "kitchen";
+  const food = data.menu.filter((item) => item.kind === "food").slice(0, 3);
+  const drinks = data.menu.filter((item) => item.kind === "drink").slice(0, 2);
   return (
-    <div className="tap-home">
-      <GuestBrand
-        brand={data.tenant.branding}
-        fallback={data.tenant.mode === "kitchen" ? "Home kitchen, plated for the street." : "Sit, scan the board, eat."}
+    <div data-testid="dining-home">
+      <BusinessHome
+        name={brand.name}
+        hostname={data.tenant.hostname}
+        accent={brand.primaryColor}
+        logoUrl={brand.logoUrl}
+        backgroundUrl={brand.backgroundUrl}
+        heroTitle={brand.heroTitle}
+        writeup={brand.writeup}
+        quotesEyebrow={kitchen ? "From people who order here" : "From people who eat here"}
+        phone={brand.phone}
+        email={brand.email}
+        address={brand.address}
+        story={
+          kitchen
+            ? `${brand.name} is a home kitchen that plates for the street — real pots, packed to travel, ordered from this phone.`
+            : `${brand.name} is a dining room for people who want a table, a plated dinner, and a drink — ordered here, not from a flyer.`
+        }
+        primaryCta={{ to: "/menu", label: kitchen ? "Order food" : "See the menu" }}
+        secondaryCta={{ to: "/drinks", label: "Open drinks" }}
+        testimonials={brand.testimonials ?? []}
+        links={[
+          { to: "/menu", eyebrow: kitchen ? "Kitchen" : "Dining", title: "Menu", copy: `${food[0]?.name ?? "Plates"} and more from the house.` },
+          { to: "/drinks", eyebrow: "Bar", title: "Drinks", copy: `${drinks[0]?.name ?? "House pours"} with the meal or after.` },
+          { to: "/orders", eyebrow: "You", title: "Orders", copy: "Track tickets you already sent to the kitchen." },
+        ]}
+        featured={
+          food.length ? (
+            <section>
+              <p className="eyebrow">On the board</p>
+              <h3>Plates people order</h3>
+              <div className="cards">
+                {food.map((item) => (
+                  <article className="card tap-card" key={item.id}>
+                    {item.photoUrl ? <img className="catalog-photo" src={item.photoUrl} alt={item.name} /> : null}
+                    <h2>{item.name}</h2>
+                    <p className="muted">
+                      {item.description} · {money(item.amountMinor)}
+                    </p>
+                    <Link className="btn btn-primary" to="/menu">
+                      Order from the menu
+                    </Link>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null
+        }
       />
-      <GuestFields guest={guest} kitchen={data.tenant.mode === "kitchen"} tables={data.tables} />
-      <section className="cards">
-        {featured.map((item) => (
-          <MenuCard key={item.id} item={item} subdomain={subdomain} guest={guest} onDone={onDone} />
-        ))}
-      </section>
     </div>
   );
 }

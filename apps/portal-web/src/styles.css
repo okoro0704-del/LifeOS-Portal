@@ -368,12 +368,15 @@ a {
   font-weight: 600;
   font-size: 0.9rem;
 }
-.form input {
+.form input,
+.form textarea,
+.form select {
   font: inherit;
   padding: 0.7rem 0.8rem;
   border-radius: 12px;
   border: 1px solid var(--los-border-strong);
   background: var(--los-surface);
+  color: inherit;
 }
 .hint {
   font-weight: 400;
@@ -758,6 +761,160 @@ fieldset {
   gap: 0.7rem;
   margin-top: 1rem;
 }
+.site-quotes h3 {
+  margin: 0.2rem 0 0.85rem;
+}
+.quote-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+.quote-grid blockquote {
+  margin: 0;
+  padding: 1rem;
+  border-radius: 18px;
+  background: var(--los-surface);
+  border: 1px solid var(--los-border);
+}
+.quote-grid p {
+  margin: 0;
+  line-height: 1.45;
+}
+.quote-grid footer {
+  display: grid;
+  gap: 0.15rem;
+  margin-top: 0.85rem;
+}
+.quote-grid footer span {
+  color: var(--los-muted);
+  font-size: 0.8rem;
+}
+.admin-site {
+  min-height: 100dvh;
+  background:
+    radial-gradient(900px 320px at 0% 0%, color-mix(in srgb, var(--tap-accent, var(--los-accent)) 12%, transparent), transparent 60%),
+    var(--los-bg);
+  color: var(--los-text);
+}
+.admin-site-top {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1.4rem;
+  background: color-mix(in srgb, var(--los-surface) 92%, transparent);
+  border-bottom: 1px solid var(--los-border);
+  backdrop-filter: blur(16px);
+}
+.admin-site-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+}
+.admin-site-brand img,
+.admin-site-brand > span {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  object-fit: cover;
+}
+.admin-site-brand > span {
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--tap-accent, var(--los-accent)) 16%, #fff);
+  color: var(--tap-accent, var(--los-accent));
+  font-weight: 800;
+}
+.admin-site-brand p {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--los-muted);
+}
+.admin-site-brand strong {
+  display: block;
+}
+.admin-site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+}
+.admin-site-nav button {
+  border: 0;
+  background: transparent;
+  color: var(--los-muted);
+  font: inherit;
+  font-weight: 700;
+  padding: 0.45rem 0.7rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.admin-site-nav button.active {
+  background: color-mix(in srgb, var(--tap-accent, var(--los-accent)) 14%, #fff);
+  color: var(--los-text);
+}
+.admin-profile {
+  position: relative;
+}
+.admin-profile-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  border: 1px solid var(--los-border);
+  background: var(--los-surface);
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem 0.25rem 0.25rem;
+  font: inherit;
+  cursor: pointer;
+}
+.admin-profile-btn i {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--tap-accent, var(--los-accent));
+  color: #fff;
+  font-style: normal;
+  font-weight: 800;
+}
+.admin-profile-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.5rem);
+  width: 240px;
+  display: grid;
+  gap: 0.25rem;
+  padding: 1rem;
+  background: var(--los-surface);
+  border: 1px solid var(--los-border);
+  border-radius: 16px;
+  box-shadow: var(--los-shadow);
+}
+.admin-profile-menu span {
+  color: var(--los-muted);
+  font-size: 0.85rem;
+}
+.admin-site-body {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1.5rem 1.2rem 3rem;
+}
+.admin-login-card {
+  margin: 2rem auto;
+  padding: 1.5rem;
+  background: var(--los-surface);
+  border-radius: 20px;
+  box-shadow: var(--los-shadow);
+}
+.quote-fields {
+  display: grid;
+  gap: 0.8rem;
+  margin: 0 0 1rem;
+}
 .site-strip {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -781,7 +938,7 @@ fieldset {
   padding: 1rem;
   border-radius: 20px;
   border: 1px solid var(--los-border);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--los-surface);
   margin-bottom: 1rem;
 }
 .today-stats {
@@ -888,5 +1045,12 @@ fieldset {
   }
   .module-grid {
     grid-template-columns: 1fr;
+  }
+  .quote-grid,
+  .site-strip {
+    grid-template-columns: 1fr;
+  }
+  .admin-site-top {
+    flex-wrap: wrap;
   }
 }

@@ -302,6 +302,10 @@ export async function registerTenantAppRoutes(
           email: z.string().email().optional().or(z.literal("")),
           address: z.string().max(200).optional(),
           dashboardStyle: z.enum(["console", "greetings"]).optional(),
+          testimonials: z
+            .array(z.object({ name: z.string().min(1).max(80), quote: z.string().min(1).max(280), visit: z.string().max(80) }))
+            .max(3)
+            .optional(),
         })
         .parse(req.body);
       return { site: updateTenantSite(row, body, store) };
