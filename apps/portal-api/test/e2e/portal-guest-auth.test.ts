@@ -230,8 +230,9 @@ test("guest hotel install works when TrustID is off and distributor is remote", 
       "housekeeping",
     ]);
     assert.equal(publicTenant.json().tenant.branding.name, "Guest Hotel");
-    const rooms = publicTenant.json().rooms as Array<{ id: string }>;
+    const rooms = publicTenant.json().rooms as Array<{ id: string; details?: string; services?: string[] }>;
     assert.ok(rooms.length >= 4);
+    assert.ok(rooms.some((row) => Boolean(row.details && row.services?.length)));
     const booked = await local.inject({
       method: "POST",
       url: `/public/tenants/${subdomain}/bookings`,
@@ -317,11 +318,42 @@ test("guest hotel install works when TrustID is off and distributor is remote", 
       method: "POST",
       url: `/public/tenants/${subdomain}/catalog/rooms`,
       headers: { "x-hotel-staff": ownerToken },
-      payload: { name: "Penthouse", beds: "1 king", nightlyMinor: 45000 },
+      payload: {
+        name: "Penthouse",
+        beds: "1 king",
+        nightlyMinor: 45000,
+        details: "Top-floor king with a city view and a soaking tub.",
+        services: ["Wi-Fi", "Soaking tub", "City view"],
+        photoUrls: ["https://images.getlifeos.app/penthouse-1.jpg", "https://images.getlifeos.app/penthouse-2.jpg"],
+      },
     });
     assert.equal(penthouse.statusCode, 201, penthouse.body);
+    assert.equal(penthouse.json().room.details, "Top-floor king with a city view and a soaking tub.");
+    assert.deepEqual(penthouse.json().room.services, ["Wi-Fi", "Soaking tub", "City view"]);
+    assert.equal(penthouse.json().room.photoUrls.length, 2);
     const afterRoom = await local.inject({ method: "GET", url: `/public/tenants/${subdomain}` });
-    assert.ok((afterRoom.json().rooms as Array<{ name: string }>).some((row) => row.name === "Penthouse"));
+    const listed = (afterRoom.json().rooms as Array<{ name: string; details?: string; services?: string[] }>).find(
+      (row) => row.name === "Penthouse",
+    );
+    assert.ok(listed);
+    assert.equal(listed?.details?.includes("soaking tub"), true);
+    assert.ok(listed?.services?.includes("City view"));
+
+    const edited = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${subdomain}/catalog/rooms`,
+      headers: { "x-hotel-staff": ownerToken },
+      payload: {
+        id: penthouse.json().room.id,
+        name: "Penthouse",
+        beds: "1 king",
+        nightlyMinor: 45000,
+        details: "Updated penthouse copy.",
+        services: ["Wi-Fi", "Butler"],
+      },
+    });
+    assert.equal(edited.statusCode, 200, edited.body);
+    assert.equal(edited.json().room.details, "Updated penthouse copy.");
 
     const ownerOps = await local.inject({
       method: "GET",

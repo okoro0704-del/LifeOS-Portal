@@ -19,6 +19,9 @@ export type HotelRoom = {
   nightlyMinor: number;
   housekeep: HotelHousekeep;
   photoUrl?: string;
+  photoUrls?: string[];
+  details?: string;
+  services?: string[];
 };
 
 export type HotelBooking = {
@@ -121,12 +124,54 @@ const properties = new Map<string, HotelProperty>();
 const DEFAULT_OWNER_PASSWORD = "hotel-owner";
 
 const SEED_ROOMS: Array<Omit<HotelRoom, "id">> = [
-  { name: "Deluxe King", beds: "1 king", nightlyMinor: 18000, housekeep: "ready" },
-  { name: "Twin Garden", beds: "2 twins", nightlyMinor: 14000, housekeep: "ready" },
-  { name: "Junior Suite", beds: "1 king + sofa", nightlyMinor: 26000, housekeep: "ready" },
-  { name: "Standard Queen", beds: "1 queen", nightlyMinor: 11000, housekeep: "ready" },
-  { name: "Family Twin", beds: "2 queens", nightlyMinor: 20000, housekeep: "ready" },
-  { name: "Executive King", beds: "1 king", nightlyMinor: 22000, housekeep: "ready" },
+  {
+    name: "Deluxe King",
+    beds: "1 king",
+    nightlyMinor: 18000,
+    housekeep: "ready",
+    details: "A quiet king room with a writing desk, blackout drapes, and city light at night.",
+    services: ["Wi-Fi", "King bed", "Room service", "Ensuite shower", "Work desk"],
+  },
+  {
+    name: "Twin Garden",
+    beds: "2 twins",
+    nightlyMinor: 14000,
+    housekeep: "ready",
+    details: "Two twin beds facing the garden. Good for friends or a short work trip.",
+    services: ["Wi-Fi", "Garden view", "Twin beds", "Daily housekeeping"],
+  },
+  {
+    name: "Junior Suite",
+    beds: "1 king + sofa",
+    nightlyMinor: 26000,
+    housekeep: "ready",
+    details: "A sitting area and a king bed. Space to take a call without sitting on the bed.",
+    services: ["Wi-Fi", "Sitting area", "Room service", "Mini fridge", "Bathtub"],
+  },
+  {
+    name: "Standard Queen",
+    beds: "1 queen",
+    nightlyMinor: 11000,
+    housekeep: "ready",
+    details: "A compact queen room for one or two. Fast to check in, easy to sleep.",
+    services: ["Wi-Fi", "Queen bed", "Ensuite", "Air conditioning"],
+  },
+  {
+    name: "Family Twin",
+    beds: "2 queens",
+    nightlyMinor: 20000,
+    housekeep: "ready",
+    details: "Two queen beds for a family stay. Extra towels and a cot on request.",
+    services: ["Wi-Fi", "Two queen beds", "Family space", "Room service", "Cot on request"],
+  },
+  {
+    name: "Executive King",
+    beds: "1 king",
+    nightlyMinor: 22000,
+    housekeep: "ready",
+    details: "A higher floor king room with a larger desk and a rain shower.",
+    services: ["Wi-Fi", "King bed", "Rain shower", "Work desk", "Late checkout on request"],
+  },
 ];
 
 const SEED_MENU: Array<Omit<HotelMenuItem, "id">> = [
@@ -691,9 +736,44 @@ export function createHotelStaff(
   return publicStaff(staff);
 }
 
+function applyRoomCatalog(
+  room: HotelRoom,
+  input: {
+    photoUrl?: string;
+    photoUrls?: string[];
+    details?: string;
+    services?: string[];
+  },
+) {
+  const photos = [...(input.photoUrls ?? [])];
+  if (input.photoUrl && !photos.includes(input.photoUrl)) photos.unshift(input.photoUrl);
+  const cleaned = photos.map((url) => url.trim()).filter(Boolean).slice(0, 6);
+  if (cleaned.length) {
+    room.photoUrls = cleaned;
+    room.photoUrl = cleaned[0];
+  } else if (input.photoUrl === "" || input.photoUrls) {
+    delete room.photoUrl;
+    delete room.photoUrls;
+  }
+  if (input.details !== undefined) room.details = input.details.trim();
+  if (input.services !== undefined) {
+    room.services = input.services.map((item) => item.trim()).filter(Boolean).slice(0, 16);
+  }
+}
+
 export function upsertHotelRoom(
   install: PortalInstall,
-  input: { id?: string; name: string; beds: string; nightlyMinor: number; photoUrl?: string; housekeep?: HotelHousekeep },
+  input: {
+    id?: string;
+    name: string;
+    beds: string;
+    nightlyMinor: number;
+    photoUrl?: string;
+    photoUrls?: string[];
+    details?: string;
+    services?: string[];
+    housekeep?: HotelHousekeep;
+  },
   actor: HotelStaff,
   store?: PortalStore,
 ) {
@@ -704,7 +784,7 @@ export function upsertHotelRoom(
     room.name = input.name.trim();
     room.beds = input.beds.trim();
     room.nightlyMinor = input.nightlyMinor;
-    if (input.photoUrl !== undefined) room.photoUrl = input.photoUrl;
+    applyRoomCatalog(room, input);
     if (input.housekeep) room.housekeep = input.housekeep;
     logHotelActivity(row, actor, "room.update", room.name);
     save(store, install, row);
@@ -716,8 +796,8 @@ export function upsertHotelRoom(
     beds: input.beds.trim(),
     nightlyMinor: input.nightlyMinor,
     housekeep: input.housekeep ?? "ready",
-    photoUrl: input.photoUrl,
   };
+  applyRoomCatalog(room, input);
   row.rooms.unshift(room);
   logHotelActivity(row, actor, "room.create", room.name);
   save(store, install, row);

@@ -22,7 +22,17 @@ type Branding = {
 type Staff = { id: string; name: string; email: string; role: string };
 type Activity = { id: string; at: string; staffName: string; role: string; action: string; detail: string };
 type CatalogItem = { id?: string; name: string; kind: string; amountMinor: number; description?: string; photoUrl?: string };
-type Room = { id?: string; name: string; beds: string; nightlyMinor: number; photoUrl?: string; housekeep?: string };
+type Room = {
+  id?: string;
+  name: string;
+  beds: string;
+  nightlyMinor: number;
+  photoUrl?: string;
+  photoUrls?: string[];
+  details?: string;
+  services?: string[];
+  housekeep?: string;
+};
 type Booking = { id: string; roomName: string; guestName: string; checkIn: string; checkOut: string; status: string; totalMinor: number };
 type Supply = {
   id: string;
@@ -692,17 +702,51 @@ function CatalogEditor({
   menu: CatalogItem[];
   onSaved: () => void;
 }) {
+  const [editingId, setEditingId] = useState<string | undefined>();
   const [name, setName] = useState("");
   const [kind, setKind] = useState(hotel ? "room" : "food");
   const [amount, setAmount] = useState("25");
   const [beds, setBeds] = useState("1 king");
-  const [photoUrl, setPhotoUrl] = useState("");
+  const [details, setDetails] = useState("");
+  const [services, setServices] = useState("");
+  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function priceMinor() {
     const value = Number(String(amount).replace(/[^0-9.]/g, ""));
     return Math.max(1, Math.round(value * 100));
+  }
+
+  function resetForm() {
+    setEditingId(undefined);
+    setName("");
+    setAmount("25");
+    setBeds("1 king");
+    setDetails("");
+    setServices("");
+    setPhotoUrls([]);
+  }
+
+  function editRoom(room: Room) {
+    setKind("room");
+    setEditingId(room.id);
+    setName(room.name);
+    setBeds(room.beds);
+    setAmount(String(((room.nightlyMinor ?? 0) / 100).toFixed(0)));
+    setDetails(room.details ?? "");
+    setServices((room.services ?? []).join(", "));
+    setPhotoUrls((room.photoUrls ?? []).filter(Boolean).length ? room.photoUrls ?? [] : room.photoUrl ? [room.photoUrl] : []);
+    setNotice(`Editing ${room.name}. Add photos, details, and services, then save.`);
+  }
+
+  async function addPhotos(files: FileList | null) {
+    if (!files?.length) return;
+    const next: string[] = [];
+    for (const file of Array.from(files).slice(0, 6)) {
+      next.push(await readImageDataUrl(file, 900));
+    }
+    setPhotoUrls((current) => [...current, ...next].slice(0, 6));
   }
 
   async function addItem(event: FormEvent) {
@@ -718,13 +762,12 @@ function CatalogEditor({
             kind,
             amountMinor: priceMinor(),
             description: name,
-            photoUrl: photoUrl || undefined,
+            photoUrl: photoUrls[0] || undefined,
           }),
         }),
       );
       setNotice(`${name} is on the menu.`);
-      setName("");
-      setPhotoUrl("");
+      resetForm();
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not add to catalog");
@@ -740,16 +783,22 @@ function CatalogEditor({
           method: "POST",
           headers,
           body: JSON.stringify({
+            id: editingId,
             name,
             beds,
             nightlyMinor: priceMinor(),
-            photoUrl: photoUrl || undefined,
+            details,
+            services: services
+              .split(",")
+              .map((item) => item.trim())
+              .filter(Boolean),
+            photoUrls,
+            photoUrl: photoUrls[0] || undefined,
           }),
         }),
       );
-      setNotice(`${name} is on the room board.`);
-      setName("");
-      setPhotoUrl("");
+      setNotice(editingId ? `${name} is updated.` : `${name} is on the room board.`);
+      resetForm();
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not add room");
@@ -767,7 +816,13 @@ function CatalogEditor({
       </label>
       <label>
         Type
-        <select value={kind} onChange={(e) => setKind(e.target.value)}>
+        <select
+          value={kind}
+          onChange={(e) => {
+            setKind(e.target.value);
+            if (e.target.value !== "room") setEditingId(undefined);
+          }}
+        >
           {hotel ? (
             <>
               <option value="room">Room</option>
@@ -784,29 +839,65 @@ function CatalogEditor({
         </select>
       </label>
       {hotel && kind === "room" ? (
-        <label>
-          Beds
-          <input value={beds} onChange={(e) => setBeds(e.target.value)} />
-        </label>
+        <>
+          <label>
+            Beds
+            <input value={beds} onChange={(e) => setBeds(e.target.value)} />
+          </label>
+          <label>
+            Room details
+            <textarea
+              value={details}
+              rows={4}
+              onChange={(e) => setDetails(e.target.value)}
+              placeholder="What the guest should know: view, bed, bathroom, quiet hours."
+            />
+          </label>
+          <label>
+            Services
+            <input
+              value={services}
+              onChange={(e) => setServices(e.target.value)}
+              placeholder="Wi-Fi, Room service, Balcony, Ensuite"
+            />
+          </label>
+        </>
       ) : null}
       <label>
         Price
         <input value={amount} onChange={(e) => setAmount(e.target.value)} />
       </label>
       <label>
-        Photo
+        {hotel && kind === "room" ? "Photos" : "Photo"}
         <input
           type="file"
           accept="image/*"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) void readImageDataUrl(file).then(setPhotoUrl);
-          }}
+          multiple={hotel && kind === "room"}
+          onChange={(e) => void addPhotos(e.target.files)}
         />
       </label>
+      {photoUrls.length ? (
+        <div className="room-thumbs">
+          {photoUrls.map((url, index) => (
+            <button
+              key={url + index}
+              type="button"
+              onClick={() => setPhotoUrls((current) => current.filter((_, i) => i !== index))}
+              title="Remove photo"
+            >
+              <img src={url} alt="" />
+            </button>
+          ))}
+        </div>
+      ) : null}
       <button className="btn btn-primary" type="submit">
-        Add to catalog
+        {editingId ? "Save room" : "Add to catalog"}
       </button>
+      {editingId ? (
+        <button className="btn btn-ghost" type="button" onClick={resetForm}>
+          Cancel edit
+        </button>
+      ) : null}
       <h4>On the board</h4>
       <ul className="list" data-testid="catalog-board">
         {hotel
@@ -815,7 +906,13 @@ function CatalogEditor({
                 <strong>{room.name}</strong>
                 <span className="muted">
                   Room · {room.beds} · ${((room.nightlyMinor ?? 0) / 100).toFixed(0)}
+                  {room.services?.length ? ` · ${room.services.length} services` : ""}
                 </span>
+                {room.id ? (
+                  <button className="btn btn-ghost" type="button" onClick={() => editRoom(room)}>
+                    Edit details
+                  </button>
+                ) : null}
               </li>
             ))
           : null}

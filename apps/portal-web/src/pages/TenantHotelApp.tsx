@@ -1,14 +1,31 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { BusinessHome } from "../components/BusinessHome";
 import { emptyFulfillment, fulfillmentPayload, OrderFulfillment, type FulfillmentChoice } from "../components/OrderFulfillment";
 import { TenantAppChrome } from "../components/TenantAppChrome";
 import { portalApiBase } from "../lib/api";
+import { addItemToCart, addRoomToCart, cartTotalMinor, clearGuestCart, removeCartLine, useGuestCart } from "../lib/guest-cart";
 import { TenantOwnerAdmin } from "./TenantOwnerAdmin";
 import { TenantStaffDesk } from "./TenantStaffDesk";
 
-type Room = { id: string; name: string; beds: string; nightlyMinor: number; housekeep: string; photoUrl?: string };
+type Room = {
+  id: string;
+  name: string;
+  beds: string;
+  nightlyMinor: number;
+  housekeep: string;
+  photoUrl?: string;
+  photoUrls?: string[];
+  details?: string;
+  services?: string[];
+};
 type MenuItem = { id: string; name: string; kind: "restaurant" | "bar" | "room_service"; amountMinor: number; description: string; available?: boolean };
+
+function roomPhotos(room: Room) {
+  const urls = (room.photoUrls ?? []).filter(Boolean);
+  if (urls.length) return urls;
+  return room.photoUrl ? [room.photoUrl] : [];
+}
 type Booking = {
   id: string;
   roomName: string;
@@ -99,6 +116,7 @@ export function TenantHotelApp({ subdomain, basename }: { subdomain: string; bas
 
   const color = data?.tenant.branding.primaryColor ?? "#0d7a6f";
   const style = useMemo(() => ({ ["--los-accent" as string]: color }), [color]);
+  const cart = useGuestCart(subdomain);
 
   if (error) {
     return (
@@ -141,6 +159,8 @@ export function TenantHotelApp({ subdomain, basename }: { subdomain: string; bas
               <TenantAppChrome
                 brand={data.tenant.branding.name}
                 accent={color}
+                cartTo="/cart"
+                cartCount={cart.count}
                 titles={{
                   "/": "Home",
                   "/rooms": "Rooms",
@@ -148,6 +168,7 @@ export function TenantHotelApp({ subdomain, basename }: { subdomain: string; bas
                   "/drinks": "Drinks",
                   "/activities": "Activities",
                   "/stay": "Activities",
+                  "/cart": "Cart",
                 }}
                 tabs={[
                   { to: "/", label: "Home", icon: "home" },
@@ -159,17 +180,13 @@ export function TenantHotelApp({ subdomain, basename }: { subdomain: string; bas
               >
                 <Routes>
                   <Route path="/" element={<HotelHome data={data} />} />
+                  <Route path="/rooms" element={<GuestRooms data={data} subdomain={subdomain} />} />
+                  <Route path="/rooms/:roomId" element={<GuestRoomDetail data={data} subdomain={subdomain} />} />
+                  <Route path="/food" element={<GuestMenu data={data} subdomain={subdomain} kind="restaurant" />} />
+                  <Route path="/drinks" element={<GuestMenu data={data} subdomain={subdomain} kind="bar" />} />
                   <Route
-                    path="/rooms"
-                    element={<GuestRooms data={data} subdomain={subdomain} onDone={() => void refresh()} />}
-                  />
-                  <Route
-                    path="/food"
-                    element={<GuestMenu data={data} subdomain={subdomain} kind="restaurant" onDone={() => void refresh()} />}
-                  />
-                  <Route
-                    path="/drinks"
-                    element={<GuestMenu data={data} subdomain={subdomain} kind="bar" onDone={() => void refresh()} />}
+                    path="/cart"
+                    element={<GuestCart data={data} subdomain={subdomain} onDone={() => void refresh()} />}
                   />
                   <Route path="/activities" element={<GuestStay data={data} subdomain={subdomain} />} />
                   <Route path="/stay" element={<Navigate to="/activities" replace />} />
@@ -257,127 +274,129 @@ function HotelHome({ data }: { data: HotelPublic }) {
 function GuestRooms({
   data,
   subdomain,
-  onDone,
 }: {
   data: HotelPublic;
   subdomain: string;
-  onDone: () => void;
 }) {
-  const identity = useGuestIdentity(subdomain);
-  const [checkIn, setCheckIn] = useState("");
-  const [checkOut, setCheckOut] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const navigate = useNavigate();
   const [filter, setFilter] = useState<"ready" | "all">("ready");
-  const [picked, setPicked] = useState<string[]>([]);
-
   const rooms = data.rooms.filter((room) => (filter === "ready" ? room.housekeep === "ready" : true));
 
-  async function book(roomId?: string) {
-    setBusy(true);
-    setNotice(null);
-    try {
-      identity.remember(identity.guestName, identity.guestEmail);
-      const body = await readJson(
-        await fetch(`${portalApiBase}/public/tenants/${encodeURIComponent(subdomain)}/bookings`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            roomIds: roomId ? [roomId] : picked,
-            guestName: identity.guestName,
-            guestEmail: identity.guestEmail,
-            checkIn,
-            checkOut,
-          }),
-        }),
-      );
-      const count = (body.bookings as unknown[] | undefined)?.length ?? 1;
-      setNotice(`${count} room(s) reserved. Open Activities to check in.`);
-      setPicked([]);
-      onDone();
-    } catch (err) {
-      setNotice(err instanceof Error ? err.message : "Could not book");
-    } finally {
-      setBusy(false);
-    }
+  function bookRoom(room: Room) {
+    addRoomToCart(subdomain, room);
+    navigate("/cart");
   }
 
   return (
     <main className="page">
       <p className="eyebrow">Rooms</p>
       <h2>Scan available rooms and book</h2>
-      <p className="lead">
-        {data.tenant.branding.name} rooms, restaurant, bar, self check-in, and housekeeping — not the
-        hospitality suite.
-      </p>
-      {notice ? <p className={notice.includes("reserved") ? "banner-ok" : "banner-error"}>{notice}</p> : null}
-      <GuestIdentity {...identity} />
-      <form className="form" onSubmit={(e) => e.preventDefault()}>
-        <label>
-          Check-in
-          <input type="date" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} required />
-        </label>
-        <label>
-          Check-out
-          <input type="date" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} required />
-        </label>
-        <label>
-          Show
-          <select value={filter} onChange={(e) => setFilter(e.target.value as "ready" | "all")}>
-            <option value="ready">Ready to book</option>
-            <option value="all">All rooms</option>
-          </select>
-        </label>
-      </form>
+      <p className="lead">Open a room to read the details, or book it straight into your cart.</p>
+      <label>
+        Show
+        <select value={filter} onChange={(e) => setFilter(e.target.value as "ready" | "all")}>
+          <option value="ready">Ready to book</option>
+          <option value="all">All rooms</option>
+        </select>
+      </label>
       <section className="cards" data-testid="hotel-rooms">
         {rooms.length === 0 ? <p className="muted">No rooms match this filter.</p> : null}
-        {rooms.map((room) => (
-          <article className="card tap-card" key={room.id}>
-            {room.photoUrl ? <img className="catalog-photo" src={room.photoUrl} alt={room.name} /> : null}
-            <p className="eyebrow">{room.housekeep}</p>
-            <h2>{room.name}</h2>
-            <p className="muted">
-              {room.beds} · {money(room.nightlyMinor)} / night
-            </p>
-            <label className="hint">
-              <input
-                type="checkbox"
-                checked={picked.includes(room.id)}
-                disabled={room.housekeep !== "ready"}
-                onChange={() =>
-                  setPicked((current) =>
-                    current.includes(room.id) ? current.filter((id) => id !== room.id) : [...current, room.id],
-                  )
-                }
-              />{" "}
-              Add to stay
-            </label>
-            <button
-              className="btn btn-primary"
-              disabled={
-                busy ||
-                room.housekeep !== "ready" ||
-                !identity.guestName ||
-                !identity.guestEmail ||
-                !checkIn ||
-                !checkOut
-              }
-              onClick={() => void book(room.id)}
-            >
-              {room.housekeep === "ready" ? "Book this room" : room.housekeep}
-            </button>
-          </article>
-        ))}
-        {picked.length > 0 ? (
-          <button
-            className="btn btn-primary"
-            disabled={busy || !identity.guestName || !identity.guestEmail || !checkIn || !checkOut}
-            onClick={() => void book()}
-          >
-            Book {picked.length} rooms together
-          </button>
-        ) : null}
+        {rooms.map((room) => {
+          const cover = roomPhotos(room)[0];
+          return (
+            <article className="card tap-card" key={room.id}>
+              {cover ? <img className="catalog-photo" src={cover} alt={room.name} /> : null}
+              <p className="eyebrow">{room.housekeep.replaceAll("_", " ")}</p>
+              <h2>{room.name}</h2>
+              <p className="muted">
+                {room.beds} · {money(room.nightlyMinor)} / night
+              </p>
+              <div className="room-actions">
+                <Link className="btn btn-ghost" to={`/rooms/${room.id}`}>
+                  View room
+                </Link>
+                <button
+                  className="btn btn-primary"
+                  disabled={room.housekeep !== "ready"}
+                  onClick={() => bookRoom(room)}
+                >
+                  {room.housekeep === "ready" ? "Book room" : room.housekeep.replaceAll("_", " ")}
+                </button>
+              </div>
+            </article>
+          );
+        })}
       </section>
+    </main>
+  );
+}
+
+function GuestRoomDetail({ data, subdomain }: { data: HotelPublic; subdomain: string }) {
+  const { roomId } = useParams();
+  const navigate = useNavigate();
+  const room = data.rooms.find((item) => item.id === roomId);
+  const photos = room ? roomPhotos(room) : [];
+  const [shot, setShot] = useState(0);
+
+  if (!room) {
+    return (
+      <main className="page">
+        <p className="banner-error">That room is not on the board.</p>
+        <Link className="btn btn-ghost" to="/rooms">
+          Back to rooms
+        </Link>
+      </main>
+    );
+  }
+
+  return (
+    <main className="page" data-testid="room-detail">
+      {photos.length ? (
+        <div className="room-gallery">
+          <img className="room-hero" src={photos[shot] ?? photos[0]} alt={room.name} />
+          {photos.length > 1 ? (
+            <div className="room-thumbs">
+              {photos.map((url, index) => (
+                <button key={url + index} type="button" className={shot === index ? "active" : ""} onClick={() => setShot(index)}>
+                  <img src={url} alt="" />
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      <p className="eyebrow">{room.housekeep.replaceAll("_", " ")}</p>
+      <h2>{room.name}</h2>
+      <p className="muted">
+        {room.beds} · {money(room.nightlyMinor)} / night
+      </p>
+      <h3>Details</h3>
+      <p>{room.details || "The owner has not written room details yet."}</p>
+      <h3>Services</h3>
+      {room.services?.length ? (
+        <ul className="service-chips">
+          {room.services.map((service) => (
+            <li key={service}>{service}</li>
+          ))}
+        </ul>
+      ) : (
+        <p className="muted">No services listed yet.</p>
+      )}
+      <div className="room-actions">
+        <Link className="btn btn-ghost" to="/rooms">
+          All rooms
+        </Link>
+        <button
+          className="btn btn-primary"
+          disabled={room.housekeep !== "ready"}
+          onClick={() => {
+            addRoomToCart(subdomain, room);
+            navigate("/cart");
+          }}
+        >
+          Book room
+        </button>
+      </div>
     </main>
   );
 }
@@ -386,68 +405,32 @@ function GuestMenu({
   data,
   subdomain,
   kind,
-  onDone,
 }: {
   data: HotelPublic;
   subdomain: string;
   kind: "restaurant" | "bar";
-  onDone: () => void;
 }) {
-  const identity = useGuestIdentity(subdomain);
-  const tables = data.tables ?? [];
-  const [fulfillment, setFulfillment] = useState<FulfillmentChoice>(() => emptyFulfillment(tables));
-  const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const navigate = useNavigate();
   const [qty, setQty] = useState<Record<string, number>>({});
-  const [bag, setBag] = useState<Array<{ item: string; kind: string; quantity: number }>>([]);
+  const [notice, setNotice] = useState<string | null>(null);
   const items = data.menu.filter((item) => item.available !== false && (item.kind === kind || item.kind === "room_service"));
 
   function quantity(id: string) {
     return qty[id] ?? 1;
   }
 
-  function addToBag(item: MenuItem) {
+  function addToCart(item: MenuItem) {
     const quantityValue = quantity(item.id);
-    setBag((current) => [...current, { item: item.name, kind: item.kind, quantity: quantityValue }]);
-    setNotice(`${quantityValue} × ${item.name} added to the order.`);
-  }
-
-  async function placeBag() {
-    if (!bag.length) return;
-    setBusy(true);
-    setNotice(null);
-    try {
-      identity.remember(identity.guestName, identity.guestEmail);
-      await readJson(
-        await fetch(`${portalApiBase}/public/tenants/${encodeURIComponent(subdomain)}/orders`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            items: bag,
-            guestName: identity.guestName || "Guest",
-            guestEmail: identity.guestEmail || undefined,
-            ...fulfillmentPayload(fulfillment),
-          }),
-        }),
-      );
-      setNotice(`${bag.length} item(s) sent to the kitchen.`);
-      setBag([]);
-      onDone();
-    } catch (err) {
-      setNotice(err instanceof Error ? err.message : "Could not order");
-    } finally {
-      setBusy(false);
-    }
+    addItemToCart(subdomain, { name: item.name, kind: item.kind, quantity: quantityValue, amountMinor: item.amountMinor });
+    setNotice(`${quantityValue} × ${item.name} is in the cart.`);
   }
 
   return (
     <main className="page">
       <p className="eyebrow">{kind === "restaurant" ? "Restaurant" : "Bar"}</p>
       <h2>{kind === "restaurant" ? "Order food" : "Order drinks"}</h2>
-      <p className="lead">Walk-in plates go to a table. Takeaway leaves with a rider after you pin a location. Add several items, then send the order.</p>
-      {notice ? <p className={notice.includes("kitchen") || notice.includes("added") ? "banner-ok" : "banner-error"}>{notice}</p> : null}
-      <GuestIdentity {...identity} />
-      <OrderFulfillment tables={tables} value={fulfillment} onChange={setFulfillment} />
+      <p className="lead">Add plates and drinks to the same cart as your rooms, then open the cart to finish.</p>
+      {notice ? <p className="banner-ok">{notice}</p> : null}
       <section className="cards">
         {items.map((item) => (
           <article className="card" key={item.id}>
@@ -461,33 +444,174 @@ function GuestMenu({
               <input
                 type="number"
                 min={1}
-                max={20}
+                max={12}
                 value={quantity(item.id)}
                 onChange={(e) => setQty((current) => ({ ...current, [item.id]: Math.max(1, Number(e.target.value) || 1) }))}
               />
             </label>
-            <button className="btn btn-ghost" disabled={busy} onClick={() => addToBag(item)}>
-              Add to order
-            </button>
+            <div className="room-actions">
+              <button className="btn btn-ghost" onClick={() => addToCart(item)}>
+                Add to cart
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  addToCart(item);
+                  navigate("/cart");
+                }}
+              >
+                Book now
+              </button>
+            </div>
           </article>
         ))}
       </section>
-      {bag.length ? (
-        <div className="card">
+    </main>
+  );
+}
+
+function GuestCart({
+  data,
+  subdomain,
+  onDone,
+}: {
+  data: HotelPublic;
+  subdomain: string;
+  onDone: () => void;
+}) {
+  const navigate = useNavigate();
+  const identity = useGuestIdentity(subdomain);
+  const cart = useGuestCart(subdomain);
+  const tables = data.tables ?? [];
+  const [checkIn, setCheckIn] = useState("");
+  const [checkOut, setCheckOut] = useState("");
+  const [fulfillment, setFulfillment] = useState<FulfillmentChoice>(() => emptyFulfillment(tables));
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const rooms = cart.lines.filter((line) => line.kind === "room");
+  const items = cart.lines.filter((line) => line.kind === "item");
+  const nights =
+    checkIn && checkOut
+      ? Math.max(1, Math.round((Date.parse(checkOut) - Date.parse(checkIn)) / 86_400_000))
+      : 1;
+  const total = cartTotalMinor(cart.lines, Number.isFinite(nights) ? nights : 1);
+
+  async function complete() {
+    if (!cart.lines.length) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      identity.remember(identity.guestName, identity.guestEmail);
+      if (rooms.length) {
+        await readJson(
+          await fetch(`${portalApiBase}/public/tenants/${encodeURIComponent(subdomain)}/bookings`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              roomIds: rooms.map((line) => line.roomId),
+              guestName: identity.guestName,
+              guestEmail: identity.guestEmail,
+              checkIn,
+              checkOut,
+            }),
+          }),
+        );
+      }
+      if (items.length) {
+        await readJson(
+          await fetch(`${portalApiBase}/public/tenants/${encodeURIComponent(subdomain)}/orders`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              items: items.map((line) => ({ item: line.name, kind: line.menuKind, quantity: line.quantity })),
+              guestName: identity.guestName || "Guest",
+              guestEmail: identity.guestEmail || undefined,
+              ...fulfillmentPayload(fulfillment),
+            }),
+          }),
+        );
+      }
+      clearGuestCart(subdomain);
+      setNotice("Stay is booked. Open Activities to follow it.");
+      onDone();
+      navigate("/activities");
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : "Could not complete cart");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="page" data-testid="guest-cart">
+      <p className="eyebrow">Cart</p>
+      <h2>Finish this stay</h2>
+      <p className="lead">Add more rooms, food, or drinks, then complete once.</p>
+      {notice ? <p className={notice.includes("booked") ? "banner-ok" : "banner-error"}>{notice}</p> : null}
+      {!cart.lines.length ? (
+        <p className="muted">Cart is empty. Pick a room or a plate first.</p>
+      ) : (
+        <ul className="list">
+          {cart.lines.map((line) => (
+            <li key={line.key}>
+              <strong>{line.kind === "room" ? line.name : `${line.quantity} × ${line.name}`}</strong>
+              <span className="muted">
+                {line.kind === "room"
+                  ? `${line.beds} · ${money(line.nightlyMinor)} / night`
+                  : `${line.menuKind.replaceAll("_", " ")} · ${money(line.amountMinor)}`}
+              </span>
+              <button className="btn btn-ghost" type="button" onClick={() => removeCartLine(subdomain, line.key)}>
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="room-actions">
+        <Link className="btn btn-ghost" to="/rooms">
+          Add rooms
+        </Link>
+        <Link className="btn btn-ghost" to="/food">
+          Add food
+        </Link>
+        <Link className="btn btn-ghost" to="/drinks">
+          Add drinks
+        </Link>
+      </div>
+      {cart.lines.length ? (
+        <form
+          className="form tap-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void complete();
+          }}
+        >
+          <GuestIdentity {...identity} />
+          {rooms.length ? (
+            <>
+              <label>
+                Check-in
+                <input type="date" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} required />
+              </label>
+              <label>
+                Check-out
+                <input type="date" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} required />
+              </label>
+            </>
+          ) : null}
+          {items.length ? <OrderFulfillment tables={tables} value={fulfillment} onChange={setFulfillment} /> : null}
           <p>
-            <strong>{bag.length} item(s) in this order</strong>
+            <strong>Total {money(total)}</strong>
+            {rooms.length ? <span className="muted"> · {nights} night(s)</span> : null}
           </p>
-          <ul className="list">
-            {bag.map((line, index) => (
-              <li key={`${line.item}-${index}`}>
-                {line.quantity} × {line.item}
-              </li>
-            ))}
-          </ul>
-          <button className="btn btn-primary" disabled={busy} onClick={() => void placeBag()}>
-            Send order
+          <button
+            className="btn btn-primary"
+            type="submit"
+            disabled={busy || !identity.guestName || !identity.guestEmail || (rooms.length > 0 && (!checkIn || !checkOut))}
+          >
+            Complete stay
           </button>
-        </div>
+        </form>
       ) : null}
     </main>
   );

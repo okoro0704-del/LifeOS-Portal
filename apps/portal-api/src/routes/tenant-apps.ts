@@ -377,6 +377,9 @@ export async function registerTenantAppRoutes(
           beds: z.string().min(1),
           nightlyMinor: z.number().int().positive(),
           photoUrl: imageField.optional(),
+          photoUrls: z.array(imageField).max(6).optional(),
+          details: z.string().max(800).optional(),
+          services: z.array(z.string().min(1).max(48)).max(16).optional(),
           housekeep: z.enum(["ready", "occupied", "dirty", "cleaning"]).optional(),
         })
         .parse(req.body);

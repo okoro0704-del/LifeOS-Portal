@@ -41,24 +41,35 @@ const ICONS: Record<TenantTab["icon"], ReactNode> = {
   ),
 };
 
+function pageTitle(path: string, titles: Record<string, string>, brand: string) {
+  if (titles[path]) return titles[path];
+  if (path.startsWith("/rooms/") && path !== "/rooms") return "Room";
+  const parent = `/${path.split("/").filter(Boolean)[0] ?? ""}`;
+  return titles[parent] ?? titles["/"] ?? brand;
+}
+
 export function TenantAppChrome({
   brand,
   accent,
   tabs,
   titles,
+  cartTo,
+  cartCount,
   children,
 }: {
   brand: string;
   accent: string;
   tabs: TenantTab[];
   titles: Record<string, string>;
+  cartTo?: string;
+  cartCount?: number;
   children: ReactNode;
 }) {
   const location = useLocation();
   const navigate = useNavigate();
   const path = location.pathname.replace(/\/$/, "") || "/";
   const home = path === "/";
-  const title = titles[path] ?? brand;
+  const title = pageTitle(path, titles, brand);
   const historyIdx = typeof window.history.state?.idx === "number" ? window.history.state.idx : 0;
 
   return (
@@ -82,7 +93,16 @@ export function TenantAppChrome({
           <p>{brand}</p>
           <h1>{title}</h1>
         </div>
-        <span className="tap-side" />
+        {cartTo ? (
+          <NavLink to={cartTo} className="tap-cart" aria-label="Cart" data-testid="guest-cart-link">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 7h15l-1.4 9.2a2 2 0 0 1-2 1.8H9.2a2 2 0 0 1-2-1.7L5 4H3" />
+            </svg>
+            {cartCount ? <span className="tap-cart-badge">{cartCount}</span> : null}
+          </NavLink>
+        ) : (
+          <span className="tap-side" />
+        )}
       </header>
       <div className="tap-body">{children}</div>
       <nav className="tap-bottom">
