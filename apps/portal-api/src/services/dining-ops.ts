@@ -5,7 +5,7 @@ import { hashPassword, verifyPassword } from "../lib/password.js";
 import type { PortalInstall, PortalStore } from "../store.js";
 import { publicBranding, type StaffActivity } from "./tenant-site.js";
 
-export type DiningStaffRole = "owner" | "kitchen" | "counter" | "rider";
+export type DiningStaffRole = "owner" | "kitchen" | "counter" | "rider" | "storekeeper";
 export type DiningKind = "food" | "drink";
 export type DiningOrderStatus = "received" | "preparing" | "ready" | "delivered";
 export type OrderFulfillment = "walk_in" | "takeaway";
@@ -17,6 +17,7 @@ export type DiningMenuItem = {
   amountMinor: number;
   description: string;
   photoUrl?: string;
+  available?: boolean;
 };
 
 export type DiningOrder = {
@@ -33,6 +34,7 @@ export type DiningOrder = {
   fulfillment?: OrderFulfillment;
   lat?: number;
   lng?: number;
+  note?: string;
   status: DiningOrderStatus;
   createdAt: string;
   placedBy?: "guest" | "staff";
@@ -56,7 +58,7 @@ type DiningSupply = {
   note: string;
   fromRole: string;
   fromStaffName: string;
-  toDepartment: "stores" | "owner" | "housekeeping";
+  toDepartment: "stores" | "owner" | "housekeeping" | "kitchen";
   status: "requested" | "approved" | "fulfilled" | "rejected";
   createdAt: string;
 };
@@ -209,18 +211,32 @@ export function diningOpsPayload(install: PortalInstall, staff: DiningStaff, sto
   const orders = [...filtered].sort(
     (a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9) || Date.parse(a.createdAt) - Date.parse(b.createdAt),
   );
-  const supplies = (row.supplies ?? []).filter((item) => staff.role === "owner" || item.fromRole === staff.role);
+  const supplies = (row.supplies ?? []).filter((item) => {
+    if (staff.role === "owner") return true;
+    if (staff.role === "storekeeper") return item.toDepartment === "stores" || item.toDepartment === "kitchen";
+    if (staff.role === "kitchen") return item.toDepartment === "kitchen" || item.fromRole === "kitchen" || item.fromRole === "counter";
+    return item.fromRole === staff.role;
+  });
   return {
     staff: publicStaff(staff),
     desk: staff.role,
-    orders,
-    menu: staff.role === "rider" ? [] : staff.role === "kitchen" ? row.menu.filter((item) => item.kind === "food") : row.menu,
+    orders: staff.role === "storekeeper" ? [] : orders,
+    menu: staff.role === "rider" || staff.role === "storekeeper" ? [] : staff.role === "kitchen" ? row.menu.filter((item) => item.kind === "food") : row.menu,
     tables: staff.role === "rider" ? [] : row.tables,
     team: staff.role === "owner" ? row.staff.map(publicStaff) : undefined,
     activity: staff.role === "owner" ? (row.activity ?? []).slice(0, 80) : undefined,
     bookings: [],
     rooms: [],
     supplies,
+    analytics: {
+      foodRevenueMinor: row.orders.filter((item) => item.kind === "food").reduce((sum, item) => sum + item.amountMinor, 0),
+      drinkRevenueMinor: row.orders.filter((item) => item.kind === "drink").reduce((sum, item) => sum + item.amountMinor, 0),
+      openTickets: row.orders.filter((item) => item.status !== "delivered").length,
+      deliveredTickets: row.orders.filter((item) => item.status === "delivered").length,
+      walkInOrders: row.orders.filter((item) => item.fulfillment !== "takeaway").length,
+      takeawayOrders: row.orders.filter((item) => item.fulfillment === "takeaway").length,
+      supplyOpen: (row.supplies ?? []).filter((item) => item.status === "requested" || item.status === "approved").length,
+    },
   };
 }
 
@@ -251,12 +267,14 @@ export function placeDiningOrder(
     lat?: number;
     lng?: number;
     kind?: DiningKind;
+    note?: string;
     actor?: DiningStaff;
   },
   store?: PortalStore,
 ) {
   const row = requireProperty(install, store);
   const menuItem = row.menu.find((item) => item.name === input.item.trim());
+  if (menuItem && menuItem.available === false) throw new HttpError(`${menuItem.name} is 86'd tonight.`, 409, "item_unavailable");
   const quantity = Math.max(1, Math.min(12, input.quantity ?? 1));
   const fulfillment =
     input.fulfillment ?? (input.address || input.lat != null ? "takeaway" : "walk_in");
@@ -280,6 +298,7 @@ export function placeDiningOrder(
     fulfillment,
     lat: input.lat,
     lng: input.lng,
+    note: input.note,
     status: "received",
     createdAt: new Date().toISOString(),
     placedBy: input.actor ? "staff" : "guest",
@@ -384,7 +403,7 @@ export function createDiningStaff(
 
 export function upsertDiningMenuItem(
   install: PortalInstall,
-  input: { id?: string; name: string; kind: DiningKind; amountMinor: number; description: string; photoUrl?: string },
+  input: { id?: string; name: string; kind: DiningKind; amountMinor: number; description: string; photoUrl?: string; available?: boolean },
   actor: DiningStaff,
   store?: PortalStore,
 ) {
@@ -397,6 +416,7 @@ export function upsertDiningMenuItem(
     item.amountMinor = input.amountMinor;
     item.description = input.description.trim();
     if (input.photoUrl !== undefined) item.photoUrl = input.photoUrl;
+    if (input.available !== undefined) item.available = input.available;
     logDiningActivity(row, actor, "menu.update", item.name);
     save(store, install, row);
     return item;
@@ -408,6 +428,7 @@ export function upsertDiningMenuItem(
     amountMinor: input.amountMinor,
     description: input.description.trim(),
     photoUrl: input.photoUrl,
+    available: input.available,
   };
   row.menu.unshift(item);
   logDiningActivity(row, actor, "menu.create", item.name);
@@ -421,7 +442,7 @@ export function createDiningSupply(
   input: { item: string; quantity?: number; note?: string; toDepartment?: DiningSupply["toDepartment"] },
   store?: PortalStore,
 ) {
-  if (actor.role === "rider") throw new HttpError("This dashboard is not assigned to you.", 403, "forbidden");
+  if (actor.role === "rider" || actor.role === "storekeeper") throw new HttpError("This dashboard is not assigned to you.", 403, "forbidden");
   const row = requireProperty(install, store);
   const request: DiningSupply = {
     id: newId("sup"),
@@ -430,7 +451,7 @@ export function createDiningSupply(
     note: input.note?.trim() ?? "",
     fromRole: actor.role,
     fromStaffName: actor.name,
-    toDepartment: input.toDepartment ?? "stores",
+    toDepartment: input.toDepartment ?? "kitchen",
     status: "requested",
     createdAt: new Date().toISOString(),
   };
@@ -448,7 +469,7 @@ export function updateDiningSupply(
   status: DiningSupply["status"],
   store?: PortalStore,
 ) {
-  if (actor.role !== "owner") throw new HttpError("This dashboard is not assigned to you.", 403, "forbidden");
+  if (actor.role !== "owner" && actor.role !== "storekeeper") throw new HttpError("This dashboard is not assigned to you.", 403, "forbidden");
   const row = requireProperty(install, store);
   const request = (row.supplies ?? []).find((item) => item.id === requestId);
   if (!request) throw new HttpError("Supply request not found.", 404, "not_found");

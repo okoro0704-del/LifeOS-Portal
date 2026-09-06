@@ -22,6 +22,7 @@ import {
 import {
   assertStaffRole,
   bookHotelRoom,
+  bookHotelRooms,
   createHotelStaff,
   createHotelSupply,
   guestSelfCheck,
@@ -60,7 +61,7 @@ function sendHtml(reply: FastifyReply, html: string) {
 
 const imageField = z
   .string()
-  .max(700_000)
+  .max(1_200_000)
   .refine((value) => value.startsWith("data:image/") || /^https?:\/\//i.test(value));
 const fqdn = z
   .string()
@@ -135,14 +136,20 @@ export async function registerTenantAppRoutes(
       const { subdomain } = req.params as { subdomain: string };
       const body = z
         .object({
-          roomId: z.string().min(1),
+          roomId: z.string().min(1).optional(),
+          roomIds: z.array(z.string().min(1)).min(1).optional(),
           guestName: z.string().min(1),
           guestEmail: z.string().email(),
           checkIn: z.string().min(8),
           checkOut: z.string().min(8),
+          note: z.string().max(280).optional(),
         })
+        .refine((value) => Boolean(value.roomId || value.roomIds?.length), { message: "Pick at least one room." })
         .parse(req.body);
-      return reply.code(201).send({ booking: bookHotelRoom(hotelInstall(subdomain), body, store) });
+      const hotel = hotelInstall(subdomain);
+      const roomIds = body.roomIds?.length ? body.roomIds : [body.roomId as string];
+      const bookings = bookHotelRooms(hotel, { ...body, roomIds }, store);
+      return reply.code(201).send({ booking: bookings[0], bookings });
     } catch (err) {
       return sendHotelError(reply, err);
     }
@@ -156,7 +163,7 @@ export async function registerTenantAppRoutes(
       if (isDiningVertical(row.verticalId)) {
         const body = z
           .object({
-            item: z.string().min(1),
+            item: z.string().min(1).optional(),
             quantity: z.number().int().positive().max(12).optional(),
             guestName: z.string().min(1),
             guestEmail: z.string().email().optional(),
@@ -166,15 +173,30 @@ export async function registerTenantAppRoutes(
             fulfillment: z.enum(["walk_in", "takeaway"]).optional(),
             lat: z.number().min(-90).max(90).optional(),
             lng: z.number().min(-180).max(180).optional(),
+            note: z.string().max(280).optional(),
             kind: z.enum(["food", "drink"]).optional(),
+            items: z
+              .array(
+                z.object({
+                  item: z.string().min(1),
+                  quantity: z.number().int().positive().max(12).optional(),
+                  kind: z.enum(["food", "drink"]).optional(),
+                }),
+              )
+              .optional(),
           })
+          .refine((value) => Boolean(value.item || value.items?.length), { message: "Add at least one plate." })
           .parse(req.body);
         const actor = staffToken(req) ? diningStaffFromToken(row, staffToken(req), store) : undefined;
-        return reply.code(201).send({ order: placeDiningOrder(row, { ...body, actor }, store) });
+        const lines = body.items?.length ? body.items : [{ item: body.item as string, quantity: body.quantity, kind: body.kind }];
+        const orders = lines.map((line) =>
+          placeDiningOrder(row, { ...body, item: line.item, quantity: line.quantity, kind: line.kind, actor }, store),
+        );
+        return reply.code(201).send({ order: orders[0], orders });
       }
       const body = z
         .object({
-          item: z.string().min(1),
+          item: z.string().min(1).optional(),
           quantity: z.number().int().positive().max(12).optional(),
           guestName: z.string().min(1),
           guestEmail: z.string().email().optional(),
@@ -185,12 +207,27 @@ export async function registerTenantAppRoutes(
           fulfillment: z.enum(["walk_in", "takeaway"]).optional(),
           lat: z.number().min(-90).max(90).optional(),
           lng: z.number().min(-180).max(180).optional(),
+          note: z.string().max(280).optional(),
           kind: z.enum(["restaurant", "bar", "room_service"]).optional(),
+          items: z
+            .array(
+              z.object({
+                item: z.string().min(1),
+                quantity: z.number().int().positive().max(12).optional(),
+                kind: z.enum(["restaurant", "bar", "room_service"]).optional(),
+              }),
+            )
+            .optional(),
         })
+        .refine((value) => Boolean(value.item || value.items?.length), { message: "Add at least one plate." })
         .parse(req.body);
       const hotel = hotelInstall(subdomain);
       const actor = staffToken(req) ? staffFromToken(hotel, staffToken(req), store) : undefined;
-      return reply.code(201).send({ order: placeHotelOrder(hotel, { ...body, actor }, store) });
+      const lines = body.items?.length ? body.items : [{ item: body.item as string, quantity: body.quantity, kind: body.kind }];
+      const orders = lines.map((line) =>
+        placeHotelOrder(hotel, { ...body, item: line.item, quantity: line.quantity, kind: line.kind, actor }, store),
+      );
+      return reply.code(201).send({ order: orders[0], orders });
     } catch (err) {
       return sendHotelError(reply, err);
     }
@@ -270,7 +307,7 @@ export async function registerTenantAppRoutes(
             name: z.string().min(1),
             email: z.string().email(),
             password: z.string().min(6),
-            role: z.enum(["kitchen", "counter", "rider"]),
+            role: z.enum(["kitchen", "counter", "rider", "storekeeper"]),
           })
           .parse(req.body);
         return reply.code(201).send({
@@ -286,7 +323,7 @@ export async function registerTenantAppRoutes(
           name: z.string().min(1),
           email: z.string().email(),
           password: z.string().min(6),
-          role: z.enum(["front_desk", "restaurant", "bar", "housekeeping", "rider"]),
+          role: z.enum(["front_desk", "restaurant", "bar", "housekeeping", "rider", "kitchen", "storekeeper"]),
         })
         .parse(req.body);
       return reply.code(201).send({
@@ -332,7 +369,7 @@ export async function registerTenantAppRoutes(
     try {
       const hotel = hotelInstall((req.params as { subdomain: string }).subdomain);
       const actor = staffFromToken(hotel, staffToken(req), store);
-      assertStaffRole(actor, ["front_desk"]);
+      assertStaffRole(actor, ["front_desk", "owner"]);
       const body = z
         .object({
           id: z.string().optional(),
@@ -354,7 +391,7 @@ export async function registerTenantAppRoutes(
       const row = readyInstall((req.params as { subdomain: string }).subdomain);
       if (isDiningVertical(row.verticalId)) {
         const actor = diningStaffFromToken(row, staffToken(req), store);
-        assertDiningRole(actor, ["kitchen", "counter"]);
+        assertDiningRole(actor, ["kitchen", "counter", "owner"]);
         const body = z
           .object({
             id: z.string().optional(),
@@ -363,6 +400,7 @@ export async function registerTenantAppRoutes(
             amountMinor: z.number().int().positive(),
             description: z.string().max(240).optional(),
             photoUrl: imageField.optional(),
+            available: z.boolean().optional(),
           })
           .parse(req.body);
         return reply
@@ -371,7 +409,7 @@ export async function registerTenantAppRoutes(
       }
       const hotel = hotelInstall(row.subdomain);
       const actor = staffFromToken(hotel, staffToken(req), store);
-      assertStaffRole(actor, ["restaurant", "bar"]);
+      assertStaffRole(actor, ["restaurant", "bar", "kitchen", "owner"]);
       const body = z
         .object({
           id: z.string().optional(),
@@ -380,6 +418,7 @@ export async function registerTenantAppRoutes(
           amountMinor: z.number().int().positive(),
           description: z.string().max(240).optional(),
           photoUrl: imageField.optional(),
+          available: z.boolean().optional(),
         })
         .parse(req.body);
       return reply
@@ -439,7 +478,7 @@ export async function registerTenantAppRoutes(
       const { subdomain, bookingId } = req.params as { subdomain: string; bookingId: string };
       const row = hotelInstall(subdomain, false);
       const actor = staffFromToken(row, staffToken(req), store);
-      assertStaffRole(actor, ["front_desk"]);
+      assertStaffRole(actor, ["front_desk", "owner"]);
       const body = z.object({ status: z.enum(["confirmed", "checked_in", "checked_out"]) }).parse(req.body);
       return { booking: updateHotelBookingStatus(row, bookingId, body.status, store) };
     } catch (err) {
@@ -453,7 +492,7 @@ export async function registerTenantAppRoutes(
       const ready = readyInstall(subdomain);
       if (isDiningVertical(ready.verticalId)) {
         const actor = diningStaffFromToken(ready, staffToken(req), store);
-        assertDiningRole(actor, ["kitchen", "counter", "rider"]);
+        assertDiningRole(actor, ["kitchen", "counter", "rider", "owner"]);
         const body = z.object({ status: z.enum(["received", "preparing", "ready", "delivered"]) }).parse(req.body);
         return { order: updateDiningOrderStatus(ready, orderId, body.status, store) };
       }
@@ -465,7 +504,7 @@ export async function registerTenantAppRoutes(
       if (!order) throw new HttpError("Order not found.", 404, "not_found");
       if (actor.role === "restaurant") assertStaffRole(actor, ["restaurant"]);
       if (actor.role === "bar") assertStaffRole(actor, ["bar"]);
-      if (actor.role === "housekeeping" || actor.role === "front_desk") {
+      if (actor.role === "housekeeping" || actor.role === "front_desk" || actor.role === "storekeeper") {
         throw new HttpError("This dashboard is not assigned to you.", 403, "forbidden");
       }
       return { order: updateHotelOrderStatus(row, orderId, body.status, store) };
@@ -483,7 +522,7 @@ export async function registerTenantAppRoutes(
           item: z.string().min(1),
           quantity: z.number().int().positive().max(200).optional(),
           note: z.string().max(280).optional(),
-          toDepartment: z.enum(["stores", "owner", "housekeeping"]).optional(),
+          toDepartment: z.enum(["stores", "owner", "housekeeping", "kitchen"]).optional(),
         })
         .parse(req.body);
       if (isDiningVertical(ready.verticalId)) {

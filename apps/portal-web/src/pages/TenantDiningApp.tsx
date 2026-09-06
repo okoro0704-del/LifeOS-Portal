@@ -7,7 +7,7 @@ import { portalApiBase } from "../lib/api";
 import { TenantOwnerAdmin } from "./TenantOwnerAdmin";
 import { TenantStaffDesk } from "./TenantStaffDesk";
 
-type MenuItem = { id: string; name: string; kind: "food" | "drink"; amountMinor: number; description: string; photoUrl?: string };
+type MenuItem = { id: string; name: string; kind: "food" | "drink"; amountMinor: number; description: string; photoUrl?: string; available?: boolean };
 type Order = {
   id: string;
   item: string;
@@ -273,33 +273,24 @@ function DiningMenu({
   kind: "food" | "drink";
 }) {
   const guest = useGuest(subdomain, data.tables);
-  const items = data.menu.filter((item) => item.kind === kind);
-  return (
-    <div>
-      <GuestFields guest={guest} tables={data.tables} />
-      <section className="cards" data-testid="dining-menu">
-        {items.map((item) => (
-          <MenuCard key={item.id} item={item} subdomain={subdomain} guest={guest} />
-        ))}
-      </section>
-    </div>
-  );
-}
-
-function MenuCard({
-  item,
-  subdomain,
-  guest,
-  onDone,
-}: {
-  item: MenuItem;
-  subdomain: string;
-  guest: ReturnType<typeof useGuest>;
-  onDone?: () => void;
-}) {
+  const items = data.menu.filter((item) => item.kind === kind && item.available !== false);
+  const [qty, setQty] = useState<Record<string, number>>({});
+  const [bag, setBag] = useState<Array<{ item: string; kind: "food" | "drink"; quantity: number }>>([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  async function order() {
+
+  function quantity(id: string) {
+    return qty[id] ?? 1;
+  }
+
+  function addToBag(item: MenuItem) {
+    const quantityValue = quantity(item.id);
+    setBag((current) => [...current, { item: item.name, kind: item.kind, quantity: quantityValue }]);
+    setNotice(`${quantityValue} × ${item.name} added.`);
+  }
+
+  async function sendOrder() {
+    if (!bag.length) return;
     setBusy(true);
     setNotice(null);
     guest.remember();
@@ -309,35 +300,69 @@ function MenuCard({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            item: item.name,
-            kind: item.kind,
+            items: bag,
             guestName: guest.guestName || "Guest",
             guestEmail: guest.guestEmail || undefined,
             ...fulfillmentPayload(guest.fulfillment),
           }),
         }),
       );
-      setNotice(`${item.name} is in the kitchen.`);
-      onDone?.();
+      setNotice(`${bag.length} item(s) sent to the kitchen.`);
+      setBag([]);
     } catch (err) {
       setNotice(err instanceof Error ? err.message : "Could not order");
     } finally {
       setBusy(false);
     }
   }
+
   return (
-    <article className="card tap-card">
-      {item.photoUrl ? <img className="catalog-photo" src={item.photoUrl} alt={item.name} /> : null}
-      <p className="eyebrow">{item.kind}</p>
-      <h2>{item.name}</h2>
-      <p className="muted">
-        {item.description} · {money(item.amountMinor)}
-      </p>
-      {notice ? <p className={notice.includes("kitchen") ? "banner-ok" : "banner-error"}>{notice}</p> : null}
-      <button className="btn btn-primary" disabled={busy} onClick={() => void order()}>
-        Order
-      </button>
-    </article>
+    <div>
+      <GuestFields guest={guest} tables={data.tables} />
+      {notice ? <p className={notice.includes("kitchen") || notice.includes("added") ? "banner-ok" : "banner-error"}>{notice}</p> : null}
+      <section className="cards" data-testid="dining-menu">
+        {items.map((item) => (
+          <article className="card tap-card" key={item.id}>
+            {item.photoUrl ? <img className="catalog-photo" src={item.photoUrl} alt={item.name} /> : null}
+            <p className="eyebrow">{item.kind}</p>
+            <h2>{item.name}</h2>
+            <p className="muted">
+              {item.description} · {money(item.amountMinor)}
+            </p>
+            <label>
+              Quantity
+              <input
+                type="number"
+                min={1}
+                max={12}
+                value={quantity(item.id)}
+                onChange={(e) => setQty((current) => ({ ...current, [item.id]: Math.max(1, Number(e.target.value) || 1) }))}
+              />
+            </label>
+            <button className="btn btn-ghost" disabled={busy} onClick={() => addToBag(item)}>
+              Add to order
+            </button>
+          </article>
+        ))}
+      </section>
+      {bag.length ? (
+        <div className="card">
+          <p>
+            <strong>{bag.length} item(s) in this order</strong>
+          </p>
+          <ul className="list">
+            {bag.map((line, index) => (
+              <li key={`${line.item}-${index}`}>
+                {line.quantity} × {line.item}
+              </li>
+            ))}
+          </ul>
+          <button className="btn btn-primary" disabled={busy} onClick={() => void sendOrder()}>
+            Send order
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

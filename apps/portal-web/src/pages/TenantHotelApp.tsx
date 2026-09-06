@@ -8,7 +8,7 @@ import { TenantOwnerAdmin } from "./TenantOwnerAdmin";
 import { TenantStaffDesk } from "./TenantStaffDesk";
 
 type Room = { id: string; name: string; beds: string; nightlyMinor: number; housekeep: string; photoUrl?: string };
-type MenuItem = { id: string; name: string; kind: "restaurant" | "bar" | "room_service"; amountMinor: number; description: string };
+type MenuItem = { id: string; name: string; kind: "restaurant" | "bar" | "room_service"; amountMinor: number; description: string; available?: boolean };
 type Booking = {
   id: string;
   roomName: string;
@@ -269,10 +269,11 @@ function GuestRooms({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [filter, setFilter] = useState<"ready" | "all">("ready");
+  const [picked, setPicked] = useState<string[]>([]);
 
   const rooms = data.rooms.filter((room) => (filter === "ready" ? room.housekeep === "ready" : true));
 
-  async function book(roomId: string) {
+  async function book(roomId?: string) {
     setBusy(true);
     setNotice(null);
     try {
@@ -282,7 +283,7 @@ function GuestRooms({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            roomId,
+            roomIds: roomId ? [roomId] : picked,
             guestName: identity.guestName,
             guestEmail: identity.guestEmail,
             checkIn,
@@ -290,7 +291,9 @@ function GuestRooms({
           }),
         }),
       );
-      setNotice(`Room reserved for ${body.booking.nights} night(s). Open Activities to check in.`);
+      const count = (body.bookings as unknown[] | undefined)?.length ?? 1;
+      setNotice(`${count} room(s) reserved. Open Activities to check in.`);
+      setPicked([]);
       onDone();
     } catch (err) {
       setNotice(err instanceof Error ? err.message : "Could not book");
@@ -336,6 +339,19 @@ function GuestRooms({
             <p className="muted">
               {room.beds} · {money(room.nightlyMinor)} / night
             </p>
+            <label className="hint">
+              <input
+                type="checkbox"
+                checked={picked.includes(room.id)}
+                disabled={room.housekeep !== "ready"}
+                onChange={() =>
+                  setPicked((current) =>
+                    current.includes(room.id) ? current.filter((id) => id !== room.id) : [...current, room.id],
+                  )
+                }
+              />{" "}
+              Add to stay
+            </label>
             <button
               className="btn btn-primary"
               disabled={
@@ -348,10 +364,19 @@ function GuestRooms({
               }
               onClick={() => void book(room.id)}
             >
-              {room.housekeep === "ready" ? "Book room" : room.housekeep}
+              {room.housekeep === "ready" ? "Book this room" : room.housekeep}
             </button>
           </article>
         ))}
+        {picked.length > 0 ? (
+          <button
+            className="btn btn-primary"
+            disabled={busy || !identity.guestName || !identity.guestEmail || !checkIn || !checkOut}
+            onClick={() => void book()}
+          >
+            Book {picked.length} rooms together
+          </button>
+        ) : null}
       </section>
     </main>
   );
@@ -373,9 +398,22 @@ function GuestMenu({
   const [fulfillment, setFulfillment] = useState<FulfillmentChoice>(() => emptyFulfillment(tables));
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const items = data.menu.filter((item) => item.kind === kind || item.kind === "room_service");
+  const [qty, setQty] = useState<Record<string, number>>({});
+  const [bag, setBag] = useState<Array<{ item: string; kind: string; quantity: number }>>([]);
+  const items = data.menu.filter((item) => item.available !== false && (item.kind === kind || item.kind === "room_service"));
 
-  async function order(item: MenuItem) {
+  function quantity(id: string) {
+    return qty[id] ?? 1;
+  }
+
+  function addToBag(item: MenuItem) {
+    const quantityValue = quantity(item.id);
+    setBag((current) => [...current, { item: item.name, kind: item.kind, quantity: quantityValue }]);
+    setNotice(`${quantityValue} × ${item.name} added to the order.`);
+  }
+
+  async function placeBag() {
+    if (!bag.length) return;
     setBusy(true);
     setNotice(null);
     try {
@@ -385,16 +423,15 @@ function GuestMenu({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            item: item.name,
-            kind: item.kind,
-            quantity: 1,
+            items: bag,
             guestName: identity.guestName || "Guest",
             guestEmail: identity.guestEmail || undefined,
             ...fulfillmentPayload(fulfillment),
           }),
         }),
       );
-      setNotice(`${item.name} is on the way.`);
+      setNotice(`${bag.length} item(s) sent to the kitchen.`);
+      setBag([]);
       onDone();
     } catch (err) {
       setNotice(err instanceof Error ? err.message : "Could not order");
@@ -407,8 +444,8 @@ function GuestMenu({
     <main className="page">
       <p className="eyebrow">{kind === "restaurant" ? "Restaurant" : "Bar"}</p>
       <h2>{kind === "restaurant" ? "Order food" : "Order drinks"}</h2>
-      <p className="lead">Walk-in plates go to a table. Takeaway leaves with a rider after you pin a location.</p>
-      {notice ? <p className={notice.includes("on the way") ? "banner-ok" : "banner-error"}>{notice}</p> : null}
+      <p className="lead">Walk-in plates go to a table. Takeaway leaves with a rider after you pin a location. Add several items, then send the order.</p>
+      {notice ? <p className={notice.includes("kitchen") || notice.includes("added") ? "banner-ok" : "banner-error"}>{notice}</p> : null}
       <GuestIdentity {...identity} />
       <OrderFulfillment tables={tables} value={fulfillment} onChange={setFulfillment} />
       <section className="cards">
@@ -419,12 +456,39 @@ function GuestMenu({
             <p className="muted">
               {item.description} · {money(item.amountMinor)}
             </p>
-            <button className="btn btn-primary" disabled={busy} onClick={() => void order(item)}>
-              {kind === "bar" ? "Order drink" : "Order food"}
+            <label>
+              Quantity
+              <input
+                type="number"
+                min={1}
+                max={20}
+                value={quantity(item.id)}
+                onChange={(e) => setQty((current) => ({ ...current, [item.id]: Math.max(1, Number(e.target.value) || 1) }))}
+              />
+            </label>
+            <button className="btn btn-ghost" disabled={busy} onClick={() => addToBag(item)}>
+              Add to order
             </button>
           </article>
         ))}
       </section>
+      {bag.length ? (
+        <div className="card">
+          <p>
+            <strong>{bag.length} item(s) in this order</strong>
+          </p>
+          <ul className="list">
+            {bag.map((line, index) => (
+              <li key={`${line.item}-${index}`}>
+                {line.quantity} × {line.item}
+              </li>
+            ))}
+          </ul>
+          <button className="btn btn-primary" disabled={busy} onClick={() => void placeBag()}>
+            Send order
+          </button>
+        </div>
+      ) : null}
     </main>
   );
 }

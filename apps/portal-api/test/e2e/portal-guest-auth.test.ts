@@ -246,6 +246,21 @@ test("guest hotel install works when TrustID is off and distributor is remote", 
     assert.equal(booked.statusCode, 201, booked.body);
     assert.equal(booked.json().booking.nights, 2);
 
+    const multiRooms = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${subdomain}/bookings`,
+      payload: {
+        roomIds: [rooms[1].id, rooms[2].id],
+        guestName: "Chi Guest",
+        guestEmail: "chi@guest.example",
+        checkIn: "2026-09-10",
+        checkOut: "2026-09-11",
+        note: "Connecting rooms",
+      },
+    });
+    assert.equal(multiRooms.statusCode, 201, multiRooms.body);
+    assert.equal((multiRooms.json().bookings as unknown[]).length, 2);
+
     const food = await local.inject({
       method: "POST",
       url: `/public/tenants/${subdomain}/orders`,
@@ -266,6 +281,21 @@ test("guest hotel install works when TrustID is off and distributor is remote", 
     });
     assert.equal(drink.statusCode, 201, drink.body);
 
+    const bag = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${subdomain}/orders`,
+      payload: {
+        items: [
+          { item: "Club sandwich", quantity: 2, kind: "restaurant" },
+          { item: "Lager", quantity: 3, kind: "bar" },
+        ],
+        guestName: "Ada Guest",
+        guestEmail: "ada@guest.example",
+      },
+    });
+    assert.equal(bag.statusCode, 201, bag.body);
+    assert.equal((bag.json().orders as unknown[]).length, 2);
+
     const checkedIn = await local.inject({
       method: "POST",
       url: `/public/tenants/${subdomain}/stay/check-in`,
@@ -282,6 +312,26 @@ test("guest hotel install works when TrustID is off and distributor is remote", 
     assert.equal(ownerLogin.statusCode, 200, ownerLogin.body);
     assert.equal(ownerLogin.json().staff.role, "owner");
     const ownerToken = ownerLogin.json().token as string;
+
+    const penthouse = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${subdomain}/catalog/rooms`,
+      headers: { "x-hotel-staff": ownerToken },
+      payload: { name: "Penthouse", beds: "1 king", nightlyMinor: 45000 },
+    });
+    assert.equal(penthouse.statusCode, 201, penthouse.body);
+    const afterRoom = await local.inject({ method: "GET", url: `/public/tenants/${subdomain}` });
+    assert.ok((afterRoom.json().rooms as Array<{ name: string }>).some((row) => row.name === "Penthouse"));
+
+    const ownerOps = await local.inject({
+      method: "GET",
+      url: `/public/tenants/${subdomain}/ops`,
+      headers: { "x-hotel-staff": ownerToken },
+    });
+    assert.equal(ownerOps.statusCode, 200, ownerOps.body);
+    assert.ok(ownerOps.json().analytics);
+    assert.ok(ownerOps.json().analytics.stays >= 3);
+    assert.ok(ownerOps.json().analytics.openTickets >= 1);
 
     const created = await local.inject({
       method: "POST",
@@ -360,6 +410,49 @@ test("guest hotel install works when TrustID is off and distributor is remote", 
       payload: { item: "Rice 25kg", quantity: 1 },
     });
     assert.equal(deskSupply.statusCode, 403);
+
+    const kitchenPull = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${subdomain}/supplies`,
+      headers: { "x-hotel-staff": restoToken },
+      payload: { item: "Palm oil", quantity: 4, note: "Dinner mise", toDepartment: "kitchen" },
+    });
+    assert.equal(kitchenPull.statusCode, 201, kitchenPull.body);
+    assert.equal(kitchenPull.json().supply.toDepartment, "kitchen");
+
+    const storeStaff = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${subdomain}/staff`,
+      headers: { "x-hotel-staff": ownerToken },
+      payload: {
+        name: "Sam Store",
+        email: "store@guest-hotel.example",
+        password: "store-pass",
+        role: "storekeeper",
+      },
+    });
+    assert.equal(storeStaff.statusCode, 201, storeStaff.body);
+    const storeLogin = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${subdomain}/staff/login`,
+      payload: { email: "store@guest-hotel.example", password: "store-pass", surface: "staff" },
+    });
+    const storeOps = await local.inject({
+      method: "GET",
+      url: `/public/tenants/${subdomain}/ops`,
+      headers: { "x-hotel-staff": storeLogin.json().token as string },
+    });
+    assert.equal(storeOps.json().desk, "storekeeper");
+    const storeRows = storeOps.json().supplies as Array<{ id: string; item: string; toDepartment: string }>;
+    assert.ok(storeRows.some((row) => row.item === "Palm oil" && row.toDepartment === "kitchen"));
+    const issued = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${subdomain}/supplies/${kitchenPull.json().supply.id}/status`,
+      headers: { "x-hotel-staff": storeLogin.json().token as string },
+      payload: { status: "fulfilled" },
+    });
+    assert.equal(issued.statusCode, 200, issued.body);
+    assert.equal(issued.json().supply.status, "fulfilled");
 
     const housekeeper = await local.inject({
       method: "POST",
@@ -581,6 +674,64 @@ test("restaurant and home-kitchen tenant apps serve menus, orders, and staff boa
       payload: { name: "Suya wrap", kind: "food", amountMinor: 3000, description: "Street wrap" },
     });
     assert.equal(item.statusCode, 201, item.body);
+
+    const diningBag = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${restaurantSub}/orders`,
+      payload: {
+        items: [
+          { item: "Jollof platter", quantity: 2, kind: "food" },
+          { item: "Chapman", quantity: 2, kind: "drink" },
+        ],
+        guestName: "Ada",
+        guestEmail: "ada@harbor.example",
+        tableName: "T2",
+        seats: 2,
+        fulfillment: "walk_in",
+      },
+    });
+    assert.equal(diningBag.statusCode, 201, diningBag.body);
+    assert.equal((diningBag.json().orders as unknown[]).length, 2);
+
+    const diningOps = await local.inject({
+      method: "GET",
+      url: `/public/tenants/${restaurantSub}/ops`,
+      headers: { "x-hotel-staff": ownerToken },
+    });
+    assert.ok(diningOps.json().analytics);
+    assert.ok(diningOps.json().analytics.foodRevenueMinor >= 4500);
+
+    const counterLogin = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${restaurantSub}/staff/login`,
+      payload: { email: "counter@harbor.example", password: "counter-pass", surface: "staff" },
+    });
+    const kitchenAsk = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${restaurantSub}/supplies`,
+      headers: { "x-hotel-staff": counterLogin.json().token as string },
+      payload: { item: "Pepper mix", quantity: 3, toDepartment: "kitchen" },
+    });
+    assert.equal(kitchenAsk.statusCode, 201, kitchenAsk.body);
+    const diningStore = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${restaurantSub}/staff`,
+      headers: { "x-hotel-staff": ownerToken },
+      payload: { name: "Store Sam", email: "store@harbor.example", password: "store-pass", role: "storekeeper" },
+    });
+    assert.equal(diningStore.statusCode, 201, diningStore.body);
+    const diningStoreLogin = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${restaurantSub}/staff/login`,
+      payload: { email: "store@harbor.example", password: "store-pass", surface: "staff" },
+    });
+    const diningStoreOps = await local.inject({
+      method: "GET",
+      url: `/public/tenants/${restaurantSub}/ops`,
+      headers: { "x-hotel-staff": diningStoreLogin.json().token as string },
+    });
+    assert.equal(diningStoreOps.json().desk, "storekeeper");
+    assert.ok((diningStoreOps.json().supplies as Array<{ item: string }>).some((row) => row.item === "Pepper mix"));
 
     const staffOrder = await local.inject({
       method: "POST",

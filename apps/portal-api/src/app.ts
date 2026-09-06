@@ -63,6 +63,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
 
   const app = Fastify({
     trustProxy: true,
+    bodyLimit: 2_000_000,
     logger:
       env.nodeEnv === "test"
         ? false

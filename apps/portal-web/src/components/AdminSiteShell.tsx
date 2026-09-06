@@ -7,7 +7,7 @@ function greetingFor(now = new Date()) {
   return "Good evening";
 }
 
-export type AdminNavId = "today" | "brand" | "catalog" | "staff" | "domain" | "activity";
+export type AdminNavId = "today" | "brand" | "catalog" | "staff" | "domain" | "activity" | "analytics";
 
 export function AdminSiteShell({
   brand,

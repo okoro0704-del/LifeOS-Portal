@@ -5,7 +5,7 @@ import { hashPassword, verifyPassword } from "../lib/password.js";
 import type { PortalInstall, PortalStore } from "../store.js";
 import { publicBranding, type StaffActivity } from "./tenant-site.js";
 
-export type HotelStaffRole = "owner" | "front_desk" | "restaurant" | "bar" | "housekeeping" | "rider";
+export type HotelStaffRole = "owner" | "front_desk" | "restaurant" | "bar" | "housekeeping" | "rider" | "kitchen" | "storekeeper";
 export type OrderFulfillment = "walk_in" | "takeaway";
 export type HotelHousekeep = "ready" | "occupied" | "dirty" | "cleaning";
 export type HotelOrderKind = "restaurant" | "bar" | "room_service";
@@ -33,6 +33,7 @@ export type HotelBooking = {
   totalMinor: number;
   status: HotelBookingStatus;
   createdAt: string;
+  note?: string;
 };
 
 export type HotelMenuItem = {
@@ -42,6 +43,7 @@ export type HotelMenuItem = {
   amountMinor: number;
   description: string;
   photoUrl?: string;
+  available?: boolean;
 };
 
 export type HotelOrder = {
@@ -59,6 +61,7 @@ export type HotelOrder = {
   address?: string;
   lat?: number;
   lng?: number;
+  note?: string;
   status: HotelOrderStatus;
   createdAt: string;
   placedBy?: "guest" | "staff";
@@ -81,7 +84,7 @@ export type HotelStaffSession = {
 
 export type HotelTable = { id: string; name: string; seats: number };
 
-export type SupplyDepartment = "stores" | "owner" | "housekeeping";
+export type SupplyDepartment = "stores" | "owner" | "housekeeping" | "kitchen";
 export type SupplyStatus = "requested" | "approved" | "fulfilled" | "rejected";
 export type SupplyRequest = {
   id: string;
@@ -281,8 +284,10 @@ function roomCounts(rooms: HotelRoom[]) {
 
 function visibleSupplies(staff: HotelStaff, supplies: SupplyRequest[]) {
   if (staff.role === "owner") return supplies;
+  if (staff.role === "storekeeper") return supplies.filter((row) => row.toDepartment === "stores" || row.toDepartment === "kitchen");
+  if (staff.role === "kitchen") return supplies.filter((row) => row.toDepartment === "kitchen" || row.fromRole === "restaurant" || row.fromRole === "kitchen");
   if (staff.role === "housekeeping") return supplies.filter((row) => row.toDepartment === "housekeeping");
-  return supplies.filter((row) => row.fromRole === staff.role || (staff.role === "restaurant" && row.toDepartment === "stores"));
+  return supplies.filter((row) => row.fromRole === staff.role);
 }
 
 export function hotelOpsPayload(install: PortalInstall, staff: HotelStaff, store?: PortalStore) {
@@ -301,15 +306,27 @@ export function hotelOpsPayload(install: PortalInstall, staff: HotelStaff, store
       supplies: [],
     };
   }
-  if (staff.role === "restaurant") {
+  if (staff.role === "restaurant" || staff.role === "kitchen") {
     return {
       staff: publicStaff(staff),
-      desk: "restaurant",
+      desk: staff.role,
       rooms: [],
       bookings: [],
       orders: sortOrders(row.orders.filter((item) => item.kind === "restaurant" || item.kind === "room_service")),
       menu: row.menu.filter((item) => item.kind === "restaurant" || item.kind === "room_service"),
       tables: row.tables,
+      supplies,
+    };
+  }
+  if (staff.role === "storekeeper") {
+    return {
+      staff: publicStaff(staff),
+      desk: "storekeeper",
+      rooms: [],
+      bookings: [],
+      orders: [],
+      menu: [],
+      tables: [],
       supplies,
     };
   }
@@ -364,6 +381,38 @@ export function hotelOpsPayload(install: PortalInstall, staff: HotelStaff, store
     activity: row.activity.slice(0, 80),
     roomCounts: roomCounts(row.rooms),
     supplies: row.supplies ?? [],
+    analytics: hotelAnalytics(row),
+  };
+}
+
+export function hotelAnalytics(row: HotelProperty) {
+  const counts = roomCounts(row.rooms);
+  const occupancyPct = counts.total ? Math.round((counts.occupied / counts.total) * 100) : 0;
+  const roomRevenueMinor = row.bookings.reduce((sum, item) => sum + item.totalMinor, 0);
+  const foodRevenueMinor = row.orders
+    .filter((item) => item.kind === "restaurant" || item.kind === "room_service")
+    .reduce((sum, item) => sum + item.amountMinor, 0);
+  const drinkRevenueMinor = row.orders.filter((item) => item.kind === "bar").reduce((sum, item) => sum + item.amountMinor, 0);
+  const today = new Date().toISOString().slice(0, 10);
+  return {
+    occupancyPct,
+    roomsReady: counts.ready,
+    roomsOccupied: counts.occupied,
+    roomsDirty: counts.dirty,
+    roomsTotal: counts.total,
+    arrivals: row.bookings.filter((item) => item.checkIn === today || item.status === "confirmed").length,
+    inHouse: row.bookings.filter((item) => item.status === "checked_in").length,
+    departures: row.bookings.filter((item) => item.checkOut === today || item.status === "checked_out").length,
+    stays: row.bookings.length,
+    roomRevenueMinor,
+    foodRevenueMinor,
+    drinkRevenueMinor,
+    openTickets: row.orders.filter((item) => item.status !== "delivered").length,
+    deliveredTickets: row.orders.filter((item) => item.status === "delivered").length,
+    walkInOrders: row.orders.filter((item) => item.fulfillment !== "takeaway").length,
+    takeawayOrders: row.orders.filter((item) => item.fulfillment === "takeaway").length,
+    supplyOpen: (row.supplies ?? []).filter((item) => item.status === "requested" || item.status === "approved").length,
+    adrMinor: counts.occupied ? Math.round(roomRevenueMinor / Math.max(1, row.bookings.length)) : 0,
   };
 }
 
@@ -387,7 +436,7 @@ function logHotelActivity(
 
 export function bookHotelRoom(
   install: PortalInstall,
-  input: { roomId: string; guestName: string; guestEmail: string; checkIn: string; checkOut: string },
+  input: { roomId: string; guestName: string; guestEmail: string; checkIn: string; checkOut: string; note?: string },
   store?: PortalStore,
 ) {
   const row = requireProperty(install, store);
@@ -408,12 +457,28 @@ export function bookHotelRoom(
     totalMinor: room.nightlyMinor * nights,
     status: "confirmed",
     createdAt: new Date().toISOString(),
+    note: input.note,
   };
   room.housekeep = "occupied";
   row.bookings.unshift(booking);
   logHotelActivity(row, { name: booking.guestName, role: "guest" }, "booking.create", `${booking.roomName} · ${booking.checkIn} → ${booking.checkOut}`);
   save(store, install, row);
   return booking;
+}
+
+export function bookHotelRooms(
+  install: PortalInstall,
+  input: { roomIds: string[]; guestName: string; guestEmail: string; checkIn: string; checkOut: string; note?: string },
+  store?: PortalStore,
+) {
+  const ids = [...new Set(input.roomIds.map((id) => id.trim()).filter(Boolean))];
+  if (!ids.length) throw new HttpError("Pick at least one room.", 400, "invalid_body");
+  const row = requireProperty(install, store);
+  for (const roomId of ids) {
+    const room = row.rooms.find((item) => item.id === roomId);
+    if (!room || room.housekeep !== "ready") throw new HttpError(`${room?.name ?? "A room"} is not available.`, 409, "room_unavailable");
+  }
+  return ids.map((roomId) => bookHotelRoom(install, { ...input, roomId }, store));
 }
 
 export function placeHotelOrder(
@@ -431,6 +496,7 @@ export function placeHotelOrder(
     address?: string;
     lat?: number;
     lng?: number;
+    note?: string;
     placedBy?: "guest" | "staff";
     actor?: HotelStaff;
   },
@@ -439,6 +505,7 @@ export function placeHotelOrder(
   const row = requireProperty(install, store);
   const quantity = Math.max(1, Math.min(12, input.quantity ?? 1));
   const menuItem = row.menu.find((item) => item.name === input.item.trim());
+  if (menuItem && menuItem.available === false) throw new HttpError(`${menuItem.name} is 86'd tonight.`, 409, "item_unavailable");
   const kind = input.kind ?? menuItem?.kind ?? "room_service";
   const fulfillment =
     input.fulfillment ?? (input.address || input.lat != null ? "takeaway" : "walk_in");
@@ -463,6 +530,7 @@ export function placeHotelOrder(
     address: input.address,
     lat: input.lat,
     lng: input.lng,
+    note: input.note,
     status: "received",
     createdAt: new Date().toISOString(),
     placedBy: input.placedBy ?? (input.actor ? "staff" : "guest"),
@@ -658,7 +726,7 @@ export function upsertHotelRoom(
 
 export function upsertHotelMenuItem(
   install: PortalInstall,
-  input: { id?: string; name: string; kind: HotelOrderKind; amountMinor: number; description: string; photoUrl?: string },
+  input: { id?: string; name: string; kind: HotelOrderKind; amountMinor: number; description: string; photoUrl?: string; available?: boolean },
   actor: HotelStaff,
   store?: PortalStore,
 ) {
@@ -671,6 +739,7 @@ export function upsertHotelMenuItem(
     item.amountMinor = input.amountMinor;
     item.description = input.description.trim();
     if (input.photoUrl !== undefined) item.photoUrl = input.photoUrl;
+    if (input.available !== undefined) item.available = input.available;
     logHotelActivity(row, actor, "menu.update", item.name);
     save(store, install, row);
     return item;
@@ -682,6 +751,7 @@ export function upsertHotelMenuItem(
     amountMinor: input.amountMinor,
     description: input.description.trim(),
     photoUrl: input.photoUrl,
+    available: input.available,
   };
   row.menu.unshift(item);
   logHotelActivity(row, actor, "menu.create", item.name);
@@ -695,7 +765,7 @@ export function createHotelSupply(
   input: { item: string; quantity?: number; note?: string; toDepartment?: SupplyDepartment },
   store?: PortalStore,
 ) {
-  if (actor.role === "front_desk" || actor.role === "rider") {
+  if (actor.role === "front_desk" || actor.role === "rider" || actor.role === "storekeeper") {
     throw new HttpError("This dashboard is not assigned to you.", 403, "forbidden");
   }
   const row = requireProperty(install, store);
@@ -706,7 +776,7 @@ export function createHotelSupply(
     note: input.note?.trim() ?? "",
     fromRole: actor.role,
     fromStaffName: actor.name,
-    toDepartment: input.toDepartment ?? (actor.role === "housekeeping" ? "housekeeping" : "stores"),
+    toDepartment: input.toDepartment ?? (actor.role === "housekeeping" ? "housekeeping" : "kitchen"),
     status: "requested",
     createdAt: new Date().toISOString(),
   };
@@ -727,7 +797,11 @@ export function updateHotelSupply(
   const row = requireProperty(install, store);
   const request = (row.supplies ?? []).find((item) => item.id === requestId);
   if (!request) throw new HttpError("Supply request not found.", 404, "not_found");
-  if (actor.role !== "owner" && !(actor.role === "housekeeping" && request.toDepartment === "housekeeping")) {
+  if (
+    actor.role !== "owner" &&
+    actor.role !== "storekeeper" &&
+    !(actor.role === "housekeeping" && request.toDepartment === "housekeeping")
+  ) {
     throw new HttpError("This dashboard is not assigned to you.", 403, "forbidden");
   }
   request.status = status;

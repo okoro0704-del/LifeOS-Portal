@@ -209,7 +209,9 @@ function OwnerDesk({
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [menu, setMenu] = useState<CatalogItem[]>([]);
   const [supplies, setSupplies] = useState<Supply[]>([]);
+  const [analytics, setAnalytics] = useState<Record<string, number> | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [domain, setDomain] = useState("");
   const [handoff, setHandoff] = useState<string | null>(null);
@@ -229,7 +231,9 @@ function OwnerDesk({
     setBookings(body.bookings ?? []);
     setOrders(body.orders ?? []);
     setRooms(body.rooms ?? []);
+    setMenu(body.menu ?? []);
     setSupplies(body.supplies ?? []);
+    setAnalytics(body.analytics ?? null);
   }
 
   useEffect(() => {
@@ -284,6 +288,7 @@ function OwnerDesk({
         { id: "staff", label: "Staff" },
         { id: "domain", label: "Domain" },
         { id: "activity", label: "Activity" },
+        { id: "analytics", label: "Analytics" },
       ]}
       active={panel}
       onNav={setPanel}
@@ -486,7 +491,36 @@ function OwnerDesk({
       </form>
       ) : null}
 
-      {panel === "catalog" ? <CatalogEditor subdomain={subdomain} headers={headers} hotel={hotel} /> : null}
+      {panel === "catalog" ? (
+        <CatalogEditor
+          subdomain={subdomain}
+          headers={headers}
+          hotel={hotel}
+          rooms={rooms}
+          menu={menu}
+          onSaved={() => void load()}
+        />
+      ) : null}
+
+      {panel === "analytics" && analytics ? (
+        <section className="today-hub" data-testid="admin-analytics">
+          <p className="eyebrow">House analytics</p>
+          <h3>What the house is doing</h3>
+          <div className="today-stats">
+            {hotel ? <span>{analytics.occupancyPct}% occupancy</span> : null}
+            {hotel ? <span>{analytics.roomsReady} ready rooms</span> : null}
+            {hotel ? <span>{analytics.inHouse} in house</span> : null}
+            {hotel ? <span>${((analytics.roomRevenueMinor ?? 0) / 100).toFixed(0)} room revenue</span> : null}
+            <span>${((analytics.foodRevenueMinor ?? 0) / 100).toFixed(0)} food</span>
+            <span>${((analytics.drinkRevenueMinor ?? 0) / 100).toFixed(0)} drinks</span>
+            <span>{analytics.openTickets} open tickets</span>
+            <span>{analytics.walkInOrders} walk-in</span>
+            <span>{analytics.takeawayOrders} takeaway</span>
+            <span>{analytics.supplyOpen} store requests</span>
+          </div>
+          <p className="muted">Occupancy, covers, and tickets update from live front desk and restaurant work.</p>
+        </section>
+      ) : null}
 
       {panel === "staff" ? (
       <>
@@ -537,17 +571,21 @@ function OwnerDesk({
                 <option value="bar">Bar</option>
                 <option value="housekeeping">Housekeeping</option>
                 <option value="rider">Rider</option>
+                <option value="kitchen">Kitchen</option>
+                <option value="storekeeper">Storekeeper</option>
               </>
             ) : verticalId === "local_food" ? (
               <>
                 <option value="kitchen">Kitchen</option>
                 <option value="rider">Rider</option>
+                <option value="storekeeper">Storekeeper</option>
               </>
             ) : (
               <>
                 <option value="kitchen">Kitchen</option>
                 <option value="counter">Counter</option>
                 <option value="rider">Rider</option>
+                <option value="storekeeper">Storekeeper</option>
               </>
             )}
           </select>
@@ -643,59 +681,86 @@ function CatalogEditor({
   subdomain,
   headers,
   hotel,
+  rooms,
+  menu,
+  onSaved,
 }: {
   subdomain: string;
   headers: Record<string, string>;
   hotel: boolean;
+  rooms: Room[];
+  menu: CatalogItem[];
+  onSaved: () => void;
 }) {
   const [name, setName] = useState("");
-  const [kind, setKind] = useState(hotel ? "restaurant" : "food");
+  const [kind, setKind] = useState(hotel ? "room" : "food");
   const [amount, setAmount] = useState("25");
   const [beds, setBeds] = useState("1 king");
   const [photoUrl, setPhotoUrl] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function priceMinor() {
+    const value = Number(String(amount).replace(/[^0-9.]/g, ""));
+    return Math.max(1, Math.round(value * 100));
+  }
 
   async function addItem(event: FormEvent) {
     event.preventDefault();
-    await readJson(
-      await fetch(`${portalApiBase}/public/tenants/${encodeURIComponent(subdomain)}/catalog/items`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          name,
-          kind,
-          amountMinor: Math.round(Number(amount) * 100),
-          description: name,
-          photoUrl: photoUrl || undefined,
-        } satisfies CatalogItem),
-      }),
-    );
-    setNotice("Catalog item saved.");
-    setName("");
+    setError(null);
+    try {
+      await readJson(
+        await fetch(`${portalApiBase}/public/tenants/${encodeURIComponent(subdomain)}/catalog/items`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            name,
+            kind,
+            amountMinor: priceMinor(),
+            description: name,
+            photoUrl: photoUrl || undefined,
+          }),
+        }),
+      );
+      setNotice(`${name} is on the menu.`);
+      setName("");
+      setPhotoUrl("");
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not add to catalog");
+    }
   }
 
   async function addRoom(event: FormEvent) {
     event.preventDefault();
-    await readJson(
-      await fetch(`${portalApiBase}/public/tenants/${encodeURIComponent(subdomain)}/catalog/rooms`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          name,
-          beds,
-          nightlyMinor: Math.round(Number(amount) * 100),
-          photoUrl: photoUrl || undefined,
-        } satisfies Room),
-      }),
-    );
-    setNotice("Room saved.");
-    setName("");
+    setError(null);
+    try {
+      await readJson(
+        await fetch(`${portalApiBase}/public/tenants/${encodeURIComponent(subdomain)}/catalog/rooms`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            name,
+            beds,
+            nightlyMinor: priceMinor(),
+            photoUrl: photoUrl || undefined,
+          }),
+        }),
+      );
+      setNotice(`${name} is on the room board.`);
+      setName("");
+      setPhotoUrl("");
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not add room");
+    }
   }
 
   return (
     <form className="form tap-form" onSubmit={(e) => void (hotel && kind === "room" ? addRoom(e) : addItem(e))}>
       <h3>Products, food, and rooms</h3>
       {notice ? <p className="banner-ok">{notice}</p> : null}
+      {error ? <p className="banner-error">{error}</p> : null}
       <label>
         Name
         <input value={name} onChange={(e) => setName(e.target.value)} required />
@@ -742,6 +807,28 @@ function CatalogEditor({
       <button className="btn btn-primary" type="submit">
         Add to catalog
       </button>
+      <h4>On the board</h4>
+      <ul className="list" data-testid="catalog-board">
+        {hotel
+          ? rooms.map((room) => (
+              <li key={room.id ?? room.name}>
+                <strong>{room.name}</strong>
+                <span className="muted">
+                  Room · {room.beds} · ${((room.nightlyMinor ?? 0) / 100).toFixed(0)}
+                </span>
+              </li>
+            ))
+          : null}
+        {menu.map((item) => (
+          <li key={item.id ?? item.name}>
+            <strong>{item.name}</strong>
+            <span className="muted">
+              {item.kind.replaceAll("_", " ")} · ${((item.amountMinor ?? 0) / 100).toFixed(0)}
+            </span>
+          </li>
+        ))}
+        {!hotel && menu.length === 0 ? <li className="muted">Nothing in the catalog yet.</li> : null}
+      </ul>
     </form>
   );
 }
