@@ -296,6 +296,71 @@ test("guest hotel install works when TrustID is off and distributor is remote", 
     });
     assert.equal(created.statusCode, 201, created.body);
 
+    const deskLogin = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${subdomain}/staff/login`,
+      payload: { email: "front@guest-hotel.example", password: "desk-pass", surface: "staff" },
+    });
+    assert.equal(deskLogin.statusCode, 200, deskLogin.body);
+    const deskOps = await local.inject({
+      method: "GET",
+      url: `/public/tenants/${subdomain}/ops`,
+      headers: { "x-hotel-staff": deskLogin.json().token as string },
+    });
+    assert.equal(deskOps.statusCode, 200, deskOps.body);
+    assert.equal(deskOps.json().desk, "front_desk");
+    assert.ok((deskOps.json().rooms as unknown[]).length >= 4);
+    assert.ok((deskOps.json().bookings as unknown[]).length >= 1);
+    assert.equal((deskOps.json().orders as unknown[]).length, 0);
+    assert.equal((deskOps.json().menu as unknown[]).length, 0);
+    assert.ok(deskOps.json().roomCounts.ready >= 0);
+
+    const restaurantStaff = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${subdomain}/staff`,
+      headers: { "x-hotel-staff": ownerToken },
+      payload: {
+        name: "Rita Kitchen",
+        email: "resto@guest-hotel.example",
+        password: "resto-pass",
+        role: "restaurant",
+      },
+    });
+    assert.equal(restaurantStaff.statusCode, 201, restaurantStaff.body);
+    const restoLogin = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${subdomain}/staff/login`,
+      payload: { email: "resto@guest-hotel.example", password: "resto-pass", surface: "staff" },
+    });
+    const restoToken = restoLogin.json().token as string;
+    const restoOps = await local.inject({
+      method: "GET",
+      url: `/public/tenants/${subdomain}/ops`,
+      headers: { "x-hotel-staff": restoToken },
+    });
+    assert.equal(restoOps.json().desk, "restaurant");
+    assert.equal((restoOps.json().rooms as unknown[]).length, 0);
+    assert.equal((restoOps.json().bookings as unknown[]).length, 0);
+    assert.ok((restoOps.json().menu as unknown[]).length >= 1);
+    assert.ok((restoOps.json().orders as Array<{ kind: string }>).every((row) => row.kind === "restaurant" || row.kind === "room_service"));
+
+    const supply = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${subdomain}/supplies`,
+      headers: { "x-hotel-staff": restoToken },
+      payload: { item: "Rice 25kg", quantity: 2, note: "Dinner service", toDepartment: "stores" },
+    });
+    assert.equal(supply.statusCode, 201, supply.body);
+    assert.equal(supply.json().supply.toDepartment, "stores");
+
+    const deskSupply = await local.inject({
+      method: "POST",
+      url: `/public/tenants/${subdomain}/supplies`,
+      headers: { "x-hotel-staff": deskLogin.json().token as string },
+      payload: { item: "Rice 25kg", quantity: 1 },
+    });
+    assert.equal(deskSupply.statusCode, 403);
+
     const housekeeper = await local.inject({
       method: "POST",
       url: `/public/tenants/${subdomain}/staff`,

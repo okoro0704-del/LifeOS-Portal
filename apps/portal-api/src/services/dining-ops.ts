@@ -49,12 +49,25 @@ export type DiningStaff = {
   createdAt: string;
 };
 
+type DiningSupply = {
+  id: string;
+  item: string;
+  quantity: number;
+  note: string;
+  fromRole: string;
+  fromStaffName: string;
+  toDepartment: "stores" | "owner" | "housekeeping";
+  status: "requested" | "approved" | "fulfilled" | "rejected";
+  createdAt: string;
+};
+
 type DiningProperty = {
   subdomain: string;
   verticalId: string;
   menu: DiningMenuItem[];
   tables: DiningTable[];
   orders: DiningOrder[];
+  supplies: DiningSupply[];
   staff: DiningStaff[];
   sessions: Array<{ tokenHash: string; staffId: string; expiresAt: string }>;
   activity: StaffActivity[];
@@ -103,6 +116,7 @@ function emptyProperty(install: PortalInstall, seed?: { email?: string; name?: s
       ? ["Pickup 1", "Pickup 2"].map((name, i) => ({ id: newId("tbl"), name, seats: i === 0 ? 2 : 4 }))
       : ["T1", "T2", "T3", "T4", "T5", "T6"].map((name, i) => ({ id: newId("tbl"), name, seats: i < 2 ? 2 : i < 4 ? 4 : 6 })),
     orders: [],
+    supplies: [],
     staff: [
       {
         id: newId("dst"),
@@ -137,6 +151,7 @@ export function seedDiningProperty(
         subdomain: slug,
         activity: stored.activity ?? [],
         tables: stored.tables?.length ? stored.tables : emptyProperty(install, seed).tables,
+        supplies: stored.supplies ?? [],
       }
     : emptyProperty(install, seed);
   save(store, install, row);
@@ -184,21 +199,28 @@ export function diningStayPayload(install: PortalInstall, guestEmail: string, st
 
 export function diningOpsPayload(install: PortalInstall, staff: DiningStaff, store?: PortalStore) {
   const row = requireProperty(install, store);
-  const orders =
+  const rank: Record<string, number> = { received: 0, preparing: 1, ready: 2, delivered: 3 };
+  const filtered =
     staff.role === "kitchen"
       ? row.orders.filter((item) => item.kind === "food")
       : staff.role === "rider"
         ? row.orders.filter((item) => item.fulfillment === "takeaway" && (item.status === "ready" || item.status === "delivered"))
         : row.orders;
+  const orders = [...filtered].sort(
+    (a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9) || Date.parse(a.createdAt) - Date.parse(b.createdAt),
+  );
+  const supplies = (row.supplies ?? []).filter((item) => staff.role === "owner" || item.fromRole === staff.role);
   return {
     staff: publicStaff(staff),
+    desk: staff.role,
     orders,
-    menu: row.menu,
-    tables: row.tables,
+    menu: staff.role === "rider" ? [] : staff.role === "kitchen" ? row.menu.filter((item) => item.kind === "food") : row.menu,
+    tables: staff.role === "rider" ? [] : row.tables,
     team: staff.role === "owner" ? row.staff.map(publicStaff) : undefined,
     activity: staff.role === "owner" ? (row.activity ?? []).slice(0, 80) : undefined,
     bookings: [],
     rooms: [],
+    supplies,
   };
 }
 
@@ -391,6 +413,49 @@ export function upsertDiningMenuItem(
   logDiningActivity(row, actor, "menu.create", item.name);
   save(store, install, row);
   return item;
+}
+
+export function createDiningSupply(
+  install: PortalInstall,
+  actor: DiningStaff,
+  input: { item: string; quantity?: number; note?: string; toDepartment?: DiningSupply["toDepartment"] },
+  store?: PortalStore,
+) {
+  if (actor.role === "rider") throw new HttpError("This dashboard is not assigned to you.", 403, "forbidden");
+  const row = requireProperty(install, store);
+  const request: DiningSupply = {
+    id: newId("sup"),
+    item: input.item.trim(),
+    quantity: Math.max(1, Math.min(200, input.quantity ?? 1)),
+    note: input.note?.trim() ?? "",
+    fromRole: actor.role,
+    fromStaffName: actor.name,
+    toDepartment: input.toDepartment ?? "stores",
+    status: "requested",
+    createdAt: new Date().toISOString(),
+  };
+  row.supplies = row.supplies ?? [];
+  row.supplies.unshift(request);
+  logDiningActivity(row, actor, "supply.request", `${request.item} × ${request.quantity} → ${request.toDepartment}`);
+  save(store, install, row);
+  return request;
+}
+
+export function updateDiningSupply(
+  install: PortalInstall,
+  actor: DiningStaff,
+  requestId: string,
+  status: DiningSupply["status"],
+  store?: PortalStore,
+) {
+  if (actor.role !== "owner") throw new HttpError("This dashboard is not assigned to you.", 403, "forbidden");
+  const row = requireProperty(install, store);
+  const request = (row.supplies ?? []).find((item) => item.id === requestId);
+  if (!request) throw new HttpError("Supply request not found.", 404, "not_found");
+  request.status = status;
+  logDiningActivity(row, actor, `supply.${status}`, `${request.item} × ${request.quantity}`);
+  save(store, install, row);
+  return request;
 }
 
 export function assertDiningRole(staff: DiningStaff, roles: DiningStaffRole[]) {

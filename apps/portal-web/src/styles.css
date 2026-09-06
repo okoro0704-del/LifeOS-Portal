@@ -968,6 +968,15 @@ fieldset {
   border: 0;
   border-radius: 14px;
 }
+.staff-desk h2 {
+  margin: 0 0 0.8rem;
+}
+.staff-desk .cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.7rem;
+  margin-bottom: 1.2rem;
+}
 .site-strip {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

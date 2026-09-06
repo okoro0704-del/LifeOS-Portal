@@ -81,6 +81,20 @@ export type HotelStaffSession = {
 
 export type HotelTable = { id: string; name: string; seats: number };
 
+export type SupplyDepartment = "stores" | "owner" | "housekeeping";
+export type SupplyStatus = "requested" | "approved" | "fulfilled" | "rejected";
+export type SupplyRequest = {
+  id: string;
+  item: string;
+  quantity: number;
+  note: string;
+  fromRole: string;
+  fromStaffName: string;
+  toDepartment: SupplyDepartment;
+  status: SupplyStatus;
+  createdAt: string;
+};
+
 export type HotelProperty = {
   subdomain: string;
   rooms: HotelRoom[];
@@ -88,6 +102,7 @@ export type HotelProperty = {
   orders: HotelOrder[];
   menu: HotelMenuItem[];
   tables: HotelTable[];
+  supplies: SupplyRequest[];
   staff: HotelStaff[];
   sessions: HotelStaffSession[];
   activity: StaffActivity[];
@@ -159,6 +174,7 @@ function emptyProperty(slug: string, seed?: HotelOwnerSeed): HotelProperty {
     orders: [],
     menu: SEED_MENU.map((item) => ({ ...item, id: newId("mn") })),
     tables: seedTables(),
+    supplies: [],
     staff: [
       {
         id: newId("hst"),
@@ -188,6 +204,7 @@ export function seedHotelProperty(install: PortalInstall, store?: PortalStore, s
           orders: stored.orders ?? [],
           menu: stored.menu?.length ? stored.menu : SEED_MENU.map((item) => ({ ...item, id: newId("mn") })),
           tables: stored.tables?.length ? stored.tables : seedTables(),
+          supplies: stored.supplies ?? [],
           staff: stored.staff?.length ? stored.staff : emptyProperty(slug, seed).staff,
           sessions: stored.sessions ?? [],
           activity: stored.activity ?? [],
@@ -245,25 +262,108 @@ export function guestStayPayload(install: PortalInstall, guestEmail: string, sto
   };
 }
 
+function sortOrders<T extends { status: string; createdAt: string }>(orders: T[]) {
+  const rank: Record<string, number> = { received: 0, preparing: 1, ready: 2, delivered: 3 };
+  return [...orders].sort(
+    (a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9) || Date.parse(a.createdAt) - Date.parse(b.createdAt),
+  );
+}
+
+function roomCounts(rooms: HotelRoom[]) {
+  return {
+    ready: rooms.filter((room) => room.housekeep === "ready").length,
+    occupied: rooms.filter((room) => room.housekeep === "occupied").length,
+    dirty: rooms.filter((room) => room.housekeep === "dirty").length,
+    cleaning: rooms.filter((room) => room.housekeep === "cleaning").length,
+    total: rooms.length,
+  };
+}
+
+function visibleSupplies(staff: HotelStaff, supplies: SupplyRequest[]) {
+  if (staff.role === "owner") return supplies;
+  if (staff.role === "housekeeping") return supplies.filter((row) => row.toDepartment === "housekeeping");
+  return supplies.filter((row) => row.fromRole === staff.role || (staff.role === "restaurant" && row.toDepartment === "stores"));
+}
+
 export function hotelOpsPayload(install: PortalInstall, staff: HotelStaff, store?: PortalStore) {
   const row = requireProperty(install, store);
-  const orders =
-    staff.role === "restaurant"
-      ? row.orders.filter((item) => item.kind === "restaurant" || item.kind === "room_service")
-      : staff.role === "bar"
-        ? row.orders.filter((item) => item.kind === "bar")
-        : staff.role === "rider"
-          ? row.orders.filter((item) => item.fulfillment === "takeaway" && (item.status === "ready" || item.status === "delivered"))
-          : row.orders;
+  const supplies = visibleSupplies(staff, row.supplies ?? []);
+  if (staff.role === "front_desk") {
+    return {
+      staff: publicStaff(staff),
+      desk: "front_desk",
+      rooms: row.rooms,
+      bookings: row.bookings,
+      roomCounts: roomCounts(row.rooms),
+      orders: [],
+      menu: [],
+      tables: [],
+      supplies: [],
+    };
+  }
+  if (staff.role === "restaurant") {
+    return {
+      staff: publicStaff(staff),
+      desk: "restaurant",
+      rooms: [],
+      bookings: [],
+      orders: sortOrders(row.orders.filter((item) => item.kind === "restaurant" || item.kind === "room_service")),
+      menu: row.menu.filter((item) => item.kind === "restaurant" || item.kind === "room_service"),
+      tables: row.tables,
+      supplies,
+    };
+  }
+  if (staff.role === "bar") {
+    return {
+      staff: publicStaff(staff),
+      desk: "bar",
+      rooms: [],
+      bookings: [],
+      orders: sortOrders(row.orders.filter((item) => item.kind === "bar")),
+      menu: row.menu.filter((item) => item.kind === "bar"),
+      tables: row.tables,
+      supplies,
+    };
+  }
+  if (staff.role === "housekeeping") {
+    return {
+      staff: publicStaff(staff),
+      desk: "housekeeping",
+      rooms: row.rooms,
+      bookings: [],
+      roomCounts: roomCounts(row.rooms),
+      orders: [],
+      menu: [],
+      tables: [],
+      supplies,
+    };
+  }
+  if (staff.role === "rider") {
+    return {
+      staff: publicStaff(staff),
+      desk: "rider",
+      rooms: [],
+      bookings: [],
+      orders: sortOrders(
+        row.orders.filter((item) => item.fulfillment === "takeaway" && (item.status === "ready" || item.status === "delivered")),
+      ),
+      menu: [],
+      tables: [],
+      supplies: [],
+    };
+  }
   return {
     staff: publicStaff(staff),
+    desk: "owner",
     rooms: row.rooms,
     bookings: row.bookings,
-    orders,
+    orders: sortOrders(row.orders),
     menu: row.menu,
     tables: row.tables,
-    team: staff.role === "owner" ? row.staff.map(publicStaff) : undefined,
-    activity: staff.role === "owner" ? row.activity.slice(0, 80) : undefined,
+    team: row.staff.map(publicStaff),
+    activity: row.activity.slice(0, 80),
+    roomCounts: roomCounts(row.rooms),
+    supplies: row.supplies ?? [],
   };
 }
 
@@ -587,6 +687,53 @@ export function upsertHotelMenuItem(
   logHotelActivity(row, actor, "menu.create", item.name);
   save(store, install, row);
   return item;
+}
+
+export function createHotelSupply(
+  install: PortalInstall,
+  actor: HotelStaff,
+  input: { item: string; quantity?: number; note?: string; toDepartment?: SupplyDepartment },
+  store?: PortalStore,
+) {
+  if (actor.role === "front_desk" || actor.role === "rider") {
+    throw new HttpError("This dashboard is not assigned to you.", 403, "forbidden");
+  }
+  const row = requireProperty(install, store);
+  const request: SupplyRequest = {
+    id: newId("sup"),
+    item: input.item.trim(),
+    quantity: Math.max(1, Math.min(200, input.quantity ?? 1)),
+    note: input.note?.trim() ?? "",
+    fromRole: actor.role,
+    fromStaffName: actor.name,
+    toDepartment: input.toDepartment ?? (actor.role === "housekeeping" ? "housekeeping" : "stores"),
+    status: "requested",
+    createdAt: new Date().toISOString(),
+  };
+  row.supplies = row.supplies ?? [];
+  row.supplies.unshift(request);
+  logHotelActivity(row, actor, "supply.request", `${request.item} × ${request.quantity} → ${request.toDepartment}`);
+  save(store, install, row);
+  return request;
+}
+
+export function updateHotelSupply(
+  install: PortalInstall,
+  actor: HotelStaff,
+  requestId: string,
+  status: SupplyStatus,
+  store?: PortalStore,
+) {
+  const row = requireProperty(install, store);
+  const request = (row.supplies ?? []).find((item) => item.id === requestId);
+  if (!request) throw new HttpError("Supply request not found.", 404, "not_found");
+  if (actor.role !== "owner" && !(actor.role === "housekeeping" && request.toDepartment === "housekeeping")) {
+    throw new HttpError("This dashboard is not assigned to you.", 403, "forbidden");
+  }
+  request.status = status;
+  logHotelActivity(row, actor, `supply.${status}`, `${request.item} × ${request.quantity}`);
+  save(store, install, row);
+  return request;
 }
 
 export function assertStaffRole(staff: HotelStaff, roles: HotelStaffRole[]) {

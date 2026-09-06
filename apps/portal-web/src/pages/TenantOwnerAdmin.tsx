@@ -24,6 +24,15 @@ type Activity = { id: string; at: string; staffName: string; role: string; actio
 type CatalogItem = { id?: string; name: string; kind: string; amountMinor: number; description?: string; photoUrl?: string };
 type Room = { id?: string; name: string; beds: string; nightlyMinor: number; photoUrl?: string; housekeep?: string };
 type Booking = { id: string; roomName: string; guestName: string; checkIn: string; checkOut: string; status: string; totalMinor: number };
+type Supply = {
+  id: string;
+  item: string;
+  quantity: number;
+  note: string;
+  fromStaffName: string;
+  toDepartment: string;
+  status: string;
+};
 type Order = {
   id: string;
   item: string;
@@ -200,6 +209,7 @@ function OwnerDesk({
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [supplies, setSupplies] = useState<Supply[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [domain, setDomain] = useState("");
   const [handoff, setHandoff] = useState<string | null>(null);
@@ -219,6 +229,7 @@ function OwnerDesk({
     setBookings(body.bookings ?? []);
     setOrders(body.orders ?? []);
     setRooms(body.rooms ?? []);
+    setSupplies(body.supplies ?? []);
   }
 
   useEffect(() => {
@@ -290,6 +301,7 @@ function OwnerDesk({
           {hotel ? <span>{inHouse} in house</span> : null}
           <span>{openTickets} open tickets</span>
           {hotel ? <span>{dirtyRooms} rooms to turn</span> : null}
+          <span>{supplies.filter((row) => row.status === "requested").length} store requests</span>
         </div>
         {hotel ? (
           <>
@@ -344,6 +356,31 @@ function OwnerDesk({
                   Done
                 </button>
               </span>
+            </li>
+          ))}
+        </ul>
+        <h4>Store requests</h4>
+        <ul className="list">
+          {supplies.length === 0 ? <li className="muted">No foodstuff requests from the restaurant.</li> : null}
+          {supplies.map((row) => (
+            <li key={row.id}>
+              <strong>
+                {row.item} × {row.quantity}
+              </strong>
+              <span className="muted">
+                {row.fromStaffName} → {row.toDepartment} · {row.status}
+                {row.note ? ` · ${row.note}` : ""}
+              </span>
+              {row.status === "requested" || row.status === "approved" ? (
+                <span className="deliverable-links">
+                  <button className="btn btn-ghost" type="button" onClick={() => void post(`/supplies/${row.id}/status`, { status: "approved" })}>
+                    Approve
+                  </button>
+                  <button className="btn btn-primary" type="button" onClick={() => void post(`/supplies/${row.id}/status`, { status: "fulfilled" })}>
+                    Fulfilled
+                  </button>
+                </span>
+              ) : null}
             </li>
           ))}
         </ul>

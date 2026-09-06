@@ -7,6 +7,7 @@ import { findInstallByHost, updateTenantSite } from "../services/tenant-site.js"
 import {
   assertDiningRole,
   createDiningStaff,
+  createDiningSupply,
   diningAppPayload,
   diningOpsPayload,
   diningStaffFromToken,
@@ -15,12 +16,14 @@ import {
   loginDiningStaff,
   placeDiningOrder,
   updateDiningOrderStatus,
+  updateDiningSupply,
   upsertDiningMenuItem,
 } from "../services/dining-ops.js";
 import {
   assertStaffRole,
   bookHotelRoom,
   createHotelStaff,
+  createHotelSupply,
   guestSelfCheck,
   guestStayPayload,
   hotelAppPayload,
@@ -30,6 +33,7 @@ import {
   staffFromToken,
   updateHotelBookingStatus,
   updateHotelOrderStatus,
+  updateHotelSupply,
   updateRoomHousekeep,
   upsertHotelMenuItem,
   upsertHotelRoom,
@@ -465,6 +469,47 @@ export async function registerTenantAppRoutes(
         throw new HttpError("This dashboard is not assigned to you.", 403, "forbidden");
       }
       return { order: updateHotelOrderStatus(row, orderId, body.status, store) };
+    } catch (err) {
+      return sendHotelError(reply, err);
+    }
+  });
+
+  app.post("/public/tenants/:subdomain/supplies", async (req, reply) => {
+    try {
+      const { subdomain } = req.params as { subdomain: string };
+      const ready = readyInstall(subdomain);
+      const body = z
+        .object({
+          item: z.string().min(1),
+          quantity: z.number().int().positive().max(200).optional(),
+          note: z.string().max(280).optional(),
+          toDepartment: z.enum(["stores", "owner", "housekeeping"]).optional(),
+        })
+        .parse(req.body);
+      if (isDiningVertical(ready.verticalId)) {
+        const actor = diningStaffFromToken(ready, staffToken(req), store);
+        return reply.code(201).send({ supply: createDiningSupply(ready, actor, body, store) });
+      }
+      const hotel = hotelInstall(subdomain);
+      const actor = staffFromToken(hotel, staffToken(req), store);
+      return reply.code(201).send({ supply: createHotelSupply(hotel, actor, body, store) });
+    } catch (err) {
+      return sendHotelError(reply, err);
+    }
+  });
+
+  app.post("/public/tenants/:subdomain/supplies/:requestId/status", async (req, reply) => {
+    try {
+      const { subdomain, requestId } = req.params as { subdomain: string; requestId: string };
+      const ready = readyInstall(subdomain);
+      const body = z.object({ status: z.enum(["requested", "approved", "fulfilled", "rejected"]) }).parse(req.body);
+      if (isDiningVertical(ready.verticalId)) {
+        const actor = diningStaffFromToken(ready, staffToken(req), store);
+        return { supply: updateDiningSupply(ready, actor, requestId, body.status, store) };
+      }
+      const hotel = hotelInstall(subdomain);
+      const actor = staffFromToken(hotel, staffToken(req), store);
+      return { supply: updateHotelSupply(hotel, actor, requestId, body.status, store) };
     } catch (err) {
       return sendHotelError(reply, err);
     }
