@@ -88,7 +88,7 @@ export function PersonalOsPage() {
         <p className="muted small">
           Public: <code>https://{subdomain || "your-brand"}.getlifeos.app/</code>
           {" · "}
-          Admin: <code>https://{subdomain || "your-brand"}.getlifeos.app/admin</code>
+          Admin: <code>https://{subdomain || "your-brand"}.getlifeos.app/admin</code>.
           You can attach or buy a custom domain after download.
         </p>
         <label>
