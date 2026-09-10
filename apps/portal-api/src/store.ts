@@ -29,6 +29,11 @@ export type PortalUser = {
   identityStatus: string | null;
   roles: TrustIdRole[];
   suspended?: boolean;
+  pleasureProfile?: {
+    gender: "male" | "female";
+    orientation: "straight" | "gay" | "lesbian" | "bisexual" | "pansexual" | "other";
+    offeringIdentity: "hooks_ms" | "gigolo_ms";
+  } | null;
   createdAt: string;
   lastLoginAt: string;
 };

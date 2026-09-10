@@ -27,6 +27,7 @@ export function toPublicUser(user: PortalUser): PortalUserPublic {
     identityStatus: user.identityStatus,
     roles: user.roles?.length ? user.roles : role === "ADMIN" ? ["tenant", "platform_admin"] : ["tenant"],
     suspended: user.suspended,
+    pleasureProfile: user.pleasureProfile ?? null,
     createdAt: user.createdAt,
     lastLoginAt: user.lastLoginAt,
   };

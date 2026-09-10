@@ -8,7 +8,7 @@ export type MarketplaceCategory =
   | "services";
 
 export type TransportationPreset = "logistics" | "rentals" | "hub";
-export type ServiceOSPreset = "beauty" | "wellness" | "technical" | "culinary";
+export type ServiceOSPreset = "beauty" | "wellness" | "technical" | "culinary" | "pleasure";
 export type HospitalityOSPreset = "local_food" | "shared_homes";
 
 export type MarketplaceVertical = {
@@ -306,6 +306,45 @@ export const VERTICAL_CATALOG: MarketplaceVertical[] = [
     templateId: "culinary",
     available: true,
     preset: "culinary",
+  },
+  {
+    id: "pleasure_os",
+    icon: "♥",
+    name: "PleasureOS",
+    description:
+      "One PleasureOS on ServiceOS. Specify gender, orientation, and Hooks MS / Gigolo MS — that identity is how you are searched on LifeOS.",
+    engine: "serviceos",
+    category: "services",
+    modules: [
+      "studio",
+      "catalog",
+      "dispatch",
+      "matching",
+      "telemetry",
+      "tracking",
+      "settlement",
+      "provider_console",
+      "billing",
+      "pleasure_identity",
+      "discovery",
+    ],
+    features: ["Gender", "Orientation", "Hooks MS", "Gigolo MS", "Identity search"],
+    keywords: [
+      "pleasure",
+      "pleasureos",
+      "hooks",
+      "gigolo",
+      "dating",
+      "companion",
+      "serviceos",
+      "straight",
+      "gay",
+      "bi",
+    ],
+    verticalId: "pleasure",
+    templateId: "pleasure",
+    available: true,
+    preset: "pleasure",
   },
   {
     id: "full_resort",

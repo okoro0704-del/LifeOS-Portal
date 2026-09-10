@@ -14,6 +14,7 @@ import { createDistributorClient, type DistributorClient } from "./services/dist
 import { createHospitalityOsClient, type HosClient } from "./services/hospitalityos.js";
 import { createEcommerceOsClient, type EcoClient } from "./services/ecommerceos.js";
 import { createTransportationOsClient, type TosClient } from "./services/transportationos.js";
+import { createServiceOsClient, type SosClient } from "./services/serviceos.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerCatalogRoutes } from "./routes/catalog.js";
 import { registerBillingRoutes } from "./routes/billing.js";
@@ -35,6 +36,7 @@ export type BuildAppOptions = {
   hos?: HosClient;
   eco?: EcoClient;
   tos?: TosClient;
+  sos?: SosClient;
 };
 
 const defaultPersist = path.resolve(
@@ -60,6 +62,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   const hos = opts.hos ?? createHospitalityOsClient();
   const eco = opts.eco ?? createEcommerceOsClient();
   const tos = opts.tos ?? createTransportationOsClient();
+  const sos = opts.sos ?? createServiceOsClient();
 
   const app = Fastify({
     trustProxy: true,
@@ -98,7 +101,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   await registerAuthRoutes(app, store);
   await registerCatalogRoutes(app);
   await registerBillingRoutes(app, store);
-  await registerInstallRoutes(app, store, distributor, hos, eco, tos);
+  await registerInstallRoutes(app, store, distributor, hos, eco, tos, sos);
   await registerOrganizationRoutes(app, store);
   await registerTenantRoutes(app, store, distributor);
   await registerTenantAppRoutes(app, store, distributor);

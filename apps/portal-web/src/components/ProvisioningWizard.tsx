@@ -73,6 +73,9 @@ export type WizardSelection = {
   defaultPrepBufferMins?: number;
   deliveryRadiusKm?: number;
   fundzmanInstantPayout?: boolean;
+  pleasureGender?: "male" | "female";
+  pleasureOrientation?: "straight" | "gay" | "lesbian" | "bisexual" | "pansexual" | "other";
+  pleasureOfferingIdentity?: "hooks_ms" | "gigolo_ms";
 };
 
 const DEFAULT_DAILY_RATE_NGN = 45_000;
@@ -194,6 +197,15 @@ export function ProvisioningWizard() {
   const [fundzmanInstantPayout, setFundzmanInstantPayout] = useState(
     saved?.fundzmanInstantPayout !== false,
   );
+  const [pleasureGender, setPleasureGender] = useState<"male" | "female">(
+    saved?.pleasureGender ?? "female",
+  );
+  const [pleasureOrientation, setPleasureOrientation] = useState<
+    "straight" | "gay" | "lesbian" | "bisexual" | "pansexual" | "other"
+  >(saved?.pleasureOrientation ?? "straight");
+  const [pleasureOfferingIdentity, setPleasureOfferingIdentity] = useState<"hooks_ms" | "gigolo_ms">(
+    saved?.pleasureOfferingIdentity ?? (saved?.pleasureGender === "male" ? "gigolo_ms" : "hooks_ms"),
+  );
 
   useEffect(() => {
     if (!catalogItem && !customPreset) return;
@@ -260,6 +272,7 @@ export function ProvisioningWizard() {
       templateId === "standalone_local_food" ||
       verticalId === "local_food" ||
       verticals.includes("local_food"));
+  const pleasureLive = serviceosLive && verticalId === "pleasure";
   const hospitalityPreset: HospitalityOSPreset | undefined =
     catalogItem?.preset === "local_food" || catalogItem?.preset === "shared_homes"
       ? catalogItem.preset
@@ -308,6 +321,9 @@ export function ProvisioningWizard() {
       defaultPrepBufferMins: Number(prepBufferMins) || DEFAULT_PREP_BUFFER_MINS,
       deliveryRadiusKm: Number(deliveryRadiusKm) || DEFAULT_DELIVERY_RADIUS_KM,
       fundzmanInstantPayout,
+      pleasureGender: pleasureLive ? pleasureGender : undefined,
+      pleasureOrientation: pleasureLive ? pleasureOrientation : undefined,
+      pleasureOfferingIdentity: pleasureLive ? pleasureOfferingIdentity : undefined,
       custom: !ecommerceLive && !transportationLive && !serviceosLive && templateId === "custom",
     });
   }
@@ -323,7 +339,11 @@ export function ProvisioningWizard() {
       : transportationLive
         ? Boolean(displayName.trim() && subdomain.trim())
         : serviceosLive
-          ? Boolean(displayName.trim() && subdomain.trim())
+          ? Boolean(
+              displayName.trim() &&
+                subdomain.trim() &&
+                (!pleasureLive || (pleasureGender && pleasureOrientation && pleasureOfferingIdentity)),
+            )
         : false;
 
   function continueToBilling() {
@@ -349,7 +369,9 @@ export function ProvisioningWizard() {
                   ? "Set fleet rates, the mandatory security deposit, and Trust ID license verification before billing."
                   : "Confirm the courier fleet name and subdomain, then pay with Finprove to provision TransportationOS."
                 : serviceosLive
-                  ? "Set travel fee per km, cancellation window, skill certifications, and proof-of-service photo rules before billing."
+                  ? pleasureLive
+                    ? "One PleasureOS. Set gender, orientation, and Hooks MS / Gigolo MS — that is how you will be searched on LifeOS."
+                    : "Set travel fee per km, cancellation window, skill certifications, and proof-of-service photo rules before billing."
                 : "This engine is listed in the marketplace and is not live for provision yet."}
         </p>
       </header>
@@ -587,6 +609,66 @@ export function ProvisioningWizard() {
               <span>
                 <strong>Mandatory proof-of-service photo</strong>
                 <span className="hint">Completion requires a Sovereign Drive photo before Finprove payout.</span>
+              </span>
+            </label>
+          </>
+        ) : null}
+        {pleasureLive ? (
+          <>
+            <label>
+              Gender
+              <select
+                value={pleasureGender}
+                onChange={(e) => {
+                  const next = e.target.value as "male" | "female";
+                  setPleasureGender(next);
+                  setPleasureOfferingIdentity(next === "male" ? "gigolo_ms" : "hooks_ms");
+                }}
+                data-testid="wizard-pleasure-gender"
+              >
+                <option value="female">Female</option>
+                <option value="male">Male</option>
+              </select>
+              <span className="hint">Gender is a primary LifeOS search facet for PleasureOS.</span>
+            </label>
+            <label>
+              Orientation
+              <select
+                value={pleasureOrientation}
+                onChange={(e) =>
+                  setPleasureOrientation(
+                    e.target.value as
+                      | "straight"
+                      | "gay"
+                      | "lesbian"
+                      | "bisexual"
+                      | "pansexual"
+                      | "other",
+                  )
+                }
+                data-testid="wizard-pleasure-orientation"
+              >
+                <option value="straight">Straight</option>
+                <option value="gay">Gay</option>
+                <option value="lesbian">Lesbian</option>
+                <option value="bisexual">Bisexual</option>
+                <option value="pansexual">Pansexual</option>
+                <option value="other">Other</option>
+              </select>
+              <span className="hint">Who you identify as — used with gender for discovery matching.</span>
+            </label>
+            <label>
+              Offering identity
+              <select
+                value={pleasureOfferingIdentity}
+                onChange={(e) => setPleasureOfferingIdentity(e.target.value as "hooks_ms" | "gigolo_ms")}
+                data-testid="wizard-pleasure-offering"
+              >
+                <option value="hooks_ms">Hooks MS</option>
+                <option value="gigolo_ms">Gigolo MS</option>
+              </select>
+              <span className="hint">
+                Females default to Hooks MS; males default to Gigolo MS. There is still only one PleasureOS.
               </span>
             </label>
           </>

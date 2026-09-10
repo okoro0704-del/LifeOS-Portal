@@ -163,11 +163,54 @@ export async function registerAuthRoutes(app: FastifyInstance, store: PortalStor
 
   app.patch("/auth/me", async (req, reply) => {
     if (!requireSession(req, reply)) return;
-    const body = z.object({ displayName: z.string().min(1).max(80).optional() }).parse(req.body ?? {});
+    const body = z
+      .object({
+        displayName: z.string().min(1).max(80).optional(),
+        pleasureProfile: z
+          .object({
+            gender: z.enum(["male", "female"]),
+            orientation: z.enum(["straight", "gay", "lesbian", "bisexual", "pansexual", "other"]),
+            offeringIdentity: z.enum(["hooks_ms", "gigolo_ms"]),
+          })
+          .nullable()
+          .optional(),
+      })
+      .parse(req.body ?? {});
     const updated = store.updateUser(req.portalUser!.id, {
       displayName: body.displayName?.trim() || req.portalUser!.displayName,
+      ...(body.pleasureProfile !== undefined ? { pleasureProfile: body.pleasureProfile } : {}),
     });
     return { user: toPublicUser(updated!) };
+  });
+
+  app.get("/discovery/pleasure", async (req, reply) => {
+    if (!requireSession(req, reply)) return;
+    const q = z
+      .object({
+        gender: z.enum(["male", "female"]).optional(),
+        orientation: z.enum(["straight", "gay", "lesbian", "bisexual", "pansexual", "other"]).optional(),
+        offeringIdentity: z.enum(["hooks_ms", "gigolo_ms"]).optional(),
+        seekingGender: z.enum(["male", "female"]).optional(),
+        seekingOrientation: z
+          .enum(["straight", "gay", "lesbian", "bisexual", "pansexual", "other"])
+          .optional(),
+      })
+      .parse(req.query ?? {});
+    const { matchesPleasureSearch, PLEASURE_OFFERING_LABELS } = await import("@lifeos-portal/shared");
+    const providers = store
+      .listUsers()
+      .filter((u) => !u.suspended && u.pleasureProfile)
+      .filter((u) => matchesPleasureSearch(u.pleasureProfile!, q))
+      .map((u) => ({
+        id: u.id,
+        displayName: u.displayName,
+        trustId: u.trustId,
+        gender: u.pleasureProfile!.gender,
+        orientation: u.pleasureProfile!.orientation,
+        offeringIdentity: u.pleasureProfile!.offeringIdentity,
+        offeringLabel: PLEASURE_OFFERING_LABELS[u.pleasureProfile!.offeringIdentity],
+      }));
+    return { providers, facets: q };
   });
 
   app.post("/auth/logout", async (req, reply) => {

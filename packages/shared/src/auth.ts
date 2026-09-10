@@ -15,6 +15,12 @@ export type PortalUserPublic = {
   identityStatus: string | null;
   roles: TrustIdRole[];
   suspended?: boolean;
+  /** PleasureOS discovery facets — gender + orientation + Hooks MS / Gigolo MS. */
+  pleasureProfile?: {
+    gender: "male" | "female";
+    orientation: "straight" | "gay" | "lesbian" | "bisexual" | "pansexual" | "other";
+    offeringIdentity: "hooks_ms" | "gigolo_ms";
+  } | null;
   createdAt: string;
   lastLoginAt: string;
 };

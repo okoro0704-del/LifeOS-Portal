@@ -1,3 +1,5 @@
 https://admin.getlifeos.app/*  https://platform-admin-production-26aa.up.railway.app/:splat  200!
 https://admin.getlifeos.app    https://platform-admin-production-26aa.up.railway.app/  200!
+/admin    https://admin.getlifeos.app/admin/tenants  302!
+/admin/*  https://admin.getlifeos.app/admin/:splat  302!
 /*    /index.html   200

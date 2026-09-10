@@ -441,6 +441,192 @@ export const TRANSPORTATION_VERTICALS: CatalogVertical[] = TRANSPORTATIONOS_INST
   };
 });
 
+export const SERVICE_PLATFORM_MODULES = [
+  "studio",
+  "catalog",
+  "dispatch",
+  "matching",
+  "telemetry",
+  "tracking",
+  "settlement",
+  "provider_console",
+  "billing",
+] as const;
+
+export type ServiceOsVerticalId = "beauty" | "wellness" | "technical" | "culinary" | "pleasure";
+
+export type ServiceOsInstallTemplate = {
+  id: ServiceOsVerticalId;
+  verticalId: ServiceOsVerticalId;
+  label: string;
+  description: string;
+  preset: ServiceOsVerticalId;
+  modules: readonly string[];
+};
+
+export const SERVICEOS_INSTALL_TEMPLATES: ServiceOsInstallTemplate[] = [
+  {
+    id: "beauty",
+    verticalId: "beauty",
+    label: "Mobile Salon & Grooming",
+    description: "Home barbers, stylists, and makeup artists dispatched to the customer.",
+    preset: "beauty",
+    modules: [...SERVICE_PLATFORM_MODULES],
+  },
+  {
+    id: "wellness",
+    verticalId: "wellness",
+    label: "Home Wellness & Spa",
+    description: "At-home massage and spa professionals with live tracking.",
+    preset: "wellness",
+    modules: [...SERVICE_PLATFORM_MODULES],
+  },
+  {
+    id: "technical",
+    verticalId: "technical",
+    label: "On-Demand Field Technician",
+    description: "Home repairs and appliance technicians matched by skill and proximity.",
+    preset: "technical",
+    modules: [...SERVICE_PLATFORM_MODULES],
+  },
+  {
+    id: "culinary",
+    verticalId: "culinary",
+    label: "Private Chef & Culinary",
+    description: "Private chefs and catering dispatched into the customer's kitchen.",
+    preset: "culinary",
+    modules: [...SERVICE_PLATFORM_MODULES],
+  },
+  {
+    id: "pleasure",
+    verticalId: "pleasure",
+    label: "PleasureOS",
+    description:
+      "One PleasureOS on ServiceOS. Gender, orientation, and Hooks MS / Gigolo MS identity control how providers are searched on LifeOS.",
+    preset: "pleasure",
+    modules: [...SERVICE_PLATFORM_MODULES, "pleasure_identity", "discovery"],
+  },
+];
+
+export const SERVICE_VERTICALS: CatalogVertical[] = SERVICEOS_INSTALL_TEMPLATES.map((template) => {
+  const prices: Record<ServiceOsVerticalId, number> = {
+    beauty: 3900,
+    wellness: 3900,
+    technical: 4200,
+    culinary: 4500,
+    pleasure: 4900,
+  };
+  return {
+    id: template.verticalId,
+    displayName: template.label,
+    description: template.description,
+    osId: "serviceos",
+    available: true,
+    priceMonthlyMinor: prices[template.verticalId],
+    currency: "USD",
+    modules: [...template.modules],
+  };
+});
+
+export type PleasureGender = "male" | "female";
+export type PleasureOrientation = "straight" | "gay" | "lesbian" | "bisexual" | "pansexual" | "other";
+/** Offering identity shown in discovery — females default to Hooks MS, males to Gigolo MS. */
+export type PleasureOfferingIdentity = "hooks_ms" | "gigolo_ms";
+
+export type PleasureSearchProfile = {
+  gender: PleasureGender;
+  orientation: PleasureOrientation;
+  offeringIdentity: PleasureOfferingIdentity;
+};
+
+export const PLEASURE_OFFERING_LABELS: Record<PleasureOfferingIdentity, string> = {
+  hooks_ms: "Hooks MS",
+  gigolo_ms: "Gigolo MS",
+};
+
+export function defaultPleasureOffering(gender: PleasureGender): PleasureOfferingIdentity {
+  return gender === "female" ? "hooks_ms" : "gigolo_ms";
+}
+
+/**
+ * LifeOS PleasureOS discovery: seekers match providers by complementary
+ * gender + orientation + offering identity (Hooks MS / Gigolo MS).
+ */
+export function matchesPleasureSearch(
+  provider: PleasureSearchProfile,
+  query: Partial<PleasureSearchProfile> & {
+    seekingGender?: PleasureGender;
+    seekingOrientation?: PleasureOrientation;
+  },
+): boolean {
+  if (query.gender && provider.gender !== query.gender) return false;
+  if (query.offeringIdentity && provider.offeringIdentity !== query.offeringIdentity) return false;
+  if (query.orientation && provider.orientation !== query.orientation) return false;
+  if (query.seekingGender && provider.gender !== query.seekingGender) return false;
+  if (query.seekingOrientation) {
+    const seeker = query.seekingOrientation;
+    const providerOrientation = provider.orientation;
+    const flexible = new Set<PleasureOrientation>(["bisexual", "pansexual"]);
+    if (flexible.has(seeker) || flexible.has(providerOrientation)) return true;
+    if (seeker === "straight") {
+      return providerOrientation === "straight" || flexible.has(providerOrientation);
+    }
+    if (seeker === "gay" || seeker === "lesbian") {
+      return (
+        providerOrientation === "gay" ||
+        providerOrientation === "lesbian" ||
+        flexible.has(providerOrientation)
+      );
+    }
+    return providerOrientation === seeker;
+  }
+  return true;
+}
+
+export type ServiceOsManifest = {
+  appId: "serviceos";
+  displayName: string;
+  version: string;
+  description: string;
+  distributorPrimitives: DistributorPrimitive[];
+  requiredPrimitives: RequiredLifeOsPrimitive[];
+  defaultModules: readonly string[];
+  installTemplates: ServiceOsInstallTemplate[];
+  brandDefaults: { primaryColor: string; businessType: "services" };
+  install: {
+    bootstrapPath: "/v1/distributor/tenants/bootstrap";
+    hosProvisionPath: "/internal/distributor/provision";
+    oauthDestinations: string[];
+  };
+};
+
+export const SERVICEOS_DEFAULT_MODULES = [...SERVICE_PLATFORM_MODULES];
+
+export const SERVICEOS_MANIFEST: ServiceOsManifest = {
+  appId: "serviceos",
+  displayName: "ServiceOS",
+  version: "0.1.0",
+  description:
+    "At-home services engine — beauty, wellness, technical, culinary, and one PleasureOS vertical with identity-aware discovery.",
+  distributorPrimitives: ["commerce", "identity", "billing", "messaging"],
+  requiredPrimitives: ["identity", "messaging", "storage", "jobs", "distributor", "billing"],
+  defaultModules: SERVICEOS_DEFAULT_MODULES,
+  installTemplates: SERVICEOS_INSTALL_TEMPLATES,
+  brandDefaults: {
+    primaryColor: "#BE185D",
+    businessType: "services",
+  },
+  install: {
+    bootstrapPath: "/v1/distributor/tenants/bootstrap",
+    hosProvisionPath: "/internal/distributor/provision",
+    oauthDestinations: [
+      "https://{subdomain}.lifeos.app/provider",
+      "https://{subdomain}.lifeos.app/",
+      "https://{subdomain}.lifeos.app/admin",
+    ],
+  },
+};
+
 export const BUSINESS_OS_CATALOG: CatalogBusinessOs[] = [
   {
     osId: "hospitalityos",
@@ -471,6 +657,16 @@ export const BUSINESS_OS_CATALOG: CatalogBusinessOs[] = [
     available: true,
     requiredPrimitives: ["identity", "messaging", "storage", "jobs", "distributor", "billing"],
     verticals: ECOMMERCE_VERTICALS,
+  },
+  {
+    osId: "serviceos",
+    displayName: "ServiceOS",
+    version: "0.1.0",
+    description:
+      "At-home services — beauty, wellness, field tech, culinary, and a single PleasureOS with gender/orientation discovery.",
+    available: true,
+    requiredPrimitives: ["identity", "messaging", "storage", "jobs", "distributor", "billing"],
+    verticals: SERVICE_VERTICALS,
   },
   {
     osId: "logisticsos",
@@ -518,7 +714,7 @@ export function modulesForInstall(osId: string, verticalId: string, enabledModul
     if (enabledModules?.length) return expandEcommerceModules(enabledModules);
     return modulesForVertical(osId, verticalId);
   }
-  if (osId === "transportationos") {
+  if (osId === "transportationos" || osId === "serviceos") {
     if (enabledModules?.length) return [...enabledModules];
     return modulesForVertical(osId, verticalId);
   }

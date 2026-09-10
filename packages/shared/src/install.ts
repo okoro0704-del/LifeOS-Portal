@@ -84,6 +84,18 @@ export type InstallHospitalityInput = {
     deliveryRadiusKm?: number;
     fundzmanInstantPayout?: boolean;
   };
+  /** ServiceOS doorstep / PleasureOS tenant settings */
+  serviceSettings?: {
+    perKmFeeNgn?: number;
+    cancellationWindowMinutes?: number;
+    requireSkillCertifications?: boolean;
+    requireProofOfServicePhoto?: boolean;
+  };
+  pleasureProfile?: {
+    gender: "male" | "female";
+    orientation: "straight" | "gay" | "lesbian" | "bisexual" | "pansexual" | "other";
+    offeringIdentity: "hooks_ms" | "gigolo_ms";
+  };
   verticals?: { logistics?: boolean; rentals?: boolean };
   adminStaff: {
     email: string;

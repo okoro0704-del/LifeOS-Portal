@@ -21,9 +21,20 @@ const HOSPITALITY_SHELL_ICONS: Record<string, string> = {
   shared_homes: "🏠",
 };
 
+const SERVICE_SHELL_ICONS: Record<string, string> = {
+  pleasure: "♥",
+  beauty: "✂",
+  wellness: "💆",
+  technical: "🛠",
+  culinary: "🍳",
+};
+
 export function shellIconForPreset(appId: string, preset?: string | null): string | null {
   if (appId === "hospitalityos" && preset && HOSPITALITY_SHELL_ICONS[preset]) {
     return HOSPITALITY_SHELL_ICONS[preset];
+  }
+  if (appId === "serviceos" && preset && SERVICE_SHELL_ICONS[preset]) {
+    return SERVICE_SHELL_ICONS[preset];
   }
   return null;
 }

@@ -112,6 +112,15 @@ export function InstallVerticalPage() {
       const hosPreset =
         wizard?.preset ??
         (verticalId === "local_food" || verticalId === "shared_homes" ? verticalId : undefined);
+      const sosPreset =
+        wizard?.preset ??
+        (verticalId === "beauty" ||
+        verticalId === "wellness" ||
+        verticalId === "technical" ||
+        verticalId === "culinary" ||
+        verticalId === "pleasure"
+          ? verticalId
+          : "beauty");
       const res = await portalApi.createInstall({
         osId,
         appId: osId,
@@ -136,12 +145,33 @@ export function InstallVerticalPage() {
             ? tosPreset
             : osId === "hospitalityos"
               ? hosPreset
-              : undefined,
+              : osId === "serviceos"
+                ? sosPreset
+                : undefined,
         verticals: osId === "transportationos" ? verticalsFromPreset(tosPreset) : undefined,
         rentalSettings:
           osId === "transportationos" ? rentalSettingsFromWizard(wizard, verticalId) : undefined,
         localFoodSettings:
           osId === "hospitalityos" ? localFoodSettingsFromWizard(wizard, verticalId) : undefined,
+        serviceSettings:
+          osId === "serviceos"
+            ? {
+                perKmFeeNgn: wizard?.perKmFeeNgn,
+                cancellationWindowMinutes: wizard?.cancellationWindowMinutes,
+                requireSkillCertifications: wizard?.requireSkillCertifications,
+                requireProofOfServicePhoto: wizard?.requireProofOfServicePhoto,
+              }
+            : undefined,
+        pleasureProfile:
+          osId === "serviceos" && verticalId === "pleasure" && wizard?.pleasureGender
+            ? {
+                gender: wizard.pleasureGender,
+                orientation: wizard.pleasureOrientation ?? "straight",
+                offeringIdentity:
+                  wizard.pleasureOfferingIdentity ??
+                  (wizard.pleasureGender === "male" ? "gigolo_ms" : "hooks_ms"),
+              }
+            : undefined,
         brand: { primaryColor, logoUrl: logoUrl || undefined },
         dashboardStyle,
         adminStaff: { email, displayName: ownerName, role: "owner" },
@@ -165,6 +195,10 @@ export function InstallVerticalPage() {
             ? "License is paid. Master Distributor bootstraps the domain, then ECommerceOS seeds the storefront."
             : osId === "transportationos"
               ? "License is paid. Master Distributor bootstraps the domain, then TransportationOS seeds this mobility vertical."
+              : osId === "serviceos"
+                ? verticalId === "pleasure"
+                  ? "License is paid. PleasureOS is a single ServiceOS vertical — gender, orientation, and Hooks MS / Gigolo MS control LifeOS search."
+                  : "License is paid. Master Distributor bootstraps the domain, then ServiceOS seeds this at-home services vertical."
               : verticalId === "hotel"
                 ? "License is paid. This download creates a hotel app on getlifeos.app — rooms, booking, and room service only. HospitalityOS is not connected."
                 : "License is paid. Master Distributor bootstraps the domain, then this vertical is seeded on its own — not the entire OS."}

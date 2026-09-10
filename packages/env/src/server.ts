@@ -215,6 +215,7 @@ export function parsePortalServerEnv(source: NodeJS.ProcessEnv = process.env) {
     hospitalityOsApi: source.HOSPITALITYOS_API ?? "http://localhost:8800",
     ecommerceOsApi: source.ECOMMERCEOS_API_URL ?? "http://localhost:8900",
     transportationOsApi: source.TRANSPORTATIONOS_API ?? "http://localhost:8910",
+    serviceOsApi: source.SERVICEOS_API ?? "http://localhost:8920",
     internalProvisionToken: parsed.data.INTERNAL_PROVISION_TOKEN,
     staffLaunchUrlTemplate: source.HOS_STAFF_LAUNCH_URL ?? "https://{subdomain}.getlifeos.app/admin",
     guestLaunchUrlTemplate: source.HOS_GUEST_LAUNCH_URL ?? "https://{subdomain}.getlifeos.app/",

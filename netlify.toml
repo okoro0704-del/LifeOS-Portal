@@ -21,6 +21,19 @@
   status = 200
   force = true
 
+# Apex /admin → platform admin (operators often type getlifeos.app/admin).
+[[redirects]]
+  from = "/admin"
+  to = "https://admin.getlifeos.app/admin/tenants"
+  status = 302
+  force = true
+
+[[redirects]]
+  from = "/admin/*"
+  to = "https://admin.getlifeos.app/admin/:splat"
+  status = 302
+  force = true
+
 # React Router SPA fallback for the guest portal.
 [[redirects]]
   from = "/*"

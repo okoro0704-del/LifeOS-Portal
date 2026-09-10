@@ -190,19 +190,6 @@ export function listOwnerVerticals(store: PortalStore, user: PortalUser): Tenant
     }
   }
 
-  rows.push({
-    installId: "",
-    osId: "serviceos",
-    verticalId: "services",
-    displayName: "ServiceOS",
-    status: "bootstrapping",
-    plan: "coming_soon",
-    priceMonthlyMinor: 0,
-    currency: "USD",
-    featuresEnabled: [],
-    available: false,
-  });
-
   return rows;
 }
 

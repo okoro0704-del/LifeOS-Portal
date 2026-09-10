@@ -10,6 +10,7 @@ import type { DistributorClient } from "../services/distributor.js";
 import type { HosClient } from "../services/hospitalityos.js";
 import type { EcoClient } from "../services/ecommerceos.js";
 import type { TosClient } from "../services/transportationos.js";
+import type { SosClient } from "../services/serviceos.js";
 
 function toPublic(row: PortalInstall): InstallRecordPublic {
   const deliverables =
@@ -45,8 +46,8 @@ function toPublic(row: PortalInstall): InstallRecordPublic {
 }
 
 const installBody = z.object({
-  osId: z.enum(["hospitalityos", "ecommerceos", "transportationos"]).default("hospitalityos"),
-  appId: z.enum(["hospitalityos", "ecommerceos", "transportationos"]).optional(),
+  osId: z.enum(["hospitalityos", "ecommerceos", "transportationos", "serviceos"]).default("hospitalityos"),
+  appId: z.enum(["hospitalityos", "ecommerceos", "transportationos", "serviceos"]).optional(),
   verticalId: z.string().min(1),
   billingId: z.string().min(1),
   displayName: z.string().min(1),
@@ -100,6 +101,21 @@ const installBody = z.object({
       fundzmanInstantPayout: z.boolean().optional(),
     })
     .optional(),
+  serviceSettings: z
+    .object({
+      perKmFeeNgn: z.number().min(0).optional(),
+      cancellationWindowMinutes: z.number().int().min(0).optional(),
+      requireSkillCertifications: z.boolean().optional(),
+      requireProofOfServicePhoto: z.boolean().optional(),
+    })
+    .optional(),
+  pleasureProfile: z
+    .object({
+      gender: z.enum(["male", "female"]),
+      orientation: z.enum(["straight", "gay", "lesbian", "bisexual", "pansexual", "other"]),
+      offeringIdentity: z.enum(["hooks_ms", "gigolo_ms"]),
+    })
+    .optional(),
   verticals: z
     .object({
       logistics: z.boolean().optional(),
@@ -130,6 +146,7 @@ export async function registerInstallRoutes(
   hos: HosClient,
   eco: EcoClient,
   tos: TosClient,
+  sos: SosClient,
 ) {
   app.get("/installs", async (req, reply) => {
     if (!requireSession(req, reply)) return;
@@ -166,6 +183,7 @@ export async function registerInstallRoutes(
         hos,
         eco,
         tos,
+        sos,
         user: req.portalUser!,
         accessToken: parsed.data.trustIdAccessToken ?? req.trustIdAccessToken,
         input: parsed.data,

@@ -2,6 +2,7 @@ import {
   ECOMMERCEOS_MANIFEST,
   HOSPITALITYOS_INSTALL_TEMPLATES,
   HOSPITALITYOS_MANIFEST,
+  SERVICEOS_MANIFEST,
   TRANSPORTATIONOS_MANIFEST,
   getBusinessOs,
   getVertical,
@@ -19,6 +20,7 @@ import type { DistributorClient } from "./distributor.js";
 import type { HosClient } from "./hospitalityos.js";
 import type { EcoClient } from "./ecommerceos.js";
 import type { TosClient } from "./transportationos.js";
+import type { SosClient } from "./serviceos.js";
 import { consumePaidBilling } from "./billing.js";
 import { activateBusinessPortal } from "./tenant-portal.js";
 import { seedHotelProperty } from "./hotel-ops.js";
@@ -43,6 +45,18 @@ function resolveInstallPreset(osId: string, verticalId: string, inputPreset?: st
     if (verticalId === "rentals" || verticalId === "logistics" || verticalId === "hub") return verticalId;
     return "hub";
   }
+  if (osId === "serviceos") {
+    if (
+      verticalId === "beauty" ||
+      verticalId === "wellness" ||
+      verticalId === "technical" ||
+      verticalId === "culinary" ||
+      verticalId === "pleasure"
+    ) {
+      return verticalId;
+    }
+    return "beauty";
+  }
   return undefined;
 }
 
@@ -58,12 +72,14 @@ function oauthDestinations(osId: string, subdomain: string) {
       ? ECOMMERCEOS_MANIFEST.install.oauthDestinations
       : osId === "transportationos"
         ? TRANSPORTATIONOS_MANIFEST.install.oauthDestinations
-        : HOSPITALITYOS_MANIFEST.install.oauthDestinations;
+        : osId === "serviceos"
+          ? SERVICEOS_MANIFEST.install.oauthDestinations
+          : HOSPITALITYOS_MANIFEST.install.oauthDestinations;
   return templates.map((t) => t.replaceAll("{subdomain}", subdomain));
 }
 
 function enabledModulesForInstall(osId: string, verticalId: string, extra?: string[]) {
-  if (osId === "ecommerceos" || osId === "transportationos") {
+  if (osId === "ecommerceos" || osId === "transportationos" || osId === "serviceos") {
     return extra?.length ? extra : [...(getVertical(osId, verticalId)?.modules ?? [])];
   }
   if (verticalId === "hotel") return suiteModulesForVertical("hotel");
@@ -73,6 +89,7 @@ function enabledModulesForInstall(osId: string, verticalId: string, extra?: stri
 function manifestForOs(osId: string) {
   if (osId === "ecommerceos") return ECOMMERCEOS_MANIFEST;
   if (osId === "transportationos") return TRANSPORTATIONOS_MANIFEST;
+  if (osId === "serviceos") return SERVICEOS_MANIFEST;
   return HOSPITALITYOS_MANIFEST;
 }
 
@@ -113,6 +130,7 @@ export async function installDomainOs(opts: {
   hos: HosClient;
   eco: EcoClient;
   tos: TosClient;
+  sos: SosClient;
   user: PortalUser;
   accessToken?: string;
   input: InstallHospitalityInput;
@@ -279,6 +297,28 @@ export async function installDomainOs(opts: {
                 verticals: transportationFlags(verticalId, opts.input),
                 rentalSettings: opts.input.rentalSettings,
               })
+            : osId === "serviceos"
+              ? await opts.sos.provision({
+                  ...provisionInput,
+                  preset:
+                    (installPreset as
+                      | "beauty"
+                      | "wellness"
+                      | "technical"
+                      | "culinary"
+                      | "pleasure"
+                      | undefined) ??
+                    (verticalId === "beauty" ||
+                    verticalId === "wellness" ||
+                    verticalId === "technical" ||
+                    verticalId === "culinary" ||
+                    verticalId === "pleasure"
+                      ? verticalId
+                      : "beauty"),
+                  serviceSettings: opts.input.serviceSettings,
+                  pleasureProfile:
+                    verticalId === "pleasure" ? opts.input.pleasureProfile : undefined,
+                })
             : await opts.hos.provision({
                 ...provisionInput,
                 installTemplate,
@@ -287,6 +327,10 @@ export async function installDomainOs(opts: {
                     ? opts.input.localFoodSettings
                     : undefined,
               });
+
+    if (osId === "serviceos" && verticalId === "pleasure" && opts.input.pleasureProfile) {
+      opts.store.updateUser(opts.user.id, { pleasureProfile: opts.input.pleasureProfile });
+    }
 
     const tenantIdReady =
       ("tenantId" in provisioned ? provisioned.tenantId : undefined) ?? provisioned.hosTenantId;

@@ -21,6 +21,19 @@
             location.search +
             location.hash,
         );
+      } else if (
+        location.hostname === "getlifeos.app" ||
+        location.hostname === "www.getlifeos.app"
+      ) {
+        var path = location.pathname.replace(/\/+$/, "") || "/";
+        if (path === "/admin" || path.indexOf("/admin/") === 0) {
+          location.replace(
+            "https://admin.getlifeos.app" +
+              (path === "/admin" ? "/admin/tenants" : path) +
+              location.search +
+              location.hash,
+          );
+        }
       }
     </script>
   </head>

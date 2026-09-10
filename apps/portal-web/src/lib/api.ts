@@ -125,11 +125,32 @@ export const portalApi = {
       method: "POST",
       body: JSON.stringify({ email, password, displayName }),
     }),
-  updateProfile: (displayName: string) =>
+  updateProfile: (body: {
+    displayName?: string;
+    pleasureProfile?: {
+      gender: "male" | "female";
+      orientation: "straight" | "gay" | "lesbian" | "bisexual" | "pansexual" | "other";
+      offeringIdentity: "hooks_ms" | "gigolo_ms";
+    } | null;
+  }) =>
     api<{ user: PortalUserPublic }>("/auth/me", {
       method: "PATCH",
-      body: JSON.stringify({ displayName }),
+      body: JSON.stringify(body),
     }),
+  pleasureDiscovery: (query: Record<string, string>) => {
+    const qs = new URLSearchParams(query).toString();
+    return api<{
+      providers: Array<{
+        id: string;
+        displayName: string;
+        trustId: string | null;
+        gender: string;
+        orientation: string;
+        offeringIdentity: string;
+        offeringLabel: string;
+      }>;
+    }>(`/discovery/pleasure${qs ? `?${qs}` : ""}`);
+  },
   adminUsers: () => api<{ users: PortalUserPublic[] }>("/v1/admin/users"),
   adminSuspendUser: (id: string, suspended: boolean) =>
     api<{ ok: boolean; user: PortalUserPublic }>(`/v1/admin/users/${encodeURIComponent(id)}/suspend`, {
