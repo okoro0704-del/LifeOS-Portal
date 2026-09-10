@@ -37,8 +37,8 @@ export const PORTAL_LANES: PortalLane[] = [
   {
     id: "personal",
     displayName: "Personal OS",
-    description: "Your life shell — identity, wallet, and daily operating system.",
-    available: false,
+    description: "Download mybrandOS — your creator Digital Life workstation.",
+    available: true,
   },
   {
     id: "business",
@@ -47,6 +47,38 @@ export const PORTAL_LANES: PortalLane[] = [
     available: true,
   },
 ];
+
+/** Personal lane product — mybrandOS (not a billed business vertical). */
+export type PersonalOsProduct = {
+  appId: "mybrandos";
+  displayName: string;
+  version: string;
+  description: string;
+  available: boolean;
+  downloadUrl: string;
+  launchUrl: string;
+  approvedOrigin: string;
+  audience: "personal";
+  requiredPrimitives: RequiredLifeOsPrimitive[];
+};
+
+export const MYBRANDOS_PRODUCTION_URL = "https://mybrandos-production.up.railway.app";
+
+export const MYBRANDOS_MANIFEST: PersonalOsProduct = {
+  appId: "mybrandos",
+  displayName: "mybrandOS",
+  version: "0.17.0",
+  description:
+    "Creator Digital Life workstation — produce, import, publish, and run Live & Device Bridge on your personal OS.",
+  available: true,
+  downloadUrl: MYBRANDOS_PRODUCTION_URL,
+  launchUrl: MYBRANDOS_PRODUCTION_URL,
+  approvedOrigin: MYBRANDOS_PRODUCTION_URL,
+  audience: "personal",
+  requiredPrimitives: ["identity", "messaging", "storage", "jobs", "distributor", "billing"],
+};
+
+export const PERSONAL_OS_CATALOG: PersonalOsProduct[] = [MYBRANDOS_MANIFEST];
 
 /** Shared HospitalityOS platform modules enabled on every vertical install. */
 export const HOSPITALITY_PLATFORM_MODULES = [

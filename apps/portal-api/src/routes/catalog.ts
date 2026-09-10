@@ -5,6 +5,8 @@ import {
   HOSPITALITYOS_MANIFEST,
   TRANSPORTATIONOS_MANIFEST,
   LIFEOS_PRIMITIVE_IDS,
+  PERSONAL_OS_CATALOG,
+  MYBRANDOS_MANIFEST,
   PORTAL_LANES,
 } from "@lifeos-portal/shared";
 import { requireSession } from "../lib/auth.js";
@@ -16,6 +18,8 @@ export async function registerCatalogRoutes(app: FastifyInstance) {
     if (!isGuestAuthEnabled() && config.enableTrustId && !requireSession(req, reply)) return;
     return {
       lanes: PORTAL_LANES,
+      personalOs: PERSONAL_OS_CATALOG,
+      mybrandos: MYBRANDOS_MANIFEST,
       businessOs: BUSINESS_OS_CATALOG,
       primitives: LIFEOS_PRIMITIVE_IDS,
       hospitalityos: HOSPITALITYOS_MANIFEST,

@@ -182,6 +182,14 @@ export const portalApi = {
   catalog: () =>
     api<{
       lanes: Array<{ id: string; displayName: string; description: string; available: boolean }>;
+      personalOs?: Array<{
+        appId: string;
+        displayName: string;
+        downloadUrl: string;
+        launchUrl: string;
+        available: boolean;
+      }>;
+      mybrandos?: { appId: string; downloadUrl: string; launchUrl: string };
       businessOs: BusinessOsCard[];
       primitives: string[];
     }>("/catalog"),

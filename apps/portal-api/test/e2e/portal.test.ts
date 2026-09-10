@@ -122,8 +122,10 @@ test("GET /catalog exposes Personal vs Business lanes and Hospitality verticals"
   };
   const personal = body.lanes.find((l) => l.id === "personal");
   const business = body.lanes.find((l) => l.id === "business");
-  assert.equal(personal?.available, false);
+  assert.equal(personal?.available, true);
   assert.equal(business?.available, true);
+  const personalOs = (body as { personalOs?: Array<{ appId: string }> }).personalOs;
+  assert.ok(personalOs?.some((p) => p.appId === "mybrandos"));
 
   const hos = body.businessOs.find((os) => os.osId === "hospitalityos");
   const transport = body.businessOs.find((os) => os.osId === "transportationos");
