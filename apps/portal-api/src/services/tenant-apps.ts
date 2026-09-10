@@ -45,13 +45,25 @@ export function toPublicTenantApp(row: PortalInstall): PublicTenantApp & {
   if (row.osId !== "mybrandos") return base;
   const mybrandBase = (process.env.MYBRANDOS_URL || "https://mybrandos-production.up.railway.app").replace(/\/$/, "");
   const slug = String(site.mybrandSlug ?? row.subdomain);
+  const wlTrustFallback = `TD-WL-${slug.toUpperCase().replace(/-/g, "")}`.slice(0, 80);
+  const trustId = String(
+    site.mybrandTrustId ?? row.hosTenantId ?? row.tenantId ?? wlTrustFallback,
+  );
+  const publicOrigin = String(site.mybrandPublicOrigin ?? `${mybrandBase}/u/${slug}`);
+  const studioOrigin = String(site.mybrandStudioOrigin ?? `${mybrandBase}/`);
+  const adminWithBypass = `${mybrandBase}/enter?wl=1&trustId=${encodeURIComponent(trustId)}&name=${encodeURIComponent(row.displayName)}`;
+  let adminOrigin = String(site.mybrandAdminOrigin ?? adminWithBypass);
+  // Older installs stored bare /enter — force white-label enter so studio can open.
+  if (/\/enter\/?$/.test(adminOrigin) || (adminOrigin.includes("/enter") && !adminOrigin.includes("wl=1"))) {
+    adminOrigin = adminWithBypass;
+  }
   return {
     ...base,
     mybrand: {
       slug,
-      publicOrigin: String(site.mybrandPublicOrigin ?? `${mybrandBase}/u/${slug}`),
-      adminOrigin: String(site.mybrandAdminOrigin ?? `${mybrandBase}/enter`),
-      studioOrigin: String(site.mybrandStudioOrigin ?? `${mybrandBase}/`),
+      publicOrigin,
+      adminOrigin,
+      studioOrigin,
     },
   };
 }

@@ -135,6 +135,7 @@ export async function installMyBrandOs(opts: {
       token?: string;
     };
 
+    // DNS/alias failures must not fail an otherwise successful white-label install.
     await provisionTenantHostname(subdomain).catch(() => undefined);
 
     const deliverables = mybrandOsDeliverables({
@@ -148,6 +149,11 @@ export async function installMyBrandOs(opts: {
       staff: deliverables.staffApp.url,
     };
 
+    const adminUrl =
+      provisioned.adminUrl && provisioned.adminUrl.includes("wl=1")
+        ? provisioned.adminUrl
+        : `${base}/enter?wl=1&trustId=${encodeURIComponent(provisioned.trustId)}&name=${encodeURIComponent(opts.input.displayName)}`;
+
     opts.store.updateInstall(row.id, {
       status: "ready",
       seedApplied: true,
@@ -158,9 +164,10 @@ export async function installMyBrandOs(opts: {
       launchUrls,
       site: {
         mybrandPublicOrigin: provisioned.publicUrl,
-        mybrandAdminOrigin: provisioned.adminUrl,
+        mybrandAdminOrigin: adminUrl,
         mybrandStudioOrigin: provisioned.studioUrl || `${base}/`,
         mybrandSlug: provisioned.slug || subdomain,
+        mybrandTrustId: provisioned.trustId,
         mybrandToken: provisioned.token,
         primaryColor: opts.input.brand?.primaryColor ?? "#0B0C10",
         writeup: opts.input.tagline,

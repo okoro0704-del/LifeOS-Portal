@@ -35,10 +35,22 @@ function Frame({ title, src }: { title: string; src: string }) {
   );
 }
 
+/** Top-level navigation so mybrandOS session cookies are first-party. */
+function TopLevelRedirect({ to }: { to: string }) {
+  useEffect(() => {
+    window.location.replace(to);
+  }, [to]);
+  return (
+    <div className="tap tap-boot">
+      <p className="muted">Opening studio…</p>
+    </div>
+  );
+}
+
 /**
  * White-label surfaces on `{brand}.getlifeos.app`:
- * - `/` → public mybrandOS site
- * - `/admin` → mybrandOS studio (Trust ID bypass enter)
+ * - `/` → public mybrandOS site (embed)
+ * - `/admin` → top-level studio enter (cookies must be first-party)
  */
 export function TenantMyBrandApp({ subdomain, basename }: { subdomain: string; basename: string }) {
   const [meta, setMeta] = useState<MyBrandTenant["tenant"] | null>(null);
@@ -55,14 +67,25 @@ export function TenantMyBrandApp({ subdomain, basename }: { subdomain: string; b
   }, [subdomain]);
 
   const origins = useMemo(() => {
-    if (meta?.mybrand) return meta.mybrand;
-    if (!meta) return null;
     const base = "https://mybrandos-production.up.railway.app";
+    if (meta?.mybrand) {
+      const admin = meta.mybrand.adminOrigin;
+      const needsWl = admin.includes("/enter") && !admin.includes("wl=1");
+      const trustFallback = `TD-WL-${meta.subdomain.toUpperCase().replace(/-/g, "")}`.slice(0, 80);
+      return {
+        ...meta.mybrand,
+        adminOrigin: needsWl
+          ? `${base}/enter?wl=1&trustId=${encodeURIComponent(trustFallback)}&name=${encodeURIComponent(meta.displayName)}`
+          : admin,
+      };
+    }
+    if (!meta) return null;
     const slug = meta.subdomain;
+    const trustId = `TD-WL-${slug.toUpperCase().replace(/-/g, "")}`.slice(0, 80);
     return {
       slug,
       publicOrigin: `${base}/u/${slug}`,
-      adminOrigin: `${base}/enter?wl=1&name=${encodeURIComponent(meta.displayName)}`,
+      adminOrigin: `${base}/enter?wl=1&trustId=${encodeURIComponent(trustId)}&name=${encodeURIComponent(meta.displayName)}`,
       studioOrigin: `${base}/`,
     };
   }, [meta]);
@@ -86,8 +109,8 @@ export function TenantMyBrandApp({ subdomain, basename }: { subdomain: string; b
     <BrowserRouter basename={basename}>
       <Routes>
         <Route path="/" element={<Frame title={`${meta.displayName} public site`} src={origins.publicOrigin} />} />
-        <Route path="/admin" element={<Frame title={`${meta.displayName} admin studio`} src={origins.adminOrigin} />} />
-        <Route path="/admin/*" element={<Frame title={`${meta.displayName} admin studio`} src={origins.adminOrigin} />} />
+        <Route path="/admin" element={<TopLevelRedirect to={origins.adminOrigin} />} />
+        <Route path="/admin/*" element={<TopLevelRedirect to={origins.adminOrigin} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
