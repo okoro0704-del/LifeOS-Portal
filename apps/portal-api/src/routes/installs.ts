@@ -266,7 +266,25 @@ export async function registerInstallRoutes(
         sslStatus: provisioned.sslStatus === "ACTIVE" ? "ACTIVE" : "PENDING",
         purchased: Boolean(body.purchase),
       });
-      store.updateInstall(row.id, { customDomain: hostname, domainId: provisioned.domainId });
+      store.updateInstall(row.id, {
+        customDomain: hostname,
+        domainId: provisioned.domainId,
+        ...(row.osId === "mybrandos"
+          ? (() => {
+              const d = deliverablesForMyBrandInstall({ ...row, customDomain: hostname });
+              return {
+                storefrontUrl: d.guestApp.url,
+                adminConsoleUrl: d.adminDashboard.url,
+                launchUrls: {
+                  guest: d.guestApp.url,
+                  storefront: d.guestApp.url,
+                  admin: d.adminDashboard.url,
+                  staff: d.staffApp.url,
+                },
+              };
+            })()
+          : {}),
+      });
       const updated = store.getInstall(row.id)!;
       return reply.code(201).send({
         ok: true,

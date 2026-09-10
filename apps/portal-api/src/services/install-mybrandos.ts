@@ -1,11 +1,11 @@
 import { MYBRANDOS_PRODUCTION_URL, mybrandOsDeliverables, tenantLaunchUrls } from "@lifeos-portal/shared";
-import { config } from "../config.js";
 import { HttpError } from "../lib/http.js";
 import { identitySubject } from "../lib/local-auth.js";
 import { newId } from "../lib/crypto.js";
 import type { PortalInstall, PortalStore, PortalUser } from "../store.js";
 import type { DistributorClient } from "./distributor.js";
 import { projectInstallToLifeOsShell } from "./shell-projection.js";
+import { provisionTenantHostname } from "./tenant-hostname.js";
 
 const subdomainRe = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i;
 
@@ -29,7 +29,7 @@ function whiteLabelSecret() {
 
 /**
  * Personal OS white-label install: name your brand, provision mybrandOS studio + public site.
- * No Finprove vertical license — Personal OS downloads are free at the Portal control plane.
+ * Deliverables: `{brand}.getlifeos.app` (public) and `{brand}.getlifeos.app/admin` (studio).
  */
 export async function installMyBrandOs(opts: {
   store: PortalStore;
@@ -68,7 +68,6 @@ export async function installMyBrandOs(opts: {
   });
 
   try {
-    // Best-effort Master Distributor / LifeOS shell projection.
     try {
       const boot = await opts.distributor.bootstrap({
         tenantId,
@@ -79,7 +78,11 @@ export async function installMyBrandOs(opts: {
           primaryColor: opts.input.brand?.primaryColor ?? "#0B0C10",
           logoUrl: opts.input.brand?.logoUrl,
         },
-        oauthDestinations: [`${base}/auth/callback`, `${base}/u/${subdomain}`],
+        oauthDestinations: [
+          `https://${subdomain}.getlifeos.app/admin`,
+          `https://${subdomain}.getlifeos.app/`,
+          `${base}/auth/callback`,
+        ],
         enabledModules: ["studio", "public_brand"],
         appId: "mybrandos",
         accessToken: opts.accessToken,
@@ -89,7 +92,7 @@ export async function installMyBrandOs(opts: {
         domainId: boot.domainId,
       });
     } catch {
-      /* distributor optional for personal white-label bootstrap */
+      /* distributor optional */
     }
 
     const secret = whiteLabelSecret();
@@ -132,11 +135,11 @@ export async function installMyBrandOs(opts: {
       token?: string;
     };
 
+    await provisionTenantHostname(subdomain).catch(() => undefined);
+
     const deliverables = mybrandOsDeliverables({
       slug: provisioned.slug || subdomain,
-      baseUrl: base,
       customDomain: opts.input.customDomain,
-      adminUrl: provisioned.adminUrl,
     });
     const launchUrls = {
       guest: deliverables.guestApp.url,
@@ -150,9 +153,18 @@ export async function installMyBrandOs(opts: {
       seedApplied: true,
       hosTenantId: provisioned.trustId,
       tenantId: provisioned.trustId,
-      storefrontUrl: provisioned.publicUrl,
-      adminConsoleUrl: provisioned.adminUrl,
+      storefrontUrl: deliverables.guestApp.url,
+      adminConsoleUrl: deliverables.adminDashboard.url,
       launchUrls,
+      site: {
+        mybrandPublicOrigin: provisioned.publicUrl,
+        mybrandAdminOrigin: provisioned.adminUrl,
+        mybrandStudioOrigin: provisioned.studioUrl || `${base}/`,
+        mybrandSlug: provisioned.slug || subdomain,
+        mybrandToken: provisioned.token,
+        primaryColor: opts.input.brand?.primaryColor ?? "#0B0C10",
+        writeup: opts.input.tagline,
+      },
     });
 
     const ready = opts.store.getInstall(row.id)!;
@@ -162,7 +174,7 @@ export async function installMyBrandOs(opts: {
       tenantId: ready.distributorTenantId,
       displayName: ready.displayName,
       subdomain: ready.subdomain,
-      launchUrl: provisioned.adminUrl,
+      launchUrl: deliverables.adminDashboard.url,
       preset: "mybrandos",
       icon: "✦",
     }).catch(() => null);
@@ -177,26 +189,12 @@ export async function installMyBrandOs(opts: {
 }
 
 export function deliverablesForMyBrandInstall(row: PortalInstall) {
-  const base = mybrandBaseUrl();
-  if (row.launchUrls?.guest && row.launchUrls?.admin) {
-    return mybrandOsDeliverables({
-      slug: row.subdomain,
-      baseUrl: base,
-      customDomain: row.customDomain,
-      adminUrl: row.launchUrls.admin,
-    });
-  }
   return mybrandOsDeliverables({
     slug: row.subdomain,
-    baseUrl: base,
     customDomain: row.customDomain,
-    adminUrl: row.adminConsoleUrl,
   });
 }
 
-/** Keep TypeScript happy if launch URL helpers are imported elsewhere. */
 export function fallbackLaunch(subdomain: string, customDomain?: string) {
   return tenantLaunchUrls(subdomain, customDomain);
 }
-
-void config;

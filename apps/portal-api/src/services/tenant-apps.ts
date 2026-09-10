@@ -1,5 +1,5 @@
 import { deflateSync } from "node:zlib";
-import { tenantDeliverables, tenantLabelFromHost } from "@lifeos-portal/shared";
+import { mybrandOsDeliverables, tenantDeliverables, tenantLabelFromHost } from "@lifeos-portal/shared";
 import type { PortalInstall } from "../store.js";
 
 export type PublicTenantApp = {
@@ -18,9 +18,20 @@ export function tenantSubdomainFromHost(hostHeader?: string) {
   return tenantLabelFromHost(hostHeader);
 }
 
-export function toPublicTenantApp(row: PortalInstall): PublicTenantApp {
-  const deliverables = tenantDeliverables(row.subdomain, row.customDomain);
-  return {
+export function toPublicTenantApp(row: PortalInstall): PublicTenantApp & {
+  mybrand?: {
+    slug: string;
+    publicOrigin: string;
+    adminOrigin: string;
+    studioOrigin: string;
+  };
+} {
+  const deliverables =
+    row.osId === "mybrandos"
+      ? mybrandOsDeliverables({ slug: row.subdomain, customDomain: row.customDomain })
+      : tenantDeliverables(row.subdomain, row.customDomain);
+  const site = (row.site ?? {}) as Record<string, unknown>;
+  const base = {
     subdomain: row.subdomain,
     displayName: row.displayName,
     osId: row.osId,
@@ -30,6 +41,18 @@ export function toPublicTenantApp(row: PortalInstall): PublicTenantApp {
     guestAppUrl: deliverables.guestApp.url,
     adminDashboardUrl: deliverables.adminDashboard.url,
     status: row.status,
+  };
+  if (row.osId !== "mybrandos") return base;
+  const mybrandBase = (process.env.MYBRANDOS_URL || "https://mybrandos-production.up.railway.app").replace(/\/$/, "");
+  const slug = String(site.mybrandSlug ?? row.subdomain);
+  return {
+    ...base,
+    mybrand: {
+      slug,
+      publicOrigin: String(site.mybrandPublicOrigin ?? `${mybrandBase}/u/${slug}`),
+      adminOrigin: String(site.mybrandAdminOrigin ?? `${mybrandBase}/enter`),
+      studioOrigin: String(site.mybrandStudioOrigin ?? `${mybrandBase}/`),
+    },
   };
 }
 

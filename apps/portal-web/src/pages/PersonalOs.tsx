@@ -49,9 +49,9 @@ export function PersonalOsPage() {
         <p className="eyebrow">Personal OS</p>
         <h1>Download mybrandOS</h1>
         <p className="lead">
-          Name your brand and download a white-label mybrandOS. When provisioning finishes you get
-          two deliverables: a public brand site and an admin studio for create, import, live, and
-          publishing.
+          Name your brand and download a white-label mybrandOS. You get two deliverables on getlifeos.app:
+          the public brand site at <code>{subdomain || "your-brand"}.getlifeos.app</code> and the admin
+          studio at <code>{subdomain || "your-brand"}.getlifeos.app/admin</code>.
         </p>
       </header>
 
@@ -86,8 +86,10 @@ export function PersonalOsPage() {
           />
         </label>
         <p className="muted small">
-          Public site will be available at mybrandOS <code>/u/{subdomain || "your-brand"}</code>. You
-          can attach or buy a custom domain after download.
+          Public: <code>https://{subdomain || "your-brand"}.getlifeos.app/</code>
+          {" · "}
+          Admin: <code>https://{subdomain || "your-brand"}.getlifeos.app/admin</code>
+          You can attach or buy a custom domain after download.
         </p>
         <label>
           Tagline
