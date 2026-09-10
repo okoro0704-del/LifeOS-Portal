@@ -84,6 +84,40 @@ export function tenantLaunchUrls(subdomain: string, customDomain?: string) {
   };
 }
 
+/** mybrandOS white-label deliverables — public brand site + studio admin. */
+export function mybrandOsDeliverables(input: {
+  slug: string;
+  baseUrl: string;
+  customDomain?: string;
+  adminUrl?: string;
+}): TenantDeliverables {
+  const base = input.baseUrl.replace(/\/$/, "");
+  const slug = input.slug.trim().toLowerCase();
+  const custom = input.customDomain?.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+  const publicUrl = custom ? `https://${custom}/` : `${base}/u/${slug}`;
+  const hostname = custom || new URL(base).hostname;
+  const adminUrl = input.adminUrl ?? `${base}/enter`;
+  return {
+    hostname,
+    guestApp: {
+      url: publicUrl,
+      kind: "web_pwa",
+      label: "Guest app",
+    },
+    adminDashboard: {
+      url: adminUrl,
+      kind: "pwa",
+      installOnFirstVisit: true,
+      label: "Admin dashboard",
+    },
+    staffApp: {
+      url: `${base}/`,
+      kind: "pwa",
+      label: "Staff login",
+    },
+  };
+}
+
 export const HOTEL_FEATURE_IDS = [
   "rooms",
   "reservations",

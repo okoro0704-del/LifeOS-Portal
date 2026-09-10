@@ -47,10 +47,13 @@ async function copyText(value: string) {
 
 export function DeliverablesCard({
   deliverables,
+  variant = "business",
 }: {
   deliverables: TenantDeliverables;
+  variant?: "business" | "mybrandos";
 }) {
   const [copied, setCopied] = useState<string | null>(null);
+  const isPersonal = variant === "mybrandos";
 
   async function copy(id: string, value: string) {
     await copyText(value);
@@ -61,42 +64,45 @@ export function DeliverablesCard({
     <section className="deliverables" data-testid="install-deliverables">
       <header className="page-head">
         <p className="eyebrow">your deliverables</p>
-        <h2>Apps on {deliverables.hostname}</h2>
+        <h2>{isPersonal ? `mybrandOS for ${deliverables.hostname}` : `Apps on ${deliverables.hostname}`}</h2>
         <p className="lead">
-          Guests use the public app. Owners sign in on admin. Staff get a separate login URL
-          after you create them.
+          {isPersonal
+            ? "Public brand site for visitors. Admin studio for create, import, live, commerce, and branding."
+            : "Guests use the public app. Owners sign in on admin. Staff get a separate login URL after you create them."}
         </p>
       </header>
       <div className="cards">
         <article className="card" data-testid="guest-app-deliverable">
-          <span className="badge">Web + PWA</span>
-          <h2>Guest app</h2>
+          <span className="badge">{isPersonal ? "Public" : "Web + PWA"}</span>
+          <h2>{isPersonal ? "Public brand site" : "Guest app"}</h2>
           <p className="mono small">{deliverables.guestApp.url}</p>
           <div className="actions">
             <a className="btn btn-primary" href={deliverables.guestApp.url} target="_blank" rel="noreferrer">
-              Open guest app
+              {isPersonal ? "Open public site" : "Open guest app"}
             </a>
             <button className="btn btn-ghost" type="button" onClick={() => void copy("guest", deliverables.guestApp.url)}>
               {copied === "guest" ? "Copied" : "Copy URL"}
             </button>
           </div>
         </article>
-        <article className="card" data-testid="staff-login-deliverable">
-          <span className="badge">Staff only</span>
-          <h2>Staff login</h2>
-          <p className="mono small">{deliverables.staffApp.url}</p>
-          <div className="actions">
-            <a className="btn btn-primary" href={deliverables.staffApp.url} target="_blank" rel="noreferrer">
-              Open staff login
-            </a>
-            <button className="btn btn-ghost" type="button" onClick={() => void copy("staff", deliverables.staffApp.url)}>
-              {copied === "staff" ? "Copied" : "Copy URL"}
-            </button>
-          </div>
-        </article>
+        {!isPersonal ? (
+          <article className="card" data-testid="staff-login-deliverable">
+            <span className="badge">Staff only</span>
+            <h2>Staff login</h2>
+            <p className="mono small">{deliverables.staffApp.url}</p>
+            <div className="actions">
+              <a className="btn btn-primary" href={deliverables.staffApp.url} target="_blank" rel="noreferrer">
+                Open staff login
+              </a>
+              <button className="btn btn-ghost" type="button" onClick={() => void copy("staff", deliverables.staffApp.url)}>
+                {copied === "staff" ? "Copied" : "Copy URL"}
+              </button>
+            </div>
+          </article>
+        ) : null}
         <article className="card" data-testid="admin-dashboard-deliverable">
-          <span className="badge">Owner only</span>
-          <h2>Admin dashboard</h2>
+          <span className="badge">{isPersonal ? "Studio" : "Owner only"}</span>
+          <h2>{isPersonal ? "Admin studio" : "Admin dashboard"}</h2>
           <p className="mono small">{deliverables.adminDashboard.url}</p>
           <div className="actions">
             <a
@@ -105,7 +111,7 @@ export function DeliverablesCard({
               target="_blank"
               rel="noreferrer"
             >
-              Open admin dashboard
+              {isPersonal ? "Open admin studio" : "Open admin dashboard"}
             </a>
             <button
               className="btn btn-ghost"

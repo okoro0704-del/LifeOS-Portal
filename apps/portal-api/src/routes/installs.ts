@@ -5,12 +5,15 @@ import { requireSession } from "../lib/auth.js";
 import { HttpError } from "../lib/http.js";
 import type { PortalInstall, PortalStore } from "../store.js";
 import { installDomainOs } from "../services/install.js";
+import { deliverablesForMyBrandInstall, installMyBrandOs } from "../services/install-mybrandos.js";
 import type { DistributorClient } from "../services/distributor.js";
 import type { HosClient } from "../services/hospitalityos.js";
 import type { EcoClient } from "../services/ecommerceos.js";
 import type { TosClient } from "../services/transportationos.js";
 
 function toPublic(row: PortalInstall): InstallRecordPublic {
+  const deliverables =
+    row.osId === "mybrandos" ? deliverablesForMyBrandInstall(row) : tenantDeliverables(row.subdomain, row.customDomain);
   return {
     id: row.id,
     appId: row.appId,
@@ -33,7 +36,7 @@ function toPublic(row: PortalInstall): InstallRecordPublic {
     enabledModules: row.enabledModules,
     seedApplied: row.seedApplied,
     launchUrls: row.launchUrls,
-    deliverables: tenantDeliverables(row.subdomain, row.customDomain),
+    deliverables,
     status: row.status,
     error: row.error,
     createdAt: row.createdAt,
@@ -176,6 +179,109 @@ export async function registerInstallRoutes(
       return reply.code(e.statusCode ?? 500).send({
         error: e.code ?? "install_failed",
         message: e.message ?? "Install failed",
+      });
+    }
+  });
+
+  const personalBody = z.object({
+    displayName: z.string().min(1).max(120),
+    subdomain: z.string().min(3).max(63).regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i),
+    tagline: z.string().max(200).optional(),
+    bio: z.string().max(2000).optional(),
+    ownerEmail: z.string().email().optional(),
+    customDomain: z.string().min(3).optional(),
+    brand: z
+      .object({
+        primaryColor: z.string().optional(),
+        logoUrl: z.string().optional(),
+      })
+      .optional(),
+  });
+
+  /** Personal OS — white-label mybrandOS download (no Finprove vertical license). */
+  app.post("/installs/personal", async (req, reply) => {
+    if (!requireSession(req, reply)) return;
+    const parsed = personalBody.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: "invalid_body", message: parsed.error.message });
+    }
+    try {
+      const install = await installMyBrandOs({
+        store,
+        distributor,
+        user: req.portalUser!,
+        accessToken: req.trustIdAccessToken,
+        input: parsed.data,
+      });
+      return reply.code(201).send({ ok: true, install: toPublic(install) });
+    } catch (err) {
+      if (err instanceof HttpError) {
+        return reply.code(err.statusCode).send({ error: err.code, message: err.message });
+      }
+      const e = err as { statusCode?: number; code?: string; message?: string };
+      return reply.code(e.statusCode ?? 500).send({
+        error: e.code ?? "install_failed",
+        message: e.message ?? "Install failed",
+      });
+    }
+  });
+
+  /** Owner session: attach or buy a custom domain for an install (incl. mybrandOS). */
+  app.post("/installs/:id/domain", async (req, reply) => {
+    if (!requireSession(req, reply)) return;
+    const { id } = req.params as { id: string };
+    const row = store.getInstall(id);
+    if (!row || row.ownerUserId !== req.portalUser!.id) {
+      return reply.code(404).send({ error: "not_found", message: "Install not found" });
+    }
+    if (row.status !== "ready") {
+      return reply.code(409).send({ error: "not_ready", message: "Finish install before attaching a domain." });
+    }
+    const body = z.object({ hostname: z.string().min(3), purchase: z.boolean().optional() }).parse(req.body);
+    const hostname = body.hostname.toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+    if (store.getDomainByHostname(hostname)) {
+      return reply.code(409).send({ error: "conflict", message: "Domain already attached" });
+    }
+    try {
+      const provisioned = body.purchase
+        ? await distributor.purchaseDomain({
+            tenantId: row.distributorTenantId,
+            subdomain: row.subdomain,
+            domain: hostname,
+          })
+        : await distributor.provisionCustomDomain({
+            tenantId: row.distributorTenantId,
+            subdomain: row.subdomain,
+            customDomain: hostname,
+          });
+      const domain = store.createDomain({
+        installId: row.id,
+        distributorTenantId: row.distributorTenantId,
+        domainId: provisioned.domainId,
+        kind: "custom",
+        hostname,
+        cnameTarget: provisioned.cnameTarget,
+        dnsRecords: provisioned.dnsRecords,
+        dnsStatus: provisioned.dnsStatus === "ACTIVE" ? "ACTIVE" : "PENDING",
+        sslStatus: provisioned.sslStatus === "ACTIVE" ? "ACTIVE" : "PENDING",
+        purchased: Boolean(body.purchase),
+      });
+      store.updateInstall(row.id, { customDomain: hostname, domainId: provisioned.domainId });
+      const updated = store.getInstall(row.id)!;
+      return reply.code(201).send({
+        ok: true,
+        domain,
+        install: toPublic(updated),
+        verification: { cnameTarget: provisioned.cnameTarget, dnsRecords: provisioned.dnsRecords },
+      });
+    } catch (err) {
+      if (err instanceof HttpError) {
+        return reply.code(err.statusCode).send({ error: err.code, message: err.message });
+      }
+      const e = err as { statusCode?: number; code?: string; message?: string };
+      return reply.code(e.statusCode ?? 500).send({
+        error: e.code ?? "domain_failed",
+        message: e.message ?? "Domain attach failed",
       });
     }
   });

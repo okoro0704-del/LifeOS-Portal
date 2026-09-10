@@ -205,6 +205,28 @@ export const portalApi = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  installPersonal: (body: {
+    displayName: string;
+    subdomain: string;
+    tagline?: string;
+    bio?: string;
+    ownerEmail?: string;
+    customDomain?: string;
+  }) =>
+    api<{ ok: boolean; install: InstallRow }>("/installs/personal", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  attachInstallDomain: (id: string, body: { hostname: string; purchase?: boolean }) =>
+    api<{
+      ok: boolean;
+      install: InstallRow;
+      domain: unknown;
+      verification?: { cnameTarget?: string; dnsRecords?: unknown };
+    }>(`/installs/${id}/domain`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   organizations: () =>
     api<{
       organizations: Array<{

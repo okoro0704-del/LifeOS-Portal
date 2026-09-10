@@ -74,6 +74,7 @@ export {
   tenantLabelFromHost,
   tenantDeliverables,
   tenantLaunchUrls,
+  mybrandOsDeliverables,
   featuresForVertical,
   type TenantDeliverables,
 } from "./urls.js";
