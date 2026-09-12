@@ -1,11 +1,15 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { platformUserDashboardUrl, GUEST_PORTAL_ORIGIN } from "@lifeos-portal/shared";
 import { ApiError, portalApi, type InstallRow } from "../lib/api";
 import { DeliverablesCard, deliverablesFor } from "../components/Deliverables";
 
+type InstallLocationState = { justCreated?: boolean };
+
 export function InstallDetailPage() {
   const { id } = useParams();
+  const location = useLocation();
+  const justCreated = Boolean((location.state as InstallLocationState | null)?.justCreated);
   const [row, setRow] = useState<InstallRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [domain, setDomain] = useState("");
@@ -101,18 +105,49 @@ export function InstallDetailPage() {
       </header>
       {row.error ? <p className="banner-error">{row.error}</p> : null}
 
+      {justCreated ? (
+        <section
+          className="card"
+          style={{ marginBottom: "1.5rem", borderColor: "var(--ok, #0d7a6f)" }}
+          data-testid="download-created-banner"
+        >
+          <p className="banner-ok" style={{ margin: 0 }}>
+            Download created. Your workspace is ready to open.
+          </p>
+          <h2 style={{ marginTop: "0.75rem" }}>Check Installs or the Dashboard</h2>
+          <p className="lead">
+            Open <strong>Installs</strong> for this vertical&apos;s deliverables (guest app, admin,
+            staff), or open the <strong>Dashboard</strong> to manage domains and verticals.
+          </p>
+          <div className="actions" style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+            <Link className="btn btn-primary" to="/app/installs">
+              Go to Installs
+            </Link>
+            <a className="btn btn-primary" href={dashboardUrl} target="_blank" rel="noreferrer">
+              Open Dashboard
+            </a>
+            <a className="btn btn-ghost" href={`${GUEST_PORTAL_ORIGIN}/app/business`}>
+              Download another vertical
+            </a>
+          </div>
+        </section>
+      ) : null}
+
       {row.status === "ready" ? (
         <section className="card" style={{ marginBottom: "1.5rem" }} data-testid="owner-dashboard-cta">
           <p className="eyebrow">your dashboard</p>
-          <h2>LifeOS portal dashboard</h2>
+          <h2>LifeOS Dashboard</h2>
           <p className="lead">
-            This is where you manage installs and download more verticals. Open it any time from your
-            branded admin app.
+            Manage domains and verticals on business.getlifeos.app. Deliverables for this install stay
+            on the Installs page.
           </p>
           <div className="actions" style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
             <a className="btn btn-primary" href={dashboardUrl} target="_blank" rel="noreferrer">
-              Open portal dashboard
+              Open Dashboard
             </a>
+            <Link className="btn btn-ghost" to="/app/installs">
+              Back to Installs
+            </Link>
             <a className="btn btn-ghost" href={`${GUEST_PORTAL_ORIGIN}/app/business`}>
               Add another vertical
             </a>

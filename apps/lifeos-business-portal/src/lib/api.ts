@@ -1,4 +1,5 @@
 import {
+  BUSINESS_PORTAL_ORIGIN,
   PORTAL_AUTH_SCOPES,
   type PortalUserPublic,
   type TenantDomain,
@@ -18,10 +19,26 @@ export const trustIdMode =
 const SESSION_KEY = "business.portal.session.token";
 const USER_KEY = "business.portal.auth.user";
 
+/** OAuth callback must be the first-party dashboard web host, never Railway. */
+export function businessPortalRedirectUri() {
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname.toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1") {
+      return `${window.location.origin}/callback`;
+    }
+    if (host === "business.getlifeos.app") {
+      return `${window.location.origin}/callback`;
+    }
+  }
+  return (
+    import.meta.env.VITE_TRUSTID_REDIRECT_URI ?? `${BUSINESS_PORTAL_ORIGIN}/callback`
+  );
+}
+
 export const authClient = createAuthClient({
   trustIdApi,
   clientId: import.meta.env.VITE_TRUSTID_CLIENT_ID ?? "lifeos_business_portal_public",
-  redirectUri: import.meta.env.VITE_TRUSTID_REDIRECT_URI ?? "http://localhost:5177/callback",
+  redirectUri: businessPortalRedirectUri,
   scopes: import.meta.env.VITE_TRUSTID_SCOPES ?? PORTAL_AUTH_SCOPES,
   storageKey: "business.portal.oauth",
 });

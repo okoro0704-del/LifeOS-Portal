@@ -3,10 +3,15 @@ import { PORTAL_AUTH_SCOPES } from "@lifeos-portal/shared";
 export type AuthClientConfig = {
   trustIdApi: string;
   clientId: string;
-  redirectUri: string;
+  /** Static URI or resolver so production can follow the browser host. */
+  redirectUri: string | (() => string);
   scopes: string;
   storageKey?: string;
 };
+
+function resolveRedirectUri(redirectUri: string | (() => string)) {
+  return typeof redirectUri === "function" ? redirectUri() : redirectUri;
+}
 
 function b64url(bytes: ArrayBuffer | Uint8Array) {
   const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
@@ -40,7 +45,7 @@ export function createAuthClient(config: AuthClientConfig) {
 
       const url = new URL(`${config.trustIdApi}/oauth/authorize`);
       url.searchParams.set("client_id", config.clientId);
-      url.searchParams.set("redirect_uri", config.redirectUri);
+      url.searchParams.set("redirect_uri", resolveRedirectUri(config.redirectUri));
       url.searchParams.set("response_type", "code");
       url.searchParams.set("scope", scopes);
       url.searchParams.set("state", state);
@@ -62,7 +67,7 @@ export function createAuthClient(config: AuthClientConfig) {
         body: JSON.stringify({
           grant_type: "authorization_code",
           code,
-          redirect_uri: config.redirectUri,
+          redirect_uri: resolveRedirectUri(config.redirectUri),
           client_id: config.clientId,
           code_verifier: saved.verifier,
         }),

@@ -19,6 +19,9 @@ export function InstallsPage() {
       <header className="page-head">
         <p className="eyebrow">your workspaces</p>
         <h1>Installs</h1>
+        <p className="lead">
+          Deliverables for every download live here. Use Dashboard for domains and vertical management.
+        </p>
       </header>
       {error ? <p className="banner-error">{error}</p> : null}
       {rows.length === 0 ? (

@@ -15,7 +15,13 @@ export function DomainsPage() {
       setDomains(data.domains);
       setError(null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load domains.");
+      if (err instanceof ApiError && (err.code === "portal_not_provisioned" || err.status === 403)) {
+        setError(
+          "Your Dashboard unlocks after the first vertical download. Install one from LifeOS Portal, then return here.",
+        );
+      } else {
+        setError(err instanceof ApiError ? err.message : "Could not load domains.");
+      }
     }
   }
 

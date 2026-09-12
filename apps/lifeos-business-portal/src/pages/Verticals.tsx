@@ -6,13 +6,23 @@ import { ApiError, money, portalApi } from "../lib/api";
 export function VerticalsPage() {
   const [verticals, setVerticals] = useState<TenantVertical[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [needsInstall, setNeedsInstall] = useState(false);
 
   async function load() {
     try {
       setVerticals((await portalApi.verticals()).verticals);
       setError(null);
+      setNeedsInstall(false);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load verticals.");
+      if (err instanceof ApiError && (err.code === "portal_not_provisioned" || err.status === 403)) {
+        setNeedsInstall(true);
+        setError(
+          "Your Dashboard unlocks after the first vertical download. Install one from LifeOS Portal, then return here.",
+        );
+      } else {
+        setNeedsInstall(false);
+        setError(err instanceof ApiError ? err.message : "Could not load verticals.");
+      }
     }
   }
 
@@ -38,7 +48,21 @@ export function VerticalsPage() {
           </a>
         </p>
       </header>
-      {error ? <p className="banner-error">{error}</p> : null}
+      {error ? (
+        <div className="card" style={{ marginBottom: "1.25rem" }} data-testid="dashboard-verticals-error">
+          <p className="banner-error">{error}</p>
+          {needsInstall ? (
+            <p style={{ marginTop: "0.75rem" }}>
+              <a className="btn btn-primary" href={`${GUEST_PORTAL_ORIGIN}/app/business`}>
+                Download a vertical
+              </a>{" "}
+              <a className="btn btn-ghost" href={`${GUEST_PORTAL_ORIGIN}/app/installs`}>
+                Check Installs
+              </a>
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       <div className="cards">
         {active.map((vertical) => (
           <article className="card" key={vertical.installId}>

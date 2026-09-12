@@ -178,7 +178,7 @@ export function InstallVerticalPage() {
       });
       sessionStorage.removeItem("portal.billing");
       sessionStorage.removeItem("portal.wizard");
-      navigate(`/app/installs/${res.install.id}`);
+      navigate(`/app/installs/${res.install.id}`, { state: { justCreated: true } });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Install failed");
       setBusy(false);

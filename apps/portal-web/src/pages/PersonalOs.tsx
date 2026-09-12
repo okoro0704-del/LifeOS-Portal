@@ -35,7 +35,7 @@ export function PersonalOsPage() {
         bio: bio.trim() || undefined,
         ownerEmail: ownerEmail.trim() || undefined,
       });
-      navigate(`/app/installs/${res.install.id}`);
+      navigate(`/app/installs/${res.install.id}`, { state: { justCreated: true } });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not download mybrandOS.");
     } finally {
