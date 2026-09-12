@@ -244,6 +244,53 @@ export async function registerInstallRoutes(
     }
   });
 
+  /** Owner session: update brand name / site fields on an install. */
+  app.patch("/installs/:id", async (req, reply) => {
+    if (!requireSession(req, reply)) return;
+    const { id } = req.params as { id: string };
+    const row = store.getInstall(id);
+    if (!row || row.ownerUserId !== req.portalUser!.id) {
+      return reply.code(404).send({ error: "not_found", message: "Install not found" });
+    }
+    const body = z
+      .object({
+        displayName: z.string().min(1).max(120).optional(),
+        brand: z
+          .object({
+            primaryColor: z.string().optional(),
+            logoUrl: z
+              .string()
+              .max(700_000)
+              .refine((value) => value.startsWith("data:image/") || /^https?:\/\//i.test(value))
+              .optional(),
+          })
+          .optional(),
+        site: z
+          .object({
+            writeup: z.string().max(2000).optional(),
+            phone: z.string().max(40).optional(),
+            email: z.string().email().optional(),
+            address: z.string().max(200).optional(),
+          })
+          .optional(),
+      })
+      .parse(req.body ?? {});
+
+    const nextSite = {
+      ...(row.site ?? {}),
+      ...(body.site ?? {}),
+      ...(body.brand?.primaryColor ? { primaryColor: body.brand.primaryColor } : {}),
+      ...(body.brand?.logoUrl ? { logoUrl: body.brand.logoUrl } : {}),
+    };
+    store.updateInstall(row.id, {
+      ...(body.displayName ? { displayName: body.displayName.trim() } : {}),
+      ...(body.brand?.primaryColor ? { brandPrimaryColor: body.brand.primaryColor } : {}),
+      ...(body.brand?.logoUrl ? { brandLogoUrl: body.brand.logoUrl } : {}),
+      site: nextSite,
+    });
+    return { ok: true, install: toPublic(store.getInstall(row.id)!) };
+  });
+
   /** Owner session: attach or buy a custom domain for an install (incl. mybrandOS). */
   app.post("/installs/:id/domain", async (req, reply) => {
     if (!requireSession(req, reply)) return;

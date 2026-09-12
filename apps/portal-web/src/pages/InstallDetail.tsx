@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
+import { BUSINESS_PORTAL_ORIGIN, GUEST_PORTAL_ORIGIN } from "@lifeos-portal/shared";
 import { ApiError, portalApi, type InstallRow } from "../lib/api";
 import { DeliverablesCard, deliverablesFor } from "../components/Deliverables";
 
@@ -10,14 +11,41 @@ export function InstallDetailPage() {
   const [domain, setDomain] = useState("");
   const [domainNotice, setDomainNotice] = useState<string | null>(null);
   const [domainBusy, setDomainBusy] = useState(false);
+  const [displayName, setDisplayName] = useState("");
+  const [primaryColor, setPrimaryColor] = useState("#0d7a6f");
+  const [saveBusy, setSaveBusy] = useState(false);
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
     void portalApi
       .install(id)
-      .then((d) => setRow(d.install))
+      .then((d) => {
+        setRow(d.install);
+        setDisplayName(d.install.displayName);
+        setDomain(d.install.customDomain ?? "");
+      })
       .catch((err) => setError(err instanceof ApiError ? err.message : "Not found"));
   }, [id]);
+
+  async function saveBrand(event: FormEvent) {
+    event.preventDefault();
+    if (!row) return;
+    setSaveBusy(true);
+    setSaveNotice(null);
+    try {
+      const res = await portalApi.updateInstall(row.id, {
+        displayName: displayName.trim(),
+        brand: { primaryColor },
+      });
+      setRow(res.install);
+      setSaveNotice("Brand settings saved.");
+    } catch (err) {
+      setSaveNotice(err instanceof ApiError ? err.message : "Could not save brand settings.");
+    } finally {
+      setSaveBusy(false);
+    }
+  }
 
   async function attachDomain(purchase: boolean) {
     if (!row || !domain.trim()) return;
@@ -59,6 +87,7 @@ export function InstallDetailPage() {
 
   const deliverables = deliverablesFor(row);
   const isMyBrand = row.osId === "mybrandos" || row.appId === "mybrandos";
+  const dashboardUrl = `${BUSINESS_PORTAL_ORIGIN}/dashboard/verticals`;
 
   return (
     <div className="page">
@@ -71,11 +100,71 @@ export function InstallDetailPage() {
         </p>
       </header>
       {row.error ? <p className="banner-error">{row.error}</p> : null}
+
+      {row.status === "ready" ? (
+        <section className="card" style={{ marginBottom: "1.5rem" }} data-testid="owner-dashboard-cta">
+          <p className="eyebrow">your dashboard</p>
+          <h2>LifeOS portal dashboard</h2>
+          <p className="lead">
+            This is where you manage installs and download more verticals. Open it any time from your
+            branded admin app.
+          </p>
+          <div className="actions" style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+            <a className="btn btn-primary" href={dashboardUrl} target="_blank" rel="noreferrer">
+              Open portal dashboard
+            </a>
+            <a className="btn btn-ghost" href={`${GUEST_PORTAL_ORIGIN}/app/business`}>
+              Add another vertical
+            </a>
+          </div>
+        </section>
+      ) : null}
+
       {row.status === "ready" && deliverables ? (
         <DeliverablesCard
           deliverables={deliverables}
           variant={isMyBrand ? "mybrandos" : "business"}
         />
+      ) : null}
+
+      {row.status === "ready" ? (
+        <section className="card" style={{ marginTop: "1.5rem" }} data-testid="install-brand-edit">
+          <p className="eyebrow">brand</p>
+          <h2>Edit brand</h2>
+          <p className="lead">
+            Update the name shown on your apps. Subdomain stays{" "}
+            <code>
+              {row.subdomain}
+              {isMyBrand ? "" : ".getlifeos.app"}
+            </code>{" "}
+            once live.
+          </p>
+          <form className="form" onSubmit={(event) => void saveBrand(event)}>
+            <label>
+              Brand / business name
+              <input
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                required
+                maxLength={120}
+                data-testid="install-display-name"
+              />
+            </label>
+            <label>
+              Brand color
+              <input
+                type="color"
+                value={primaryColor}
+                onChange={(e) => setPrimaryColor(e.target.value)}
+                data-testid="install-brand-color"
+              />
+            </label>
+            <button className="btn btn-primary" type="submit" disabled={saveBusy}>
+              {saveBusy ? "Saving…" : "Save brand"}
+            </button>
+            {saveNotice ? <p className="muted">{saveNotice}</p> : null}
+          </form>
+        </section>
       ) : null}
 
       {row.status === "ready" ? (
@@ -92,6 +181,7 @@ export function InstallDetailPage() {
               value={domain}
               onChange={(e) => setDomain(e.target.value.toLowerCase())}
               placeholder="brand.example.com"
+              data-testid="install-domain-input"
             />
           </label>
           <div className="actions" style={{ marginTop: "0.75rem", display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>

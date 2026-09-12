@@ -221,6 +221,18 @@ export const portalApi = {
     ),
   installs: () => api<{ installs: InstallRow[] }>("/installs"),
   install: (id: string) => api<{ install: InstallRow }>(`/installs/${id}`),
+  updateInstall: (
+    id: string,
+    body: {
+      displayName?: string;
+      brand?: { primaryColor?: string; logoUrl?: string };
+      site?: { writeup?: string; phone?: string; email?: string; address?: string };
+    },
+  ) =>
+    api<{ ok: boolean; install: InstallRow }>(`/installs/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   createInstall: (body: unknown) =>
     api<{ ok: boolean; install: InstallRow }>("/installs", {
       method: "POST",

@@ -7,6 +7,7 @@ import type { DistributorClient } from "./distributor.js";
 import { projectInstallToLifeOsShell } from "./shell-projection.js";
 import { provisionTenantHostname } from "./tenant-hostname.js";
 import { claimSubdomain } from "./subdomain-claim.js";
+import { activateBusinessPortal } from "./tenant-portal.js";
 
 const subdomainRe = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i;
 
@@ -188,6 +189,14 @@ export async function installMyBrandOs(opts: {
       preset: "mybrandos",
       icon: "✦",
     }).catch(() => null);
+
+    activateBusinessPortal({
+      store: opts.store,
+      user: opts.user,
+      install: ready,
+      licenseAmountMinor: 0,
+      currency: "USD",
+    });
 
     return ready;
   } catch (err) {

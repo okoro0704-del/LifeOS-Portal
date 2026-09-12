@@ -24,6 +24,7 @@ export function toPublicTenantApp(row: PortalInstall): PublicTenantApp & {
     publicOrigin: string;
     adminOrigin: string;
     studioOrigin: string;
+    trustId?: string;
     upstreamPublicOrigin?: string;
     upstreamAdminOrigin?: string;
     upstreamStudioOrigin?: string;
@@ -66,6 +67,7 @@ export function toPublicTenantApp(row: PortalInstall): PublicTenantApp & {
     ...base,
     mybrand: {
       slug,
+      trustId,
       publicOrigin: publicOrigin.includes("up.railway.app") ? `${brandOrigin}/` : publicOrigin,
       adminOrigin,
       studioOrigin: studioOrigin.includes("up.railway.app") ? `${brandOrigin}/enter` : studioOrigin,

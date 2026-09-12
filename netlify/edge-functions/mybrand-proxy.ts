@@ -1,6 +1,7 @@
 /**
  * First-party mybrandOS on `{slug}.getlifeos.app`.
  * Hotels and apex stay on the Portal SPA; mybrand tenants are proxied to Railway.
+ * `/admin` is rewritten to the white-label studio (`/enter?wl=1…`) so owners never land on the public site.
  */
 import type { Context } from "https://edge.netlify.com";
 
@@ -26,7 +27,12 @@ type TenantBody = {
   tenant?: {
     osId?: string;
     subdomain?: string;
-    mybrand?: { slug?: string };
+    displayName?: string;
+    mybrand?: {
+      slug?: string;
+      trustId?: string;
+      upstreamAdminOrigin?: string;
+    };
   };
 };
 
@@ -60,6 +66,27 @@ function tenantLabel(host: string): string | null {
   return label;
 }
 
+function studioUpstreamPath(tenant: TenantBody, brandSlug: string, search: string): string {
+  const upstream = tenant.tenant?.mybrand?.upstreamAdminOrigin;
+  if (upstream) {
+    try {
+      const u = new URL(upstream);
+      return `${u.pathname}${u.search || search}`;
+    } catch {
+      /* fall through */
+    }
+  }
+  const trustId =
+    tenant.tenant?.mybrand?.trustId ||
+    `TD-WL-${brandSlug.toUpperCase().replace(/-/g, "")}`.slice(0, 80);
+  const name = tenant.tenant?.displayName || brandSlug;
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  if (!params.has("wl")) params.set("wl", "1");
+  if (!params.has("trustId")) params.set("trustId", trustId);
+  if (!params.has("name")) params.set("name", name);
+  return `/enter?${params.toString()}`;
+}
+
 export default async (request: Request, context: Context) => {
   const url = new URL(request.url);
   const host = url.hostname.toLowerCase();
@@ -77,7 +104,10 @@ export default async (request: Request, context: Context) => {
   }
 
   const brandSlug = (tenant.tenant.mybrand?.slug || tenant.tenant.subdomain || slug).toLowerCase();
-  const upstreamPath = url.pathname + url.search;
+  const isAdminPath = url.pathname === "/admin" || url.pathname.startsWith("/admin/");
+  const upstreamPath = isAdminPath
+    ? studioUpstreamPath(tenant, brandSlug, url.search)
+    : url.pathname + url.search;
   const target = new URL(upstreamPath, `${MYBRANDOS}/`);
 
   const headers = new Headers(request.headers);
@@ -97,7 +127,12 @@ export default async (request: Request, context: Context) => {
 
   const upstream = await fetch(target, init);
   const outHeaders = new Headers(upstream.headers);
-  if (url.pathname === "/" || url.pathname.startsWith("/u/") || url.pathname.startsWith("/api/")) {
+  if (
+    url.pathname === "/" ||
+    url.pathname.startsWith("/u/") ||
+    url.pathname.startsWith("/api/") ||
+    isAdminPath
+  ) {
     outHeaders.set("cache-control", "private, no-store");
   }
   return new Response(upstream.body, {

@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
+import { BUSINESS_PORTAL_ORIGIN } from "@lifeos-portal/shared";
 import { useAuth } from "../hooks/useAuth";
 
 export function AppShell() {
@@ -17,6 +18,7 @@ export function AppShell() {
           <NavLink to="/app/business">Business OS</NavLink>
           <NavLink to="/app/installs">Installs</NavLink>
           <NavLink to="/app/organizations">Organizations</NavLink>
+          <a href={`${BUSINESS_PORTAL_ORIGIN}/dashboard/verticals`}>Dashboard</a>
         </nav>
         <div className="sidebar-foot">
           <p className="mono muted small">{user?.email || user?.trustId}</p>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { TenantVertical } from "@lifeos-portal/shared";
+import { GUEST_PORTAL_ORIGIN } from "@lifeos-portal/shared";
 import { ApiError, money, portalApi } from "../lib/api";
 
 export function VerticalsPage() {
@@ -28,8 +29,13 @@ export function VerticalsPage() {
         <p className="eyebrow">Subscriptions</p>
         <h1>Verticals</h1>
         <p className="lead">
-          HospitalityOS, ECommerceOS, TransportationOS, and ServiceOS. Toggle features or upgrade the
-          plan on an active install.
+          Manage what you already run, or jump back to the LifeOS Portal marketplace to license another
+          vertical.
+        </p>
+        <p>
+          <a className="btn btn-primary" href={`${GUEST_PORTAL_ORIGIN}/app/business`}>
+            Download more verticals
+          </a>
         </p>
       </header>
       {error ? <p className="banner-error">{error}</p> : null}
@@ -57,23 +63,39 @@ export function VerticalsPage() {
                 </li>
               ))}
             </ul>
-            <button
-              className="btn btn-primary"
-              type="button"
-              onClick={() => void portalApi.upgradeVertical(vertical.installId).then(load)}
-            >
-              Upgrade plan
-            </button>
+            <div className="actions" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={() => void portalApi.upgradeVertical(vertical.installId).then(load)}
+              >
+                Upgrade plan
+              </button>
+              <a className="btn btn-ghost" href={`${GUEST_PORTAL_ORIGIN}/app/installs`}>
+                Edit in Portal
+              </a>
+            </div>
           </article>
         ))}
       </div>
       <h2 className="section-title">Also in the catalog</h2>
       <div className="cards">
         {catalog.map((vertical) => (
-          <article className={`card ${vertical.available ? "" : "card--soon"}`} key={`${vertical.osId}-${vertical.verticalId}`}>
+          <article
+            className={`card ${vertical.available ? "" : "card--soon"}`}
+            key={`${vertical.osId}-${vertical.verticalId}`}
+          >
             <span className="badge">{vertical.available ? "Available" : "Coming soon"}</span>
             <h2>{vertical.displayName}</h2>
             <p className="muted">{vertical.osId}</p>
+            {vertical.available ? (
+              <a
+                className="btn btn-primary"
+                href={`${GUEST_PORTAL_ORIGIN}/app/business/${vertical.osId}/${vertical.verticalId}/billing`}
+              >
+                Install vertical
+              </a>
+            ) : null}
           </article>
         ))}
       </div>

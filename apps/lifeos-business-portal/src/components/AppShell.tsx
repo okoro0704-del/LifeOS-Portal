@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
+import { GUEST_PORTAL_ORIGIN } from "@lifeos-portal/shared";
 import { useAuth } from "../hooks/useAuth";
 
 export function AppShell() {
@@ -12,6 +13,7 @@ export function AppShell() {
         <nav>
           <NavLink to="/dashboard/domains">Domains</NavLink>
           <NavLink to="/dashboard/verticals">Verticals</NavLink>
+          <a href={`${GUEST_PORTAL_ORIGIN}/app/business`}>Add verticals</a>
         </nav>
         <div className="sidebar-foot">
           <p className="mono muted small">{user?.trustId}</p>

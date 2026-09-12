@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { BUSINESS_PORTAL_ORIGIN, GUEST_PORTAL_ORIGIN } from "@lifeos-portal/shared";
 import { portalApiBase } from "../lib/api";
 
 type MyBrandTenant = {
@@ -13,6 +14,7 @@ type MyBrandTenant = {
       publicOrigin: string;
       adminOrigin: string;
       studioOrigin: string;
+      trustId?: string;
       upstreamPublicOrigin?: string;
       upstreamAdminOrigin?: string;
     };
@@ -27,13 +29,45 @@ function Frame({ title, src }: { title: string; src: string }) {
       style={{
         border: 0,
         width: "100%",
-        height: "100vh",
+        height: "100%",
         display: "block",
         background: "#0b0c10",
+        flex: 1,
       }}
       allow="clipboard-write; fullscreen; autoplay; camera; microphone"
       referrerPolicy="strict-origin-when-cross-origin"
     />
+  );
+}
+
+function PortalEscapeBar({ brand }: { brand: string }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: "0.75rem",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "0.55rem 0.9rem",
+        background: "#0f172a",
+        color: "#e2e8f0",
+        fontFamily: "Manrope, system-ui, sans-serif",
+        fontSize: "0.85rem",
+      }}
+      data-testid="portal-escape-bar"
+    >
+      <span>
+        <strong>{brand}</strong> · LifeOS admin
+      </span>
+      <span style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+        <a href={`${BUSINESS_PORTAL_ORIGIN}/dashboard/verticals`} style={{ color: "#7dd3fc" }}>
+          LifeOS dashboard
+        </a>
+        <a href={`${GUEST_PORTAL_ORIGIN}/app/business`} style={{ color: "#7dd3fc" }}>
+          Add verticals
+        </a>
+      </span>
+    </div>
   );
 }
 
@@ -46,6 +80,12 @@ function TopLevelRedirect({ to }: { to: string }) {
       <p className="muted">Opening studio…</p>
     </div>
   );
+}
+
+function BrandPathRedirect({ brandOrigin }: { brandOrigin: string }) {
+  const location = useLocation();
+  const target = `${brandOrigin}${location.pathname}${location.search}${location.hash}`;
+  return <TopLevelRedirect to={target} />;
 }
 
 /**
@@ -76,16 +116,16 @@ export function TenantMyBrandApp({ subdomain, basename }: { subdomain: string; b
     const upstreamAdmin =
       meta.mybrand?.upstreamAdminOrigin ||
       `https://mybrandos-production.up.railway.app/enter?wl=1&trustId=${encodeURIComponent(
-        `TD-WL-${slug.toUpperCase().replace(/-/g, "")}`.slice(0, 80),
+        meta.mybrand?.trustId || `TD-WL-${slug.toUpperCase().replace(/-/g, "")}`.slice(0, 80),
       )}&name=${encodeURIComponent(meta.displayName)}`;
     const onBrandHost = window.location.hostname.toLowerCase() === `${slug}.getlifeos.app`;
     return {
       slug,
-      // On the brand host without edge proxy, embed upstream so the page is not blank.
+      brandOrigin,
       publicEmbed: onBrandHost ? upstream : meta.mybrand?.publicOrigin || `${brandOrigin}/`,
+      adminEmbed: upstreamAdmin,
       adminOrigin: onBrandHost ? upstreamAdmin : meta.mybrand?.adminOrigin || `${brandOrigin}/admin`,
       preferRedirectToBrand: !onBrandHost,
-      brandPublic: `${brandOrigin}/`,
     };
   }, [meta]);
 
@@ -105,15 +145,37 @@ export function TenantMyBrandApp({ subdomain, basename }: { subdomain: string; b
   }
 
   if (origins.preferRedirectToBrand) {
-    return <TopLevelRedirect to={origins.brandPublic} />;
+    return (
+      <BrowserRouter basename={basename}>
+        <Routes>
+          <Route path="*" element={<BrandPathRedirect brandOrigin={origins.brandOrigin} />} />
+        </Routes>
+      </BrowserRouter>
+    );
   }
 
   return (
     <BrowserRouter basename={basename}>
       <Routes>
         <Route path="/" element={<Frame title={`${meta.displayName} public site`} src={origins.publicEmbed} />} />
-        <Route path="/admin" element={<TopLevelRedirect to={origins.adminOrigin} />} />
-        <Route path="/admin/*" element={<TopLevelRedirect to={origins.adminOrigin} />} />
+        <Route
+          path="/admin"
+          element={
+            <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+              <PortalEscapeBar brand={meta.displayName} />
+              <Frame title={`${meta.displayName} studio`} src={origins.adminEmbed} />
+            </div>
+          }
+        />
+        <Route
+          path="/admin/*"
+          element={
+            <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+              <PortalEscapeBar brand={meta.displayName} />
+              <Frame title={`${meta.displayName} studio`} src={origins.adminEmbed} />
+            </div>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

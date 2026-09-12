@@ -1,6 +1,7 @@
 /** Public production hosts. Guest testers use the apex; operators use admin. */
 export const GUEST_PORTAL_ORIGIN = "https://getlifeos.app";
 export const PLATFORM_ADMIN_ORIGIN = "https://admin.getlifeos.app";
+export const BUSINESS_PORTAL_ORIGIN = "https://business-portal-production-c734.up.railway.app";
 export const TENANT_APP_ROOT_DOMAIN = "getlifeos.app";
 
 const RESERVED_TENANT_LABELS = new Set([
