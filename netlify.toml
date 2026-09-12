@@ -1,5 +1,6 @@
 # Guest portal on getlifeos.app (this site).
 # admin.getlifeos.app is proxied to the platform-admin Railway service.
+# {brand}.getlifeos.app for mybrandOS is proxied first-party via edge function.
 [build]
   command = "npm --workspace @lifeos-portal/web run build"
   publish = "apps/portal-web/dist"
@@ -11,30 +12,47 @@
   NEXT_PUBLIC_DEFAULT_USER_ROLE = "USER"
   VITE_PORTAL_API = "https://gateway-production-c3f9.up.railway.app"
   VITE_TRUSTID_MODE = "mock"
+  GATEWAY_URL = "https://gateway-production-c3f9.up.railway.app"
+  MYBRANDOS_URL = "https://mybrandos-production.up.railway.app"
+
+# Run before SPA fallback so mybrand tenants never load the Portal shell.
+[[edge_functions]]
+  function = "mybrand-proxy"
+  path = "/*"
 
 # Host-specific proxy must come before the SPA fallback.
-# Also listed first in apps/portal-web/public/_redirects so the publish
-# directory cannot override this with /* -> /index.html.
 [[redirects]]
   from = "https://admin.getlifeos.app/*"
   to = "https://platform-admin-production-26aa.up.railway.app/:splat"
   status = 200
   force = true
 
-# Apex /admin → platform admin (operators often type getlifeos.app/admin).
+# Apex-only /admin → platform admin (NOT brand subdomains).
 [[redirects]]
-  from = "/admin"
+  from = "https://getlifeos.app/admin"
   to = "https://admin.getlifeos.app/admin/tenants"
   status = 302
   force = true
 
 [[redirects]]
-  from = "/admin/*"
+  from = "https://getlifeos.app/admin/*"
   to = "https://admin.getlifeos.app/admin/:splat"
   status = 302
   force = true
 
-# React Router SPA fallback for the guest portal.
+[[redirects]]
+  from = "https://www.getlifeos.app/admin"
+  to = "https://admin.getlifeos.app/admin/tenants"
+  status = 302
+  force = true
+
+[[redirects]]
+  from = "https://www.getlifeos.app/admin/*"
+  to = "https://admin.getlifeos.app/admin/:splat"
+  status = 302
+  force = true
+
+# React Router SPA fallback for the guest portal (hotels + apex).
 [[redirects]]
   from = "/*"
   to = "/index.html"

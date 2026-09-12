@@ -13,6 +13,8 @@ type MyBrandTenant = {
       publicOrigin: string;
       adminOrigin: string;
       studioOrigin: string;
+      upstreamPublicOrigin?: string;
+      upstreamAdminOrigin?: string;
     };
   };
 };
@@ -35,7 +37,6 @@ function Frame({ title, src }: { title: string; src: string }) {
   );
 }
 
-/** Top-level navigation so mybrandOS session cookies are first-party. */
 function TopLevelRedirect({ to }: { to: string }) {
   useEffect(() => {
     window.location.replace(to);
@@ -48,9 +49,8 @@ function TopLevelRedirect({ to }: { to: string }) {
 }
 
 /**
- * White-label surfaces on `{brand}.getlifeos.app`:
- * - `/` → public mybrandOS site (embed)
- * - `/admin` → top-level studio enter (cookies must be first-party)
+ * Fallback when Netlify edge has not yet proxied `{brand}.getlifeos.app` to mybrandOS.
+ * Prefer subdomain deliverable URLs; embed upstream Railway only if needed.
  */
 export function TenantMyBrandApp({ subdomain, basename }: { subdomain: string; basename: string }) {
   const [meta, setMeta] = useState<MyBrandTenant["tenant"] | null>(null);
@@ -67,26 +67,25 @@ export function TenantMyBrandApp({ subdomain, basename }: { subdomain: string; b
   }, [subdomain]);
 
   const origins = useMemo(() => {
-    const base = "https://mybrandos-production.up.railway.app";
-    if (meta?.mybrand) {
-      const admin = meta.mybrand.adminOrigin;
-      const needsWl = admin.includes("/enter") && !admin.includes("wl=1");
-      const trustFallback = `TD-WL-${meta.subdomain.toUpperCase().replace(/-/g, "")}`.slice(0, 80);
-      return {
-        ...meta.mybrand,
-        adminOrigin: needsWl
-          ? `${base}/enter?wl=1&trustId=${encodeURIComponent(trustFallback)}&name=${encodeURIComponent(meta.displayName)}`
-          : admin,
-      };
-    }
     if (!meta) return null;
-    const slug = meta.subdomain;
-    const trustId = `TD-WL-${slug.toUpperCase().replace(/-/g, "")}`.slice(0, 80);
+    const slug = meta.mybrand?.slug || meta.subdomain;
+    const brandOrigin = `https://${slug}.getlifeos.app`;
+    const upstream =
+      meta.mybrand?.upstreamPublicOrigin ||
+      `https://mybrandos-production.up.railway.app/u/${slug}`;
+    const upstreamAdmin =
+      meta.mybrand?.upstreamAdminOrigin ||
+      `https://mybrandos-production.up.railway.app/enter?wl=1&trustId=${encodeURIComponent(
+        `TD-WL-${slug.toUpperCase().replace(/-/g, "")}`.slice(0, 80),
+      )}&name=${encodeURIComponent(meta.displayName)}`;
+    const onBrandHost = window.location.hostname.toLowerCase() === `${slug}.getlifeos.app`;
     return {
       slug,
-      publicOrigin: `${base}/u/${slug}`,
-      adminOrigin: `${base}/enter?wl=1&trustId=${encodeURIComponent(trustId)}&name=${encodeURIComponent(meta.displayName)}`,
-      studioOrigin: `${base}/`,
+      // On the brand host without edge proxy, embed upstream so the page is not blank.
+      publicEmbed: onBrandHost ? upstream : meta.mybrand?.publicOrigin || `${brandOrigin}/`,
+      adminOrigin: onBrandHost ? upstreamAdmin : meta.mybrand?.adminOrigin || `${brandOrigin}/admin`,
+      preferRedirectToBrand: !onBrandHost,
+      brandPublic: `${brandOrigin}/`,
     };
   }, [meta]);
 
@@ -105,10 +104,14 @@ export function TenantMyBrandApp({ subdomain, basename }: { subdomain: string; b
     );
   }
 
+  if (origins.preferRedirectToBrand) {
+    return <TopLevelRedirect to={origins.brandPublic} />;
+  }
+
   return (
     <BrowserRouter basename={basename}>
       <Routes>
-        <Route path="/" element={<Frame title={`${meta.displayName} public site`} src={origins.publicOrigin} />} />
+        <Route path="/" element={<Frame title={`${meta.displayName} public site`} src={origins.publicEmbed} />} />
         <Route path="/admin" element={<TopLevelRedirect to={origins.adminOrigin} />} />
         <Route path="/admin/*" element={<TopLevelRedirect to={origins.adminOrigin} />} />
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -132,6 +132,9 @@ export async function installMyBrandOs(opts: {
       studioUrl: string;
       trustId: string;
       token?: string;
+      upstreamPublicUrl?: string;
+      upstreamAdminUrl?: string;
+      upstreamStudioUrl?: string;
     };
 
     // DNS/alias failures must not fail an otherwise successful white-label install.
@@ -148,10 +151,7 @@ export async function installMyBrandOs(opts: {
       staff: deliverables.staffApp.url,
     };
 
-    const adminUrl =
-      provisioned.adminUrl && provisioned.adminUrl.includes("wl=1")
-        ? provisioned.adminUrl
-        : `${base}/enter?wl=1&trustId=${encodeURIComponent(provisioned.trustId)}&name=${encodeURIComponent(opts.input.displayName)}`;
+    const adminUrl = `${deliverables.adminDashboard.url}`;
 
     opts.store.updateInstall(row.id, {
       status: "ready",
@@ -162,9 +162,13 @@ export async function installMyBrandOs(opts: {
       adminConsoleUrl: deliverables.adminDashboard.url,
       launchUrls,
       site: {
-        mybrandPublicOrigin: provisioned.publicUrl,
+        mybrandPublicOrigin: deliverables.guestApp.url,
         mybrandAdminOrigin: adminUrl,
-        mybrandStudioOrigin: provisioned.studioUrl || `${base}/`,
+        mybrandStudioOrigin: `${deliverables.guestApp.url.replace(/\/$/, "")}/enter?wl=1&trustId=${encodeURIComponent(provisioned.trustId)}&name=${encodeURIComponent(opts.input.displayName)}`,
+        mybrandUpstreamPublicOrigin: provisioned.upstreamPublicUrl || provisioned.publicUrl,
+        mybrandUpstreamAdminOrigin:
+          provisioned.upstreamAdminUrl ||
+          `${base}/enter?wl=1&trustId=${encodeURIComponent(provisioned.trustId)}&name=${encodeURIComponent(opts.input.displayName)}`,
         mybrandSlug: provisioned.slug || subdomain,
         mybrandTrustId: provisioned.trustId,
         mybrandToken: provisioned.token,

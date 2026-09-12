@@ -24,6 +24,9 @@ export function toPublicTenantApp(row: PortalInstall): PublicTenantApp & {
     publicOrigin: string;
     adminOrigin: string;
     studioOrigin: string;
+    upstreamPublicOrigin?: string;
+    upstreamAdminOrigin?: string;
+    upstreamStudioOrigin?: string;
   };
 } {
   const deliverables =
@@ -49,21 +52,26 @@ export function toPublicTenantApp(row: PortalInstall): PublicTenantApp & {
   const trustId = String(
     site.mybrandTrustId ?? row.hosTenantId ?? row.tenantId ?? wlTrustFallback,
   );
-  const publicOrigin = String(site.mybrandPublicOrigin ?? `${mybrandBase}/u/${slug}`);
-  const studioOrigin = String(site.mybrandStudioOrigin ?? `${mybrandBase}/`);
-  const adminWithBypass = `${mybrandBase}/enter?wl=1&trustId=${encodeURIComponent(trustId)}&name=${encodeURIComponent(row.displayName)}`;
+  const brandOrigin = `https://${deliverables.hostname}`;
+  const publicOrigin = String(site.mybrandPublicOrigin ?? `${brandOrigin}/`);
+  const studioOrigin = String(site.mybrandStudioOrigin ?? `${brandOrigin}/enter`);
+  const adminWithBypass = `${brandOrigin}/admin`;
+  const upstreamAdmin = `${mybrandBase}/enter?wl=1&trustId=${encodeURIComponent(trustId)}&name=${encodeURIComponent(row.displayName)}`;
   let adminOrigin = String(site.mybrandAdminOrigin ?? adminWithBypass);
-  // Older installs stored bare /enter — force white-label enter so studio can open.
-  if (/\/enter\/?$/.test(adminOrigin) || (adminOrigin.includes("/enter") && !adminOrigin.includes("wl=1"))) {
+  // Older installs stored Railway /enter — advertise subdomain /admin as the deliverable.
+  if (adminOrigin.includes("up.railway.app") || adminOrigin.includes("/enter")) {
     adminOrigin = adminWithBypass;
   }
   return {
     ...base,
     mybrand: {
       slug,
-      publicOrigin,
+      publicOrigin: publicOrigin.includes("up.railway.app") ? `${brandOrigin}/` : publicOrigin,
       adminOrigin,
-      studioOrigin,
+      studioOrigin: studioOrigin.includes("up.railway.app") ? `${brandOrigin}/enter` : studioOrigin,
+      upstreamPublicOrigin: `${mybrandBase}/u/${slug}`,
+      upstreamAdminOrigin: upstreamAdmin,
+      upstreamStudioOrigin: `${mybrandBase}/`,
     },
   };
 }
