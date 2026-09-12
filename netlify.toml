@@ -1,5 +1,6 @@
 # Guest portal on getlifeos.app (this site).
-# admin.getlifeos.app is proxied to the platform-admin Railway service.
+# admin.getlifeos.app → platform-admin Railway (PLATFORM ADMIN DASHBOARD).
+# business.getlifeos.app → business-portal Railway (PLATFORM USER DASHBOARD web app).
 # {brand}.getlifeos.app for mybrandOS is proxied first-party via edge function.
 [build]
   command = "npm --workspace @lifeos-portal/web run build"
@@ -20,10 +21,16 @@
   function = "mybrand-proxy"
   path = "/*"
 
-# Host-specific proxy must come before the SPA fallback.
+# Host-specific proxies must come before the SPA fallback.
 [[redirects]]
   from = "https://admin.getlifeos.app/*"
   to = "https://platform-admin-production-26aa.up.railway.app/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "https://business.getlifeos.app/*"
+  to = "https://business-portal-production-c734.up.railway.app/:splat"
   status = 200
   force = true
 

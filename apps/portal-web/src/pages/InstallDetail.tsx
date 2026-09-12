@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
-import { BUSINESS_PORTAL_ORIGIN, GUEST_PORTAL_ORIGIN } from "@lifeos-portal/shared";
+import { platformUserDashboardUrl, GUEST_PORTAL_ORIGIN } from "@lifeos-portal/shared";
 import { ApiError, portalApi, type InstallRow } from "../lib/api";
 import { DeliverablesCard, deliverablesFor } from "../components/Deliverables";
 
@@ -86,8 +86,8 @@ export function InstallDetailPage() {
   }
 
   const deliverables = deliverablesFor(row);
+  const dashboardUrl = platformUserDashboardUrl();
   const isMyBrand = row.osId === "mybrandos" || row.appId === "mybrandos";
-  const dashboardUrl = `${BUSINESS_PORTAL_ORIGIN}/dashboard/verticals`;
 
   return (
     <div className="page">

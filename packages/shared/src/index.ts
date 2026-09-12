@@ -95,6 +95,21 @@ export {
   type TenantDeliverables,
 } from "./urls.js";
 
+export {
+  APPLICATION_SURFACES,
+  UPSTREAM_SERVICE_ORIGINS,
+  getSurface,
+  platformUserDashboardUrl,
+  platformAdminDashboardUrl,
+  platformWebUrl,
+  isUpstreamServiceUrl,
+  mybrandUserAdminEnterPath,
+  mybrandUserAppUrl,
+  mybrandUserAdminUrl,
+  type ApplicationSurface,
+  type SurfaceAudience,
+  type SurfaceDefinition,
+} from "./surfaces.js";
 
 export {
   PLATFORM_COMMISSION_BPS,

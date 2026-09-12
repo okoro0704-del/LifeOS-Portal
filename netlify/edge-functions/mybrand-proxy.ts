@@ -1,7 +1,12 @@
 /**
  * First-party mybrandOS on `{slug}.getlifeos.app`.
- * Hotels and apex stay on the Portal SPA; mybrand tenants are proxied to Railway.
- * `/admin` is rewritten to the white-label studio (`/enter?wl=1…`) so owners never land on the public site.
+ *
+ * Surface routing:
+ * - USER APP  → `/` and `/u/{slug}` (public Digital Life)
+ * - USER ADMIN → `/admin` 302 → `/enter?wl=1&trustId&name` (Creator Studio)
+ *
+ * Critical: never reverse-proxy `/enter` HTML while leaving the browser on `/admin`.
+ * mybrandOS is a client SPA; pathname must match the studio route.
  */
 import type { Context } from "https://edge.netlify.com";
 
@@ -66,12 +71,14 @@ function tenantLabel(host: string): string | null {
   return label;
 }
 
-function studioUpstreamPath(tenant: TenantBody, brandSlug: string, search: string): string {
+function studioEnterPath(tenant: TenantBody, brandSlug: string, search: string): string {
   const upstream = tenant.tenant?.mybrand?.upstreamAdminOrigin;
   if (upstream) {
     try {
       const u = new URL(upstream);
-      return `${u.pathname}${u.search || search}`;
+      if (u.pathname.startsWith("/enter")) {
+        return `${u.pathname}${u.search}`;
+      }
     } catch {
       /* fall through */
     }
@@ -81,17 +88,35 @@ function studioUpstreamPath(tenant: TenantBody, brandSlug: string, search: strin
     `TD-WL-${brandSlug.toUpperCase().replace(/-/g, "")}`.slice(0, 80);
   const name = tenant.tenant?.displayName || brandSlug;
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
-  if (!params.has("wl")) params.set("wl", "1");
-  if (!params.has("trustId")) params.set("trustId", trustId);
-  if (!params.has("name")) params.set("name", name);
+  params.set("wl", "1");
+  if (!params.get("trustId")) params.set("trustId", trustId);
+  if (!params.get("name")) params.set("name", name);
   return `/enter?${params.toString()}`;
+}
+
+function rewriteUpstreamLocation(location: string, brandHost: string): string {
+  try {
+    const u = new URL(location, `https://${brandHost}`);
+    if (u.hostname.endsWith(".up.railway.app") || u.hostname === MYBRANDOS.replace(/^https?:\/\//, "")) {
+      u.protocol = "https:";
+      u.host = brandHost;
+    }
+    return u.toString();
+  } catch {
+    return location;
+  }
 }
 
 export default async (request: Request, context: Context) => {
   const url = new URL(request.url);
   const host = url.hostname.toLowerCase();
 
-  if (host === ROOT || host === `www.${ROOT}` || host === `admin.${ROOT}`) {
+  if (
+    host === ROOT ||
+    host === `www.${ROOT}` ||
+    host === `admin.${ROOT}` ||
+    host === `business.${ROOT}`
+  ) {
     return context.next();
   }
 
@@ -105,15 +130,29 @@ export default async (request: Request, context: Context) => {
 
   const brandSlug = (tenant.tenant.mybrand?.slug || tenant.tenant.subdomain || slug).toLowerCase();
   const isAdminPath = url.pathname === "/admin" || url.pathname.startsWith("/admin/");
-  const upstreamPath = isAdminPath
-    ? studioUpstreamPath(tenant, brandSlug, url.search)
-    : url.pathname + url.search;
+
+  // USER ADMIN: send the browser to the studio client route on this host.
+  if (isAdminPath && (request.method === "GET" || request.method === "HEAD")) {
+    const enterPath = studioEnterPath(tenant, brandSlug, url.search);
+    return Response.redirect(`https://${host}${enterPath}`, 302);
+  }
+
+  // Ensure bare /enter on brand host carries white-label studio params.
+  let upstreamPath = url.pathname + url.search;
+  if (url.pathname === "/enter" || url.pathname.startsWith("/enter/")) {
+    const params = new URLSearchParams(url.search.startsWith("?") ? url.search.slice(1) : url.search);
+    if (params.get("wl") !== "1") {
+      upstreamPath = studioEnterPath(tenant, brandSlug, url.search);
+    }
+  }
+
   const target = new URL(upstreamPath, `${MYBRANDOS}/`);
 
   const headers = new Headers(request.headers);
   headers.set("X-Forwarded-Host", host);
   headers.set("X-Brand-Slug", brandSlug);
   headers.set("X-Forwarded-Proto", "https");
+  headers.set("X-LifeOS-Surface", url.pathname.startsWith("/enter") ? "user_admin" : "user_app");
   headers.delete("host");
 
   const init: RequestInit = {
@@ -127,11 +166,13 @@ export default async (request: Request, context: Context) => {
 
   const upstream = await fetch(target, init);
   const outHeaders = new Headers(upstream.headers);
+  const loc = outHeaders.get("location");
+  if (loc) outHeaders.set("location", rewriteUpstreamLocation(loc, host));
   if (
     url.pathname === "/" ||
     url.pathname.startsWith("/u/") ||
     url.pathname.startsWith("/api/") ||
-    isAdminPath
+    url.pathname.startsWith("/enter")
   ) {
     outHeaders.set("cache-control", "private, no-store");
   }

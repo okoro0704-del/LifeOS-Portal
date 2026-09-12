@@ -1,8 +1,21 @@
-/** Public production hosts. Guest testers use the apex; operators use admin. */
-export const GUEST_PORTAL_ORIGIN = "https://getlifeos.app";
-export const PLATFORM_ADMIN_ORIGIN = "https://admin.getlifeos.app";
-export const BUSINESS_PORTAL_ORIGIN = "https://business-portal-production-c734.up.railway.app";
-export const TENANT_APP_ROOT_DOMAIN = "getlifeos.app";
+/**
+ * Public production hosts and tenant deliverable URL builders.
+ * Surface registry (web vs API) lives in ./surfaces.ts.
+ */
+
+export {
+  GUEST_PORTAL_ORIGIN,
+  PLATFORM_ADMIN_ORIGIN,
+  BUSINESS_PORTAL_ORIGIN,
+  TENANT_APP_ROOT_DOMAIN,
+} from "./surfaces.js";
+
+import {
+  BUSINESS_PORTAL_ORIGIN,
+  TENANT_APP_ROOT_DOMAIN,
+  mybrandUserAdminUrl,
+  mybrandUserAppUrl,
+} from "./surfaces.js";
 
 const RESERVED_TENANT_LABELS = new Set([
   "www",
@@ -85,7 +98,11 @@ export function tenantLaunchUrls(subdomain: string, customDomain?: string) {
   };
 }
 
-/** mybrandOS white-label deliverables on getlifeos.app (public `/`, admin `/admin`). */
+/**
+ * mybrandOS white-label deliverables.
+ * USER APP = public `/`
+ * USER ADMIN launch URL = `/admin` (edge/host must 302 into studio `/enter?wl=1…`)
+ */
 export function mybrandOsDeliverables(input: {
   slug: string;
   baseUrl?: string;
@@ -93,12 +110,28 @@ export function mybrandOsDeliverables(input: {
   adminUrl?: string;
 }): TenantDeliverables {
   const slug = input.slug.trim().toLowerCase();
-  const base = tenantDeliverables(slug, input.customDomain);
-  // Staff login is unused for personal white-label; keep studio root for compatibility.
+  const hostname = tenantAppHostname(slug, input.customDomain);
+  const publicUrl = input.baseUrl?.startsWith("http")
+    ? input.baseUrl.replace(/\/?$/, "/")
+    : mybrandUserAppUrl(slug, input.customDomain);
+  const adminUrl = input.adminUrl?.startsWith("http")
+    ? input.adminUrl
+    : mybrandUserAdminUrl(slug, input.customDomain);
   return {
-    ...base,
+    hostname,
+    guestApp: {
+      url: publicUrl,
+      kind: "web_pwa",
+      label: "Guest app",
+    },
+    adminDashboard: {
+      url: adminUrl,
+      kind: "pwa",
+      installOnFirstVisit: true,
+      label: "Admin dashboard",
+    },
     staffApp: {
-      url: base.adminDashboard.url,
+      url: adminUrl,
       kind: "pwa",
       label: "Staff login",
     },

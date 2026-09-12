@@ -60,7 +60,7 @@ export function toPublicTenantApp(row: PortalInstall): PublicTenantApp & {
   const upstreamAdmin = `${mybrandBase}/enter?wl=1&trustId=${encodeURIComponent(trustId)}&name=${encodeURIComponent(row.displayName)}`;
   let adminOrigin = String(site.mybrandAdminOrigin ?? adminWithBypass);
   // Older installs stored Railway /enter — advertise subdomain /admin as the deliverable.
-  if (adminOrigin.includes("up.railway.app") || adminOrigin.includes("/enter")) {
+  if (adminOrigin.includes("up.railway.app") || adminOrigin.includes("/enter?")) {
     adminOrigin = adminWithBypass;
   }
   return {
@@ -70,7 +70,10 @@ export function toPublicTenantApp(row: PortalInstall): PublicTenantApp & {
       trustId,
       publicOrigin: publicOrigin.includes("up.railway.app") ? `${brandOrigin}/` : publicOrigin,
       adminOrigin,
-      studioOrigin: studioOrigin.includes("up.railway.app") ? `${brandOrigin}/enter` : studioOrigin,
+      // Studio client route on brand host (edge maps /admin → /enter?wl=1…).
+      studioOrigin: studioOrigin.includes("up.railway.app")
+        ? `${brandOrigin}/enter`
+        : studioOrigin.split("?")[0] || `${brandOrigin}/enter`,
       upstreamPublicOrigin: `${mybrandBase}/u/${slug}`,
       upstreamAdminOrigin: upstreamAdmin,
       upstreamStudioOrigin: `${mybrandBase}/`,
