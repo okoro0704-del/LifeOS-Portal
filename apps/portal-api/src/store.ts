@@ -171,8 +171,14 @@ export type PortalStore = {
   deleteSession(tokenHash: string): void;
   createInstall(input: Omit<PortalInstall, "id" | "createdAt" | "updatedAt"> & { id?: string }): PortalInstall;
   updateInstall(id: string, patch: Partial<PortalInstall>): PortalInstall | undefined;
+  deleteInstall(id: string): boolean;
   getInstall(id: string): PortalInstall | undefined;
   getInstallBySubdomain(subdomain: string): PortalInstall | undefined;
+  /** Only a fully ready install reserves a subdomain. */
+  getReadyInstallBySubdomain(subdomain: string): PortalInstall | undefined;
+  listInstallsBySubdomain(subdomain: string): PortalInstall[];
+  /** Remove failed installs (optionally scoped to a subdomain). Returns deleted ids. */
+  purgeFailedInstalls(subdomain?: string): string[];
   getInstallByTenantId(tenantId: string): PortalInstall | undefined;
   listInstallsByOwner(userId: string): PortalInstall[];
   listAllInstalls(): PortalInstall[];
@@ -465,12 +471,39 @@ export function createStore(opts?: {
       persist();
       return next;
     },
+    deleteInstall(id) {
+      if (!installs.has(id)) return false;
+      installs.delete(id);
+      persist();
+      return true;
+    },
     getInstall(id) {
       return installs.get(id);
     },
     getInstallBySubdomain(subdomain) {
       const slug = subdomain.toLowerCase();
-      return [...installs.values()].find((i) => i.subdomain === slug);
+      const matches = [...installs.values()].filter((i) => i.subdomain === slug);
+      return matches.find((i) => i.status === "ready") ?? matches[0];
+    },
+    getReadyInstallBySubdomain(subdomain) {
+      const slug = subdomain.toLowerCase();
+      return [...installs.values()].find((i) => i.subdomain === slug && i.status === "ready");
+    },
+    listInstallsBySubdomain(subdomain) {
+      const slug = subdomain.toLowerCase();
+      return [...installs.values()].filter((i) => i.subdomain === slug);
+    },
+    purgeFailedInstalls(subdomain) {
+      const slug = subdomain?.toLowerCase();
+      const removed: string[] = [];
+      for (const row of [...installs.values()]) {
+        if (row.status !== "failed") continue;
+        if (slug && row.subdomain !== slug) continue;
+        installs.delete(row.id);
+        removed.push(row.id);
+      }
+      if (removed.length) persist();
+      return removed;
     },
     getInstallByTenantId(tenantId) {
       return [...installs.values()].find(

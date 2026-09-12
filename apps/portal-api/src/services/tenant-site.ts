@@ -125,10 +125,11 @@ export function updateTenantSite(
 
 export function findInstallByHost(store: PortalStore, hostHeader: string) {
   const host = hostHeader.split(":")[0]?.toLowerCase() ?? "";
-  return store.listAllInstalls().find((row) => {
+  const matches = store.listAllInstalls().filter((row) => {
     if (row.customDomain?.toLowerCase() === host) return true;
     return `${row.subdomain.toLowerCase()}.getlifeos.app` === host;
   });
+  return matches.find((row) => row.status === "ready") ?? matches[0];
 }
 
 function stripEmpty(patch: Partial<TenantSite>) {

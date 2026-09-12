@@ -15,6 +15,7 @@ import {
   routingTable,
   searchTenants,
 } from "../services/platform-admin.js";
+import { purgeAllFailedInstalls } from "../services/subdomain-claim.js";
 
 export async function registerPlatformAdminRoutes(
   app: FastifyInstance,
@@ -48,6 +49,12 @@ export async function registerPlatformAdminRoutes(
   app.get("/v1/admin/installs/health", async (req, reply) => {
     if (!requirePlatformAdmin(req, reply)) return;
     return { installs: listInstallHealth(store) };
+  });
+
+  app.post("/v1/admin/installs/purge-failed", async (req, reply) => {
+    if (!requirePlatformAdmin(req, reply)) return;
+    const result = purgeAllFailedInstalls(store);
+    return { ok: true, ...result };
   });
 
   app.get("/v1/admin/organizations", async (req, reply) => {

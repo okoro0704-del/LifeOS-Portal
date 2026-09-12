@@ -84,8 +84,8 @@ export async function registerTenantAppRoutes(
 
   app.get("/public/tenants/:subdomain", async (req, reply) => {
     const { subdomain } = req.params as { subdomain: string };
-    const row = store.getInstallBySubdomain(subdomain.toLowerCase());
-    if (!row || row.status !== "ready" || row.suspended) {
+    const row = store.getReadyInstallBySubdomain(subdomain.toLowerCase());
+    if (!row || row.suspended) {
       return reply.code(404).send({ error: "not_found", message: "Tenant app is not ready." });
     }
     if (row.verticalId === "hotel") return hotelAppPayload(row, store);
@@ -94,16 +94,18 @@ export async function registerTenantAppRoutes(
   });
 
   function readyInstall(subdomain: string) {
-    const row = store.getInstallBySubdomain(subdomain.toLowerCase());
-    if (!row || row.status !== "ready" || row.suspended) {
+    const row = store.getReadyInstallBySubdomain(subdomain.toLowerCase());
+    if (!row || row.suspended) {
       throw new HttpError("Tenant app is not ready.", 404, "not_found");
     }
     return row;
   }
 
   function hotelInstall(subdomain: string, readyOnly = true) {
-    const row = store.getInstallBySubdomain(subdomain.toLowerCase());
-    if (!row || row.verticalId !== "hotel" || (readyOnly && (row.status !== "ready" || row.suspended))) {
+    const row = readyOnly
+      ? store.getReadyInstallBySubdomain(subdomain.toLowerCase())
+      : store.getInstallBySubdomain(subdomain.toLowerCase());
+    if (!row || row.verticalId !== "hotel" || (readyOnly && row.suspended)) {
       throw new HttpError("Hotel is not ready.", 404, "not_found");
     }
     return row;
@@ -158,8 +160,8 @@ export async function registerTenantAppRoutes(
   app.post("/public/tenants/:subdomain/orders", async (req, reply) => {
     try {
       const { subdomain } = req.params as { subdomain: string };
-      const row = store.getInstallBySubdomain(subdomain.toLowerCase());
-      if (!row || row.status !== "ready") throw new HttpError("Tenant app is not ready.", 404, "not_found");
+      const row = store.getReadyInstallBySubdomain(subdomain.toLowerCase());
+      if (!row) throw new HttpError("Tenant app is not ready.", 404, "not_found");
       if (isDiningVertical(row.verticalId)) {
         const body = z
           .object({
@@ -577,8 +579,8 @@ export async function registerTenantAppRoutes(
     surface: "guest" | "admin",
     onTenantHost: boolean,
   ) => {
-    const row = store.getInstallBySubdomain(subdomain.toLowerCase());
-    if (!row || row.status !== "ready" || row.suspended) {
+    const row = store.getReadyInstallBySubdomain(subdomain.toLowerCase());
+    if (!row || row.suspended) {
       return reply.code(404).type("text/html").send("<!doctype html><title>Not ready</title><p>This tenant app is not ready.</p>");
     }
     const tenant = toPublicTenantApp(row);
@@ -607,8 +609,8 @@ export async function registerTenantAppRoutes(
   });
   app.get("/t/:subdomain/manifest.webmanifest", async (req, reply) => {
     const { subdomain } = req.params as { subdomain: string };
-    const row = store.getInstallBySubdomain(subdomain.toLowerCase());
-    if (!row || row.status !== "ready") return reply.code(404).send({ error: "not_found" });
+    const row = store.getReadyInstallBySubdomain(subdomain.toLowerCase());
+    if (!row) return reply.code(404).send({ error: "not_found" });
     return reply
       .type("application/manifest+json")
       .send(tenantManifest({ tenant: toPublicTenantApp(row), surface: surfaceFromQuery(req), assetBase: tenantAssetBase(row.subdomain, false) }));
@@ -652,8 +654,8 @@ export async function registerTenantAppRoutes(
   app.get("/manifest.webmanifest", async (req, reply) => {
     const subdomain = tenantSubdomainFromHost(req.hostname);
     if (!subdomain) return reply.callNotFound();
-    const row = store.getInstallBySubdomain(subdomain);
-    if (!row || row.status !== "ready") return reply.code(404).send({ error: "not_found" });
+    const row = store.getReadyInstallBySubdomain(subdomain);
+    if (!row) return reply.code(404).send({ error: "not_found" });
     return reply
       .type("application/manifest+json")
       .send(tenantManifest({ tenant: toPublicTenantApp(row), surface: surfaceFromQuery(req), assetBase: "" }));

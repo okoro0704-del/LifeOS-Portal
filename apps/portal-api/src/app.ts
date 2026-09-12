@@ -15,6 +15,7 @@ import { createHospitalityOsClient, type HosClient } from "./services/hospitalit
 import { createEcommerceOsClient, type EcoClient } from "./services/ecommerceos.js";
 import { createTransportationOsClient, type TosClient } from "./services/transportationos.js";
 import { createServiceOsClient, type SosClient } from "./services/serviceos.js";
+import { purgeAllFailedInstalls } from "./services/subdomain-claim.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerCatalogRoutes } from "./routes/catalog.js";
 import { registerBillingRoutes } from "./routes/billing.js";
@@ -58,6 +59,13 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
           databaseUrl: env.databaseUrl || undefined,
         }));
   seedLocalAdmin(store);
+  if (env.nodeEnv !== "test") {
+    const purged = purgeAllFailedInstalls(store);
+    if (purged.count) {
+      // Failed installs must not reserve subdomains; drop them on boot.
+      console.info(`[portal] purged ${purged.count} failed install(s)`);
+    }
+  }
   const distributor = opts.distributor ?? createDistributorClient();
   const hos = opts.hos ?? createHospitalityOsClient();
   const eco = opts.eco ?? createEcommerceOsClient();

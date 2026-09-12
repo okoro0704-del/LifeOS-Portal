@@ -6,6 +6,7 @@ import type { PortalInstall, PortalStore, PortalUser } from "../store.js";
 import type { DistributorClient } from "./distributor.js";
 import { projectInstallToLifeOsShell } from "./shell-projection.js";
 import { provisionTenantHostname } from "./tenant-hostname.js";
+import { claimSubdomain } from "./subdomain-claim.js";
 
 const subdomainRe = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i;
 
@@ -42,9 +43,7 @@ export async function installMyBrandOs(opts: {
   if (!subdomainRe.test(subdomain) || subdomain.length < 3) {
     throw new HttpError("Invalid brand subdomain (min 3 characters)", 400, "invalid_subdomain");
   }
-  if (opts.store.getInstallBySubdomain(subdomain)) {
-    throw new HttpError(`Brand subdomain already installed: ${subdomain}`, 409, "conflict");
-  }
+  claimSubdomain(opts.store, subdomain, "Brand subdomain");
 
   const tenantId = `tid_mybrand_${subdomain}_${newId().slice(0, 6)}`;
   const base = mybrandBaseUrl();

@@ -27,6 +27,7 @@ import { seedHotelProperty } from "./hotel-ops.js";
 import { isDiningVertical, seedDiningProperty } from "./dining-ops.js";
 import { provisionTenantHostname } from "./tenant-hostname.js";
 import { projectInstallToLifeOsShell, shellIconForPreset } from "./shell-projection.js";
+import { claimSubdomain } from "./subdomain-claim.js";
 
 function resolveHosInstallTemplate(verticalId: string, installTemplate?: string, enabledModules?: string[]) {
   if (installTemplate) return installTemplate;
@@ -175,9 +176,7 @@ export async function installDomainOs(opts: {
   if (!subdomainRe.test(subdomain)) {
     throw new HttpError("Invalid subdomain", 400, "invalid_subdomain");
   }
-  if (opts.store.getInstallBySubdomain(subdomain)) {
-    throw new HttpError(`Subdomain already installed: ${subdomain}`, 409, "conflict");
-  }
+  claimSubdomain(opts.store, subdomain);
 
   const tenantId = `tid_${subdomain}_${newId().slice(0, 6)}`;
   const destinations = oauthDestinations(osId, subdomain);
