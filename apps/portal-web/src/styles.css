@@ -19,6 +19,12 @@
   --los-radius-sm: 12px;
   --los-shadow: 0 4px 16px rgba(21, 32, 43, 0.06);
   --sidebar-w: 248px;
+  --app-header-h: 56px;
+  --app-tab-h: 64px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
 }
 
 * {
@@ -31,12 +37,18 @@ body,
   min-height: 100%;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
   font-family: var(--los-font);
   color: var(--los-text);
   background: var(--los-bg);
   -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+  touch-action: manipulation;
 }
 
 h1,
@@ -118,10 +130,11 @@ a {
 }
 
 .welcome {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
-  padding: 2rem;
+  padding: max(1.25rem, var(--safe-top)) max(1.25rem, var(--safe-right))
+    max(1.25rem, var(--safe-bottom)) max(1.25rem, var(--safe-left));
   position: relative;
   overflow: hidden;
 }
@@ -136,24 +149,30 @@ a {
 .welcome-inner {
   position: relative;
   max-width: 34rem;
+  width: min(100%, 34rem);
   display: grid;
   gap: 1rem;
 }
 .welcome-inner h1 {
   margin: 0;
-  font-size: 2.2rem;
+  font-size: clamp(1.7rem, 6vw, 2.2rem);
 }
 
 .splash {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
 }
 
 .shell {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   grid-template-columns: var(--sidebar-w) 1fr;
+}
+
+.app-top,
+.app-tabs {
+  display: none;
 }
 
 .sidebar {
@@ -173,15 +192,23 @@ a {
   display: grid;
   gap: 0.25rem;
 }
-.sidebar nav a {
+.sidebar nav a,
+.sidebar-dash {
   color: var(--los-text);
   text-decoration: none;
   padding: 0.65rem 0.75rem;
   border-radius: 12px;
   font-weight: 600;
+  font: inherit;
+  background: none;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  min-height: 44px;
 }
 .sidebar nav a.active,
-.sidebar nav a:hover {
+.sidebar nav a:hover,
+.sidebar-dash:hover {
   background: var(--los-accent-soft);
   color: var(--los-accent-strong);
 }
@@ -193,7 +220,8 @@ a {
 .linkish {
   background: none;
   border: none;
-  padding: 0;
+  padding: 0.35rem 0;
+  min-height: 44px;
   font: inherit;
   color: var(--los-accent);
   cursor: pointer;
@@ -202,10 +230,15 @@ a {
 
 .main {
   padding: 2rem;
+  min-width: 0;
 }
 
 .page {
   max-width: 920px;
+}
+
+.app-account-actions {
+  display: none;
 }
 .marketplace {
   max-width: 1100px;
@@ -1173,33 +1206,233 @@ fieldset {
 @media (max-width: 800px) {
   .shell {
     grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr auto;
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
   }
+
   .sidebar {
-    border-right: none;
-    border-bottom: 1px solid var(--los-border);
-    flex-direction: row;
-    flex-wrap: wrap;
+    display: none;
+  }
+
+  .app-top {
+    display: grid;
+    grid-template-columns: 72px 1fr 44px;
     align-items: center;
+    gap: 0.5rem;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    min-height: calc(var(--app-header-h) + var(--safe-top));
+    padding: calc(0.45rem + var(--safe-top)) max(0.85rem, var(--safe-right)) 0.55rem
+      max(0.85rem, var(--safe-left));
+    background: color-mix(in srgb, var(--los-surface) 86%, transparent);
+    border-bottom: 1px solid var(--los-border);
+    backdrop-filter: blur(18px) saturate(1.25);
+    -webkit-backdrop-filter: blur(18px) saturate(1.25);
   }
-  .sidebar nav {
-    display: flex;
-    flex: 1;
+
+  .app-top-brand {
+    margin: 0;
+    font-family: var(--los-display);
+    font-size: 0.95rem;
+    font-weight: 650;
+    letter-spacing: -0.02em;
   }
-  .sidebar-foot {
-    margin-top: 0;
-    width: 100%;
+  .app-top-brand span {
+    color: var(--los-accent);
   }
+
+  .app-top-title {
+    text-align: center;
+    min-width: 0;
+  }
+  .app-top-title p {
+    margin: 0;
+    font-size: 0.62rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--los-muted);
+    font-weight: 700;
+  }
+  .app-top-title h1 {
+    margin: 0.1rem 0 0;
+    font-family: var(--los-font);
+    font-size: 1.02rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .app-top-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    display: grid;
+    place-items: center;
+    background: var(--los-accent-soft);
+    color: var(--los-accent-strong);
+    font-weight: 750;
+    text-decoration: none;
+  }
+
   .main {
-    padding: 1.25rem;
+    padding: 1rem max(1rem, var(--safe-right)) 1rem max(1rem, var(--safe-left));
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
   }
-  .module-grid {
-    grid-template-columns: 1fr;
+
+  .app-tabs {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    position: sticky;
+    bottom: 0;
+    z-index: 20;
+    min-height: calc(var(--app-tab-h) + var(--safe-bottom));
+    padding: 0.3rem 0.35rem calc(0.35rem + var(--safe-bottom));
+    background: color-mix(in srgb, var(--los-surface) 90%, transparent);
+    border-top: 1px solid var(--los-border);
+    backdrop-filter: blur(18px) saturate(1.25);
+    -webkit-backdrop-filter: blur(18px) saturate(1.25);
   }
+
+  .app-tab {
+    display: grid;
+    justify-items: center;
+    align-content: center;
+    gap: 0.15rem;
+    min-height: 48px;
+    padding: 0.35rem 0.15rem;
+    border-radius: 14px;
+    color: var(--los-muted);
+    text-decoration: none;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+  .app-tab svg {
+    width: 22px;
+    height: 22px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .app-tab.active {
+    color: var(--los-accent-strong);
+    background: color-mix(in srgb, var(--los-accent) 12%, transparent);
+  }
+
+  .page {
+    max-width: none;
+  }
+  .page-head {
+    margin-bottom: 0.85rem;
+  }
+  .page-head .eyebrow {
+    display: none;
+  }
+  .page-head h1 {
+    font-size: 1.45rem;
+    margin-bottom: 0.25rem;
+  }
+  .page-head .lead {
+    font-size: 0.92rem;
+    max-width: none;
+  }
+
+  .cards,
+  .marketplace-grid,
+  .module-grid,
   .quote-grid,
   .site-strip {
     grid-template-columns: 1fr;
+    gap: 0.75rem;
+    margin-top: 0.85rem;
   }
+  .card {
+    padding: 1rem 1.05rem;
+  }
+
+  .marketplace-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 0.15rem;
+  }
+  .marketplace-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .marketplace-tab {
+    flex: 0 0 auto;
+    min-height: 40px;
+  }
+
+  .app-account-actions {
+    display: grid;
+    gap: 0.65rem;
+    margin: 0 0 1.15rem;
+  }
+  .app-account-actions .btn {
+    width: 100%;
+  }
+
+  .form label {
+    gap: 0.4rem;
+  }
+  .form input,
+  .form select,
+  .form textarea {
+    font-size: 16px; /* avoid iOS zoom */
+  }
+
+  .list li {
+    padding: 0.85rem 0;
+  }
+
   .admin-site-top {
     flex-wrap: wrap;
+  }
+
+  .welcome-inner {
+    gap: 0.85rem;
+  }
+  .welcome .btn {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .app-tab {
+    transition: color 140ms ease, background 140ms ease;
+  }
+  .shell .main > .page {
+    animation: app-enter 180ms ease-out;
+  }
+  .welcome-inner {
+    animation: app-enter 220ms ease-out;
+  }
+}
+
+@keyframes app-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (display-mode: standalone) {
+  body {
+    background: var(--los-surface);
   }
 }

@@ -1,0 +1,19 @@
+{
+  "name": "LifeOS Portal",
+  "short_name": "LifeOS",
+  "description": "Install and launch business operating systems",
+  "start_url": "/app",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f2f4f7",
+  "theme_color": "#0d7a6f",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { defaultPleasureOffering, PLEASURE_OFFERING_LABELS } from "@lifeos-portal/shared";
-import { getStoredSessionToken, portalApi } from "../lib/api";
+import { getStoredSessionToken, openPlatformDashboard, portalApi } from "../lib/api";
 import { useAuth } from "../hooks/useAuth";
 
 export function ProfilePage() {
-  const { user, setSession } = useAuth();
+  const { user, setSession, logout } = useAuth();
   const [displayName, setDisplayName] = useState(user?.displayName ?? "");
   const [gender, setGender] = useState<"male" | "female">(user?.pleasureProfile?.gender ?? "female");
   const [orientation, setOrientation] = useState<
@@ -51,8 +52,21 @@ export function ProfilePage() {
           appear in PleasureOS search.
         </p>
       </header>
+
+      <section className="app-account-actions" data-testid="profile-account-actions">
+        <button className="btn btn-primary" type="button" onClick={() => void openPlatformDashboard()}>
+          Open Dashboard
+        </button>
+        <Link className="btn btn-ghost" to="/app/organizations">
+          Organizations
+        </Link>
+        <button className="btn btn-ghost" type="button" onClick={() => void logout()}>
+          Sign out
+        </button>
+      </section>
+
       {error ? <p className="banner-error">{error}</p> : null}
-      {saved ? <p className="muted">Profile saved.</p> : null}
+      {saved ? <p className="banner-ok">Profile saved.</p> : null}
       <dl className="meta">
         <div>
           <dt>Email</dt>
