@@ -11,7 +11,6 @@ export {
 } from "./surfaces.js";
 
 import {
-  BUSINESS_PORTAL_ORIGIN,
   TENANT_APP_ROOT_DOMAIN,
   mybrandUserAdminUrl,
   mybrandUserAppUrl,
