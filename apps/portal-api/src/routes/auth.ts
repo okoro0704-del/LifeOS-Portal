@@ -219,4 +219,39 @@ export async function registerAuthRoutes(app: FastifyInstance, store: PortalStor
     clearSessionCookie(reply);
     return { ok: true };
   });
+
+  /** One-time code so getlifeos.app can open business.getlifeos.app with the same portal session. */
+  const handoffs = new Map<string, { rawToken: string; expiresAt: number }>();
+
+  app.post("/auth/handoff", async (req, reply) => {
+    if (!requireSession(req, reply)) return;
+    let raw = req.portalSessionToken;
+    if (!raw) {
+      const issued = issueSession(store, req.portalUser!);
+      raw = issued.rawToken;
+      setSessionCookie(reply, issued.rawToken, issued.expiresAt);
+    }
+    const code = randomToken(24);
+    handoffs.set(code, { rawToken: raw, expiresAt: Date.now() + 90_000 });
+    return { code, expiresInSec: 90 };
+  });
+
+  app.post("/auth/handoff/exchange", async (req, reply) => {
+    const body = z.object({ code: z.string().min(8).max(128) }).parse(req.body ?? {});
+    const entry = handoffs.get(body.code);
+    handoffs.delete(body.code);
+    if (!entry || entry.expiresAt < Date.now()) {
+      return reply.code(400).send({
+        error: "invalid_handoff",
+        message: "Handoff expired. Open Dashboard from the LifeOS Portal again.",
+      });
+    }
+    const session = store.getSessionByTokenHash(hashSecret(entry.rawToken));
+    const user = session ? store.getUser(session.userId) : undefined;
+    if (!user || user.suspended) {
+      return reply.code(401).send({ error: "unauthorized", message: "Portal session is no longer valid." });
+    }
+    setSessionCookie(reply, entry.rawToken, new Date(session!.expiresAt));
+    return { ok: true, sessionToken: entry.rawToken, user: toPublicUser(user) };
+  });
 }

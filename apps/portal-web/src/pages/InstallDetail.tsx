@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { platformUserDashboardUrl, GUEST_PORTAL_ORIGIN } from "@lifeos-portal/shared";
-import { ApiError, portalApi, type InstallRow } from "../lib/api";
+import { GUEST_PORTAL_ORIGIN } from "@lifeos-portal/shared";
+import { ApiError, openPlatformDashboard, portalApi, type InstallRow } from "../lib/api";
 import { DeliverablesCard, deliverablesFor } from "../components/Deliverables";
 
 type InstallLocationState = { justCreated?: boolean };
@@ -90,7 +90,6 @@ export function InstallDetailPage() {
   }
 
   const deliverables = deliverablesFor(row);
-  const dashboardUrl = platformUserDashboardUrl();
   const isMyBrand = row.osId === "mybrandos" || row.appId === "mybrandos";
 
   return (
@@ -123,9 +122,9 @@ export function InstallDetailPage() {
             <Link className="btn btn-primary" to="/app/installs">
               Go to Installs
             </Link>
-            <a className="btn btn-primary" href={dashboardUrl} target="_blank" rel="noreferrer">
+            <button className="btn btn-primary" type="button" onClick={() => void openPlatformDashboard()}>
               Open Dashboard
-            </a>
+            </button>
             <a className="btn btn-ghost" href={`${GUEST_PORTAL_ORIGIN}/app/business`}>
               Download another vertical
             </a>
@@ -142,9 +141,9 @@ export function InstallDetailPage() {
             on the Installs page.
           </p>
           <div className="actions" style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-            <a className="btn btn-primary" href={dashboardUrl} target="_blank" rel="noreferrer">
+            <button className="btn btn-primary" type="button" onClick={() => void openPlatformDashboard()}>
               Open Dashboard
-            </a>
+            </button>
             <Link className="btn btn-ghost" to="/app/installs">
               Back to Installs
             </Link>

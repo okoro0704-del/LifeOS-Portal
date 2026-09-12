@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
-import { platformUserDashboardUrl, GUEST_PORTAL_ORIGIN } from "@lifeos-portal/shared";
+import { GUEST_PORTAL_ORIGIN } from "@lifeos-portal/shared";
+import { openPlatformDashboard } from "../lib/api";
 
 function greetingFor(now = new Date()) {
   const hour = now.getHours();
@@ -70,9 +71,9 @@ export function AdminSiteShell({
               <strong>{staff.name}</strong>
               <span>{staff.email}</span>
               <span>{staff.role.replaceAll("_", " ")}</span>
-              <a className="btn btn-ghost" href={platformUserDashboardUrl()}>
+              <button className="btn btn-ghost" type="button" onClick={() => void openPlatformDashboard()}>
                 LifeOS portal dashboard
-              </a>
+              </button>
               <a className="btn btn-ghost" href={`${GUEST_PORTAL_ORIGIN}/app/business`}>
                 Add verticals
               </a>

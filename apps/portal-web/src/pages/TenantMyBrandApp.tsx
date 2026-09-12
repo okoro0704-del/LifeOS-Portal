@@ -3,9 +3,8 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-route
 import {
   GUEST_PORTAL_ORIGIN,
   mybrandUserAdminEnterPath,
-  platformUserDashboardUrl,
 } from "@lifeos-portal/shared";
-import { portalApiBase } from "../lib/api";
+import { openPlatformDashboard, portalApiBase } from "../lib/api";
 
 type MyBrandTenant = {
   tenant: {
@@ -64,7 +63,14 @@ function PortalEscapeBar({ brand }: { brand: string }) {
         <strong>{brand}</strong> · User Admin
       </span>
       <span style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-        <a href={platformUserDashboardUrl()} style={{ color: "#7dd3fc" }}>
+        <a
+          href="#dashboard"
+          style={{ color: "#7dd3fc" }}
+          onClick={(e) => {
+            e.preventDefault();
+            void openPlatformDashboard();
+          }}
+        >
           LifeOS dashboard
         </a>
         <a href={`${GUEST_PORTAL_ORIGIN}/app/business`} style={{ color: "#7dd3fc" }}>

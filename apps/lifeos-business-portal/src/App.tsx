@@ -4,6 +4,7 @@ import { RequireAuth } from "./components/RequireAuth";
 import { AppShell } from "./components/AppShell";
 import { LoginPage } from "./pages/Login";
 import { CallbackPage } from "./pages/Callback";
+import { AcceptHandoffPage } from "./pages/AcceptHandoff";
 import { DomainsPage } from "./pages/Domains";
 import { VerticalsPage } from "./pages/Verticals";
 
@@ -14,6 +15,7 @@ export function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/callback" element={<CallbackPage />} />
+          <Route path="/auth/accept" element={<AcceptHandoffPage />} />
           <Route element={<RequireAuth />}>
             <Route element={<AppShell />}>
               <Route path="/dashboard/domains" element={<DomainsPage />} />

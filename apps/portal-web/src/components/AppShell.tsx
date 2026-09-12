@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { platformUserDashboardUrl } from "@lifeos-portal/shared";
+import { openPlatformDashboard } from "../lib/api";
 import { useAuth } from "../hooks/useAuth";
 
 export function AppShell() {
@@ -18,7 +18,14 @@ export function AppShell() {
           <NavLink to="/app/business">Business OS</NavLink>
           <NavLink to="/app/installs">Installs</NavLink>
           <NavLink to="/app/organizations">Organizations</NavLink>
-          <a href={platformUserDashboardUrl()}>Dashboard</a>
+          <button
+            type="button"
+            className="linkish"
+            style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: 0, padding: 0, cursor: "pointer" }}
+            onClick={() => void openPlatformDashboard()}
+          >
+            Dashboard
+          </button>
         </nav>
         <div className="sidebar-foot">
           <p className="mono muted small">{user?.email || user?.trustId}</p>

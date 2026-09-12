@@ -11,8 +11,13 @@ import { createAuthClient } from "./auth-client";
 export const trustIdWeb = import.meta.env.VITE_TRUSTID_WEB ?? "http://localhost:5173";
 export const trustIdApi = import.meta.env.VITE_TRUSTID_API ?? "http://localhost:8787";
 export const portalApiBase = import.meta.env.VITE_PORTAL_API ?? "/api";
-export const trustIdMode =
-  import.meta.env.PROD || import.meta.env.VITE_TRUSTID_MODE === "remote"
+/** TrustID is bypassed on the Dashboard for now — reuse Portal session / guest auth. */
+export const enableTrustId = import.meta.env.VITE_ENABLE_TRUST_ID === "true";
+export const bypassAuthForTesting =
+  import.meta.env.VITE_BYPASS_AUTH_FOR_TESTING !== "false" && !enableTrustId;
+export const trustIdMode = !enableTrustId
+  ? "disabled"
+  : import.meta.env.PROD || import.meta.env.VITE_TRUSTID_MODE === "remote"
     ? "remote"
     : (import.meta.env.VITE_TRUSTID_MODE ?? "mock");
 
@@ -117,8 +122,13 @@ export const portalApi = {
       method: "POST",
       body: JSON.stringify({ accessToken }),
     }),
+  exchangeHandoff: (code: string) =>
+    api<{ ok: boolean; sessionToken: string; user: PortalUserPublic }>("/auth/handoff/exchange", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    }),
   devSession: (trustId?: string) => {
-    if (trustIdMode !== "mock") {
+    if (trustIdMode !== "mock" && !bypassAuthForTesting) {
       return Promise.reject(new ApiError("Not found", 404, "not_found"));
     }
     return api<{ sessionToken: string; user: PortalUserPublic }>("/auth/dev-session", {

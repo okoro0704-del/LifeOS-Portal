@@ -1,4 +1,4 @@
-import { PORTAL_AUTH_SCOPES, type PortalUserPublic } from "@lifeos-portal/shared";
+import { BUSINESS_PORTAL_ORIGIN, PORTAL_AUTH_SCOPES, platformUserDashboardUrl, type PortalUserPublic } from "@lifeos-portal/shared";
 import { createAuthClient } from "./auth-client";
 
 export const trustIdWeb = import.meta.env.VITE_TRUSTID_WEB ?? "http://localhost:5173";
@@ -200,6 +200,8 @@ export const portalApi = {
   },
   me: () => api<{ user: PortalUserPublic }>("/auth/me"),
   logout: () => api<{ ok: boolean }>("/auth/logout", { method: "POST" }),
+  createHandoff: () =>
+    api<{ code: string; expiresInSec: number }>("/auth/handoff", { method: "POST" }),
   catalog: () =>
     api<{
       lanes: Array<{ id: string; displayName: string; description: string; available: boolean }>;
@@ -315,3 +317,17 @@ export type InstallRow = {
   error?: string;
   createdAt: string;
 };
+
+/** Open Platform User Dashboard with the current Portal session (no second TrustID login). */
+export async function openPlatformDashboard(path = "/dashboard/verticals") {
+  const next = path.startsWith("/") ? path : `/${path}`;
+  try {
+    const { code } = await portalApi.createHandoff();
+    const url = new URL(`${BUSINESS_PORTAL_ORIGIN}/auth/accept`);
+    url.searchParams.set("code", code);
+    url.searchParams.set("next", next);
+    window.location.href = url.toString();
+  } catch {
+    window.location.href = platformUserDashboardUrl(next);
+  }
+}
