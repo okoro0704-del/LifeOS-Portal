@@ -105,6 +105,7 @@ export {
   isUpstreamServiceUrl,
   mybrandUserAdminEnterPath,
   mybrandUserAppUrl,
+  mybrandSurfaceUrl,
   mybrandUserAdminUrl,
   type ApplicationSurface,
   type SurfaceAudience,

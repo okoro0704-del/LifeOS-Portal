@@ -8,6 +8,8 @@
 
 export type ApplicationSurface =
   | "user_app"
+  | "website"
+  | "studio"
   | "user_admin"
   | "platform_web"
   | "platform_user_dashboard"
@@ -41,6 +43,22 @@ export const UPSTREAM_SERVICE_ORIGINS = {
 } as const;
 
 export const APPLICATION_SURFACES: Record<ApplicationSurface, SurfaceDefinition> = {
+  website: {
+    id: "website",
+    label: "Website",
+    audience: "visitor",
+    webOrigin: GUEST_PORTAL_ORIGIN,
+    description: "Public information experience for a brand.",
+    authRequired: false,
+  },
+  studio: {
+    id: "studio",
+    label: "Studio",
+    audience: "tenant_owner",
+    webOrigin: GUEST_PORTAL_ORIGIN,
+    description: "Authenticated creator/admin workstation.",
+    authRequired: true,
+  },
   platform_web: {
     id: "platform_web",
     label: "Platform Web App",
@@ -114,8 +132,9 @@ export function isUpstreamServiceUrl(url: string): boolean {
 
 /**
  * mybrandOS USER ADMIN entry on a brand host.
- * Studio is the `/enter?wl=1…` client route — never leave the browser on `/admin`
- * while serving `/enter` HTML (that loads the public Digital Life SPA).
+ * Studio is the `/enter?wl=1…` client route, then Creator Studio at `/studio`.
+ * Never leave the browser on `/admin` while serving `/enter` HTML, and never
+ * send studio login success to `/` on a brand host (`/` is the public user app).
  */
 export function mybrandUserAdminEnterPath(input: {
   trustId: string;
@@ -136,6 +155,20 @@ export function mybrandUserAppUrl(slug: string, customDomain?: string): string {
     ? customDomain.replace(/^https?:\/\//, "").replace(/\/.*$/, "")
     : `${slug.trim().toLowerCase()}.${TENANT_APP_ROOT_DOMAIN}`;
   return `https://${host}/`;
+}
+
+/** Canonical browser destination for a mybrandOS surface. */
+export function mybrandSurfaceUrl(input: {
+  slug: string;
+  surface: "user_app" | "studio" | "website";
+  customDomain?: string;
+  studioPath?: string;
+}): string {
+  const host = input.customDomain?.trim()
+    ? input.customDomain.replace(/^https?:\/\//, "").replace(/\/.*$/, "")
+    : `${input.slug.trim().toLowerCase()}.${TENANT_APP_ROOT_DOMAIN}`;
+  const path = input.surface === "user_app" ? "/" : input.surface === "website" ? "/website" : (input.studioPath || "/enter");
+  return `https://${host}${path}`;
 }
 
 export function mybrandUserAdminUrl(slug: string, customDomain?: string): string {

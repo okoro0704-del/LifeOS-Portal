@@ -2,11 +2,11 @@
  * First-party mybrandOS on `{slug}.getlifeos.app`.
  *
  * Surface routing:
- * - USER APP  → `/` and `/u/{slug}` (public Digital Life)
- * - USER ADMIN → `/admin` 302 → `/enter?wl=1&trustId&name` (Creator Studio)
+ * - USER APP  → `/` and public Digital Life paths
+ * - USER ADMIN → `/admin` 302 → `/enter?wl=1…` → Creator Studio at `/studio`
  *
  * Critical: never reverse-proxy `/enter` HTML while leaving the browser on `/admin`.
- * mybrandOS is a client SPA; pathname must match the studio route.
+ * Never send studio login success to `/` on a brand host (`/` is the public user app).
  */
 import type { Context } from "https://edge.netlify.com";
 
@@ -138,7 +138,9 @@ export default async (request: Request, context: Context) => {
   }
 
   // Ensure bare /enter on brand host carries white-label studio params.
-  let upstreamPath = url.pathname + url.search;
+  // The upstream root is the creator workstation. Public `/` must resolve to
+  // the explicit consumer route, regardless of authentication state.
+  let upstreamPath = url.pathname === "/" ? `/u/${encodeURIComponent(brandSlug)}${url.search}` : url.pathname + url.search;
   if (url.pathname === "/enter" || url.pathname.startsWith("/enter/")) {
     const params = new URLSearchParams(url.search.startsWith("?") ? url.search.slice(1) : url.search);
     if (params.get("wl") !== "1") {

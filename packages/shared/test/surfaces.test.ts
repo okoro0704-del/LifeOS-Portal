@@ -10,19 +10,22 @@ import {
   mybrandUserAdminEnterPath,
   mybrandUserAdminUrl,
   mybrandUserAppUrl,
+  mybrandSurfaceUrl,
   platformAdminDashboardUrl,
   platformUserDashboardUrl,
   platformWebUrl,
 } from "../src/index.js";
 
 describe("application surfaces", () => {
-  test("locks five distinct surfaces with web origins", () => {
+  test("locks the registered surfaces with web origins", () => {
     expect(Object.keys(APPLICATION_SURFACES).sort()).toEqual([
       "platform_admin_dashboard",
       "platform_user_dashboard",
       "platform_web",
+      "studio",
       "user_admin",
       "user_app",
+      "website",
     ]);
     expect(APPLICATION_SURFACES.platform_web.webOrigin).toBe(GUEST_PORTAL_ORIGIN);
     expect(APPLICATION_SURFACES.platform_user_dashboard.webOrigin).toBe(BUSINESS_PORTAL_ORIGIN);
@@ -49,6 +52,12 @@ describe("application surfaces", () => {
     expect(deliverables.guestApp.url).toBe("https://kingbooker.getlifeos.app/");
     expect(deliverables.adminDashboard.url).toBe("https://kingbooker.getlifeos.app/admin");
     expect(deliverables.guestApp.url).not.toBe(deliverables.adminDashboard.url);
+  });
+
+  test("canonical mybrand surface resolver is deterministic", () => {
+    expect(mybrandSurfaceUrl({ slug: "kingbooker", surface: "user_app" })).toBe("https://kingbooker.getlifeos.app/");
+    expect(mybrandSurfaceUrl({ slug: "kingbooker", surface: "studio" })).toBe("https://kingbooker.getlifeos.app/enter");
+    expect(mybrandSurfaceUrl({ slug: "kingbooker", surface: "website" })).toBe("https://kingbooker.getlifeos.app/website");
   });
 
   test("USER ADMIN enter path carries white-label studio params", () => {
