@@ -133,22 +133,21 @@ export default async (request: Request, context: Context) => {
 
   const brandSlug = (tenant.tenant.mybrand?.slug || tenant.tenant.subdomain || slug).toLowerCase();
   const isAdminPath = url.pathname === "/admin" || url.pathname.startsWith("/admin/");
-  // The upstream root is the creator workstation. Public `/` must resolve to
-  // the explicit consumer route, regardless of authentication state.
+  // Public `/` must resolve to the consumer app. Creator studio stays at `/admin`.
+  // Never reverse-proxy `/enter` HTML onto `/admin` — the SPA reads the browser URL.
   let upstreamPath = url.pathname === "/" ? `/u/${encodeURIComponent(brandSlug)}${url.search}` : url.pathname + url.search;
 
-  // USER ADMIN: keep the canonical `/admin` browser URL while upstreaming to
-  // the white-label Studio entry route. Identity never selects the surface.
-  if (isAdminPath && (request.method === "GET" || request.method === "HEAD")) {
-    const enterPath = studioEnterPath(tenant, brandSlug, url.search);
-    upstreamPath = enterPath;
-  }
-
-  // Ensure bare /enter on brand host carries white-label studio params.
-  if (url.pathname === "/enter" || url.pathname.startsWith("/enter/")) {
+  // Bare /enter on a brand host must carry white-label params in the *browser* URL
+  // so the SPA can auto-open the owner session and return to /admin.
+  if (
+    (request.method === "GET" || request.method === "HEAD") &&
+    (url.pathname === "/enter" || url.pathname.startsWith("/enter/"))
+  ) {
     const params = new URLSearchParams(url.search.startsWith("?") ? url.search.slice(1) : url.search);
     if (params.get("wl") !== "1") {
-      upstreamPath = studioEnterPath(tenant, brandSlug, url.search);
+      if (!params.get("returnTo")) params.set("returnTo", "/admin");
+      const enterPath = studioEnterPath(tenant, brandSlug, `?${params.toString()}`);
+      return Response.redirect(`https://${host}${enterPath}`, 302);
     }
   }
 
