@@ -16,6 +16,7 @@ import { createEcommerceOsClient, type EcoClient } from "./services/ecommerceos.
 import { createTransportationOsClient, type TosClient } from "./services/transportationos.js";
 import { createServiceOsClient, type SosClient } from "./services/serviceos.js";
 import { purgeAllFailedInstalls } from "./services/subdomain-claim.js";
+import { reconcileMybrandOsCanonicalUrls } from "./services/reconcile-mybrandos-urls.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerCatalogRoutes } from "./routes/catalog.js";
 import { registerBillingRoutes } from "./routes/billing.js";
@@ -27,6 +28,7 @@ import { registerPlatformAdminRoutes } from "./routes/platform-admin.js";
 import { registerGatewayRoutes } from "./routes/gateway.js";
 import { registerFinproveRoutes } from "./routes/finprove.js";
 import { registerDataZoneAdminRoutes } from "./routes/datazone-admin.js";
+import { registerDirectoryRoutes } from "./routes/directory.js";
 import { registerUserAdminRoutes } from "./routes/users.js";
 import { registerPushRoutes } from "./routes/push.js";
 import { seedLocalAdmin } from "./lib/seed-admin.js";
@@ -64,6 +66,12 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     if (purged.count) {
       // Failed installs must not reserve subdomains; drop them on boot.
       console.info(`[portal] purged ${purged.count} failed install(s)`);
+    }
+    const reconciled = reconcileMybrandOsCanonicalUrls(store);
+    if (reconciled.repaired) {
+      console.info(
+        `[portal] reconciled ${reconciled.repaired}/${reconciled.scanned} mybrandOS URL(s) to canonical contract`,
+      );
     }
   }
   const distributor = opts.distributor ?? createDistributorClient();
@@ -119,6 +127,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   await registerFinproveRoutes(app);
   await registerGatewayRoutes(app);
   await registerDataZoneAdminRoutes(app, store);
+  await registerDirectoryRoutes(app, store);
 
   return app;
 }

@@ -62,7 +62,11 @@ export type PersonalOsProduct = {
   requiredPrimitives: RequiredLifeOsPrimitive[];
 };
 
+/** Upstream mybrandOS engine (API / proxy target). Never a consumer launch URL. */
 export const MYBRANDOS_PRODUCTION_URL = "https://mybrandos-production.up.railway.app";
+
+/** Portal download surface for mybrandOS — not a per-tenant subdomain. */
+export const MYBRANDOS_PORTAL_DOWNLOAD_URL = "https://getlifeos.app/app/personal";
 
 export const MYBRANDOS_MANIFEST: PersonalOsProduct = {
   appId: "mybrandos",
@@ -71,9 +75,9 @@ export const MYBRANDOS_MANIFEST: PersonalOsProduct = {
   description:
     "Creator Digital Life workstation — produce, import, publish, and run Live & Device Bridge on your personal OS.",
   available: true,
-  downloadUrl: MYBRANDOS_PRODUCTION_URL,
-  launchUrl: MYBRANDOS_PRODUCTION_URL,
-  approvedOrigin: MYBRANDOS_PRODUCTION_URL,
+  downloadUrl: MYBRANDOS_PORTAL_DOWNLOAD_URL,
+  launchUrl: MYBRANDOS_PORTAL_DOWNLOAD_URL,
+  approvedOrigin: "https://getlifeos.app",
   audience: "personal",
   requiredPrimitives: ["identity", "messaging", "storage", "jobs", "distributor", "billing"],
 };

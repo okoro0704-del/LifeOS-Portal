@@ -98,24 +98,27 @@ export function tenantLaunchUrls(subdomain: string, customDomain?: string) {
 }
 
 /**
- * mybrandOS white-label deliverables.
- * USER APP = public `/`
- * STUDIO launch URL = `/admin` (edge upstreams the white-label `/enter` route).
+ * mybrandOS white-label deliverables — ONE canonical contract for every tenant.
+ *
+ * PUBLIC  = https://{slug}.getlifeos.app/
+ * ADMIN   = https://{slug}.getlifeos.app/admin
+ *
+ * Infrastructure overrides (Railway, /enter, /studio) are never accepted as
+ * browser destinations. `baseUrl` / `adminUrl` inputs are ignored so callers
+ * cannot accidentally reintroduce provider URLs.
  */
 export function mybrandOsDeliverables(input: {
   slug: string;
+  /** @deprecated Ignored — public URL is always derived from slug/customDomain. */
   baseUrl?: string;
   customDomain?: string;
+  /** @deprecated Ignored — admin URL is always `{origin}/admin`. */
   adminUrl?: string;
 }): TenantDeliverables {
   const slug = input.slug.trim().toLowerCase();
   const hostname = tenantAppHostname(slug, input.customDomain);
-  const publicUrl = input.baseUrl?.startsWith("http")
-    ? input.baseUrl.replace(/\/?$/, "/")
-    : mybrandUserAppUrl(slug, input.customDomain);
-  const adminUrl = input.adminUrl?.startsWith("http")
-    ? input.adminUrl
-    : mybrandUserAdminUrl(slug, input.customDomain);
+  const publicUrl = mybrandUserAppUrl(slug, input.customDomain);
+  const adminUrl = mybrandUserAdminUrl(slug, input.customDomain);
   return {
     hostname,
     guestApp: {

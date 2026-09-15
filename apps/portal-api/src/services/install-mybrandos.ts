@@ -181,13 +181,15 @@ export async function installMyBrandOs(opts: {
     });
 
     const ready = opts.store.getInstall(row.id)!;
+    // LifeOS / OS Xperience consumer discovery launches the PUBLIC User App.
+    // Creator Admin remains `{origin}/admin` and is never the catalog destination.
     await projectInstallToLifeOsShell({
       trustId: ready.ownerTrustId || provisioned.trustId,
       appId: "mybrandos",
       tenantId: ready.distributorTenantId,
       displayName: ready.displayName,
       subdomain: ready.subdomain,
-      launchUrl: deliverables.adminDashboard.url,
+      launchUrl: deliverables.guestApp.url,
       preset: "mybrandos",
       icon: "✦",
     }).catch(() => null);

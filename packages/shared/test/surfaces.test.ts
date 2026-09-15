@@ -54,13 +54,25 @@ describe("application surfaces", () => {
     expect(deliverables.guestApp.url).not.toBe(deliverables.adminDashboard.url);
   });
 
+  test("mybrand deliverables ignore Railway and /studio overrides", () => {
+    const deliverables = mybrandOsDeliverables({
+      slug: "mrfundzman",
+      baseUrl: "https://mybrandos-production.up.railway.app/u/mrfundzman",
+      adminUrl: "https://mybrandos-production.up.railway.app/enter?wl=1",
+    });
+    expect(deliverables.guestApp.url).toBe("https://mrfundzman.getlifeos.app/");
+    expect(deliverables.adminDashboard.url).toBe("https://mrfundzman.getlifeos.app/admin");
+    expect(deliverables.adminDashboard.url).not.toContain("/studio");
+    expect(deliverables.adminDashboard.url).not.toContain("railway");
+  });
+
   test("canonical mybrand surface resolver is deterministic", () => {
     expect(mybrandSurfaceUrl({ slug: "kingbooker", surface: "user_app" })).toBe("https://kingbooker.getlifeos.app/");
     expect(mybrandSurfaceUrl({ slug: "kingbooker", surface: "studio" })).toBe("https://kingbooker.getlifeos.app/admin");
     expect(mybrandSurfaceUrl({ slug: "kingbooker", surface: "website" })).toBe("https://kingbooker.getlifeos.app/website");
   });
 
-  test("USER ADMIN enter path carries white-label studio params", () => {
+  test("USER ADMIN enter path carries white-label studio params and defaults returnTo=/admin", () => {
     const path = mybrandUserAdminEnterPath({
       trustId: "TD-WL-KINGBOOKER",
       displayName: "King Booker",
@@ -69,6 +81,16 @@ describe("application surfaces", () => {
     expect(path).toContain("wl=1");
     expect(path).toContain("trustId=TD-WL-KINGBOOKER");
     expect(path).toContain("name=King");
-    expect(path).not.toContain("/admin");
+    expect(path).toContain("returnTo=%2Fadmin");
+    expect(path).not.toMatch(/returnTo=%2F(?!admin)/);
+  });
+
+  test("enter path refuses public root as returnTo", () => {
+    const path = mybrandUserAdminEnterPath({
+      trustId: "TD-WL-MRFUNDZMAN",
+      displayName: "Mr FundzMan",
+      search: "?returnTo=/",
+    });
+    expect(path).toContain("returnTo=%2Fadmin");
   });
 });

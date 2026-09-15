@@ -53,30 +53,21 @@ export function toPublicTenantApp(row: PortalInstall): PublicTenantApp & {
   const trustId = String(
     site.mybrandTrustId ?? row.hosTenantId ?? row.tenantId ?? wlTrustFallback,
   );
-  const brandOrigin = `https://${deliverables.hostname}`;
-  const publicOrigin = String(site.mybrandPublicOrigin ?? `${brandOrigin}/`);
-  const studioOrigin = String(site.mybrandStudioOrigin ?? `${brandOrigin}/enter`);
-  const adminWithBypass = `${brandOrigin}/admin`;
+  const publicOrigin = deliverables.guestApp.url;
+  const adminOrigin = deliverables.adminDashboard.url;
   const upstreamAdmin = `${mybrandBase}/enter?wl=1&trustId=${encodeURIComponent(trustId)}&name=${encodeURIComponent(row.displayName)}`;
-  let adminOrigin = String(site.mybrandAdminOrigin ?? adminWithBypass);
-  // Older installs stored Railway /enter — advertise subdomain /admin as the deliverable.
-  if (adminOrigin.includes("up.railway.app") || adminOrigin.includes("/enter?")) {
-    adminOrigin = adminWithBypass;
-  }
   return {
     ...base,
     mybrand: {
       slug,
       trustId,
-      publicOrigin: publicOrigin.includes("up.railway.app") ? `${brandOrigin}/` : publicOrigin,
+      publicOrigin,
       adminOrigin,
-      // `/admin` is the canonical Studio browser URL for every deployment.
-      studioOrigin: studioOrigin.includes("up.railway.app")
-        ? `${brandOrigin}/admin`
-        : `${brandOrigin}/admin`,
+      // `/admin` is the canonical Creator Admin browser URL for every deployment.
+      studioOrigin: adminOrigin,
       upstreamPublicOrigin: `${mybrandBase}/u/${slug}`,
       upstreamAdminOrigin: upstreamAdmin,
-      upstreamStudioOrigin: `${mybrandBase}/`,
+      upstreamStudioOrigin: `${mybrandBase}/admin`,
     },
   };
 }

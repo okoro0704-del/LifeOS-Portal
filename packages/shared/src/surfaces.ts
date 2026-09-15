@@ -131,14 +131,15 @@ export function isUpstreamServiceUrl(url: string): boolean {
 }
 
 /**
- * mybrandOS USER ADMIN entry on a brand host.
- * `/admin` is the canonical browser URL for Studio. The edge may upstream it
- * to the white-label `/enter` route, but the browser surface stays `/admin`.
+ * mybrandOS USER ADMIN auth bootstrap on a brand host.
+ * Browser destination remains `/admin`. `/enter` is internal auth only and must
+ * default returnTo to `/admin` (never `/` or `/studio`).
  */
 export function mybrandUserAdminEnterPath(input: {
   trustId: string;
   displayName: string;
   search?: string;
+  returnTo?: string;
 }): string {
   const params = new URLSearchParams(
     input.search?.startsWith("?") ? input.search.slice(1) : input.search ?? "",
@@ -146,6 +147,12 @@ export function mybrandUserAdminEnterPath(input: {
   params.set("wl", "1");
   if (!params.get("trustId")) params.set("trustId", input.trustId);
   if (!params.get("name")) params.set("name", input.displayName);
+  const returnTo = input.returnTo?.startsWith("/") ? input.returnTo : params.get("returnTo") || "/admin";
+  if (!returnTo.startsWith("/admin")) {
+    params.set("returnTo", "/admin");
+  } else if (!params.get("returnTo")) {
+    params.set("returnTo", returnTo);
+  }
   return `/enter?${params.toString()}`;
 }
 
