@@ -56,7 +56,7 @@ describe("application surfaces", () => {
 
   test("canonical mybrand surface resolver is deterministic", () => {
     expect(mybrandSurfaceUrl({ slug: "kingbooker", surface: "user_app" })).toBe("https://kingbooker.getlifeos.app/");
-    expect(mybrandSurfaceUrl({ slug: "kingbooker", surface: "studio" })).toBe("https://kingbooker.getlifeos.app/enter");
+    expect(mybrandSurfaceUrl({ slug: "kingbooker", surface: "studio" })).toBe("https://kingbooker.getlifeos.app/admin");
     expect(mybrandSurfaceUrl({ slug: "kingbooker", surface: "website" })).toBe("https://kingbooker.getlifeos.app/website");
   });
 

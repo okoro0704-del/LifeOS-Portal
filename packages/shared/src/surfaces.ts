@@ -132,9 +132,8 @@ export function isUpstreamServiceUrl(url: string): boolean {
 
 /**
  * mybrandOS USER ADMIN entry on a brand host.
- * Studio is the `/enter?wl=1…` client route, then Creator Studio at `/studio`.
- * Never leave the browser on `/admin` while serving `/enter` HTML, and never
- * send studio login success to `/` on a brand host (`/` is the public user app).
+ * `/admin` is the canonical browser URL for Studio. The edge may upstream it
+ * to the white-label `/enter` route, but the browser surface stays `/admin`.
  */
 export function mybrandUserAdminEnterPath(input: {
   trustId: string;
@@ -167,7 +166,7 @@ export function mybrandSurfaceUrl(input: {
   const host = input.customDomain?.trim()
     ? input.customDomain.replace(/^https?:\/\//, "").replace(/\/.*$/, "")
     : `${input.slug.trim().toLowerCase()}.${TENANT_APP_ROOT_DOMAIN}`;
-  const path = input.surface === "user_app" ? "/" : input.surface === "website" ? "/website" : (input.studioPath || "/enter");
+  const path = input.surface === "user_app" ? "/" : input.surface === "website" ? "/website" : (input.studioPath || "/admin");
   return `https://${host}${path}`;
 }
 

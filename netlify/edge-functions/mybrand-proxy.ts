@@ -130,17 +130,18 @@ export default async (request: Request, context: Context) => {
 
   const brandSlug = (tenant.tenant.mybrand?.slug || tenant.tenant.subdomain || slug).toLowerCase();
   const isAdminPath = url.pathname === "/admin" || url.pathname.startsWith("/admin/");
-
-  // USER ADMIN: send the browser to the studio client route on this host.
-  if (isAdminPath && (request.method === "GET" || request.method === "HEAD")) {
-    const enterPath = studioEnterPath(tenant, brandSlug, url.search);
-    return Response.redirect(`https://${host}${enterPath}`, 302);
-  }
-
-  // Ensure bare /enter on brand host carries white-label studio params.
   // The upstream root is the creator workstation. Public `/` must resolve to
   // the explicit consumer route, regardless of authentication state.
   let upstreamPath = url.pathname === "/" ? `/u/${encodeURIComponent(brandSlug)}${url.search}` : url.pathname + url.search;
+
+  // USER ADMIN: keep the canonical `/admin` browser URL while upstreaming to
+  // the white-label Studio entry route. Identity never selects the surface.
+  if (isAdminPath && (request.method === "GET" || request.method === "HEAD")) {
+    const enterPath = studioEnterPath(tenant, brandSlug, url.search);
+    upstreamPath = enterPath;
+  }
+
+  // Ensure bare /enter on brand host carries white-label studio params.
   if (url.pathname === "/enter" || url.pathname.startsWith("/enter/")) {
     const params = new URLSearchParams(url.search.startsWith("?") ? url.search.slice(1) : url.search);
     if (params.get("wl") !== "1") {
@@ -154,7 +155,7 @@ export default async (request: Request, context: Context) => {
   headers.set("X-Forwarded-Host", host);
   headers.set("X-Brand-Slug", brandSlug);
   headers.set("X-Forwarded-Proto", "https");
-  headers.set("X-LifeOS-Surface", url.pathname.startsWith("/enter") ? "user_admin" : "user_app");
+  headers.set("X-LifeOS-Surface", isAdminPath || url.pathname.startsWith("/enter") ? "studio" : "user_app");
   headers.delete("host");
 
   const init: RequestInit = {
@@ -175,6 +176,7 @@ export default async (request: Request, context: Context) => {
     url.pathname.startsWith("/u/") ||
     url.pathname.startsWith("/api/") ||
     url.pathname.startsWith("/enter")
+    || isAdminPath
   ) {
     outHeaders.set("cache-control", "private, no-store");
   }

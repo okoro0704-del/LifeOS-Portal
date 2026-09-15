@@ -140,7 +140,7 @@ export function TenantMyBrandApp({ subdomain, basename }: { subdomain: string; b
       // USER APP embed
       publicEmbed: onBrandHost ? upstream : meta.mybrand?.publicOrigin || `${brandOrigin}/`,
       // USER ADMIN: navigate browser to studio path on brand host (edge proxies /enter).
-      adminBrowserUrl: `${brandOrigin}${enterPath}`,
+      adminBrowserUrl: `${brandOrigin}/admin`,
       adminEmbed: upstreamAdmin,
       preferRedirectToBrand: !onBrandHost,
     };
@@ -175,7 +175,15 @@ export function TenantMyBrandApp({ subdomain, basename }: { subdomain: string; b
     <BrowserRouter basename={basename}>
       <Routes>
         <Route path="/" element={<Frame title={`${meta.displayName} public site`} src={origins.publicEmbed} />} />
-        <Route path="/admin" element={<TopLevelRedirect to={origins.adminBrowserUrl} />} />
+        <Route
+          path="/admin"
+          element={
+            <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+              <PortalEscapeBar brand={meta.displayName} />
+              <Frame title={`${meta.displayName} studio`} src={origins.adminEmbed} />
+            </div>
+          }
+        />
         <Route path="/admin/*" element={<TopLevelRedirect to={origins.adminBrowserUrl} />} />
         <Route
           path="/enter"
