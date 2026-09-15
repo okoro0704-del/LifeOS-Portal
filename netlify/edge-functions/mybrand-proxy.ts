@@ -3,10 +3,10 @@
  *
  * Surface routing:
  * - USER APP  → `/` and public Digital Life paths
- * - USER ADMIN → `/admin` 302 → `/enter?wl=1…` → Creator Studio at `/studio`
+ * - USER ADMIN → `/admin` (upstream white-label `/enter?wl=1…`)
  *
- * Critical: never reverse-proxy `/enter` HTML while leaving the browser on `/admin`.
- * Never send studio login success to `/` on a brand host (`/` is the public user app).
+ * Critical: never allow an upstream Studio callback to redirect the browser to
+ * `/` on a brand host (`/` is the public user app).
  */
 import type { Context } from "https://edge.netlify.com";
 
@@ -94,12 +94,15 @@ function studioEnterPath(tenant: TenantBody, brandSlug: string, search: string):
   return `/enter?${params.toString()}`;
 }
 
-function rewriteUpstreamLocation(location: string, brandHost: string): string {
+function rewriteUpstreamLocation(location: string, brandHost: string, surface: "studio" | "user_app"): string {
   try {
     const u = new URL(location, `https://${brandHost}`);
     if (u.hostname.endsWith(".up.railway.app") || u.hostname === MYBRANDOS.replace(/^https?:\/\//, "")) {
       u.protocol = "https:";
       u.host = brandHost;
+    }
+    if (surface === "studio" && (u.pathname === "/" || u.pathname === "")) {
+      u.pathname = "/admin";
     }
     return u.toString();
   } catch {
@@ -170,7 +173,7 @@ export default async (request: Request, context: Context) => {
   const upstream = await fetch(target, init);
   const outHeaders = new Headers(upstream.headers);
   const loc = outHeaders.get("location");
-  if (loc) outHeaders.set("location", rewriteUpstreamLocation(loc, host));
+  if (loc) outHeaders.set("location", rewriteUpstreamLocation(loc, host, isAdminPath ? "studio" : "user_app"));
   if (
     url.pathname === "/" ||
     url.pathname.startsWith("/u/") ||

@@ -100,7 +100,7 @@ function BrandPathRedirect({ brandOrigin }: { brandOrigin: string }) {
 
 /**
  * Fallback when Netlify edge has not yet proxied `{brand}.getlifeos.app` to mybrandOS.
- * USER ADMIN must open studio (`/enter?wl=1…`), never the public Digital Life.
+ * USER ADMIN must remain on `/admin`, never the public Digital Life.
  */
 export function TenantMyBrandApp({ subdomain, basename }: { subdomain: string; basename: string }) {
   const [meta, setMeta] = useState<MyBrandTenant["tenant"] | null>(null);

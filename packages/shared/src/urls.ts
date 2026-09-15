@@ -100,7 +100,7 @@ export function tenantLaunchUrls(subdomain: string, customDomain?: string) {
 /**
  * mybrandOS white-label deliverables.
  * USER APP = public `/`
- * USER ADMIN launch URL = `/admin` (edge/host must 302 into studio `/enter?wl=1…`)
+ * STUDIO launch URL = `/admin` (edge upstreams the white-label `/enter` route).
  */
 export function mybrandOsDeliverables(input: {
   slug: string;

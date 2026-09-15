@@ -70,10 +70,10 @@ export function toPublicTenantApp(row: PortalInstall): PublicTenantApp & {
       trustId,
       publicOrigin: publicOrigin.includes("up.railway.app") ? `${brandOrigin}/` : publicOrigin,
       adminOrigin,
-      // Studio client route on brand host (edge maps /admin → /enter?wl=1…).
+      // `/admin` is the canonical Studio browser URL for every deployment.
       studioOrigin: studioOrigin.includes("up.railway.app")
-        ? `${brandOrigin}/enter`
-        : studioOrigin.split("?")[0] || `${brandOrigin}/enter`,
+        ? `${brandOrigin}/admin`
+        : `${brandOrigin}/admin`,
       upstreamPublicOrigin: `${mybrandBase}/u/${slug}`,
       upstreamAdminOrigin: upstreamAdmin,
       upstreamStudioOrigin: `${mybrandBase}/`,
