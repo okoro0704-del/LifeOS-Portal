@@ -72,12 +72,16 @@ function tenantLabel(host: string): string | null {
 }
 
 function studioEnterPath(tenant: TenantBody, brandSlug: string, search: string): string {
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   const upstream = tenant.tenant?.mybrand?.upstreamAdminOrigin;
   if (upstream) {
     try {
       const u = new URL(upstream);
       if (u.pathname.startsWith("/enter")) {
-        return `${u.pathname}${u.search}`;
+        // Merge Portal-stored enter params with the browser request (preserve returnTo).
+        for (const [key, value] of u.searchParams.entries()) {
+          if (!params.get(key)) params.set(key, value);
+        }
       }
     } catch {
       /* fall through */
@@ -87,10 +91,10 @@ function studioEnterPath(tenant: TenantBody, brandSlug: string, search: string):
     tenant.tenant?.mybrand?.trustId ||
     `TD-WL-${brandSlug.toUpperCase().replace(/-/g, "")}`.slice(0, 80);
   const name = tenant.tenant?.displayName || brandSlug;
-  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   params.set("wl", "1");
   if (!params.get("trustId")) params.set("trustId", trustId);
   if (!params.get("name")) params.set("name", name);
+  if (!params.get("returnTo")) params.set("returnTo", "/admin");
   return `/enter?${params.toString()}`;
 }
 
