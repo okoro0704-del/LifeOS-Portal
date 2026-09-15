@@ -28,15 +28,24 @@ function toPublic(row: PortalInstall): InstallRecordPublic {
     domainId: row.domainId,
     hosTenantId: row.hosTenantId,
     tenantId: row.tenantId ?? row.hosTenantId,
-    storefrontUrl: row.storefrontUrl ?? row.launchUrls?.storefront,
-    adminConsoleUrl: row.adminConsoleUrl ?? row.launchUrls?.admin,
+    storefrontUrl: row.osId === "mybrandos" ? deliverables.guestApp.url : row.storefrontUrl ?? row.launchUrls?.storefront,
+    adminConsoleUrl: row.osId === "mybrandos" ? deliverables.adminDashboard.url : row.adminConsoleUrl ?? row.launchUrls?.admin,
     organizationId: row.organizationId,
     branchId: row.branchId,
     staffId: row.staffId,
     modulesEnabled: row.modulesEnabled,
     enabledModules: row.enabledModules,
     seedApplied: row.seedApplied,
-    launchUrls: row.launchUrls,
+    launchUrls:
+      row.osId === "mybrandos"
+        ? {
+            ...row.launchUrls,
+            guest: deliverables.guestApp.url,
+            storefront: deliverables.guestApp.url,
+            admin: deliverables.adminDashboard.url,
+            staff: deliverables.staffApp.url,
+          }
+        : row.launchUrls,
     deliverables,
     status: row.status,
     error: row.error,

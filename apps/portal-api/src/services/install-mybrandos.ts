@@ -165,7 +165,9 @@ export async function installMyBrandOs(opts: {
       site: {
         mybrandPublicOrigin: deliverables.guestApp.url,
         mybrandAdminOrigin: adminUrl,
-        mybrandStudioOrigin: `${deliverables.guestApp.url.replace(/\/$/, "")}/enter?wl=1&trustId=${encodeURIComponent(provisioned.trustId)}&name=${encodeURIComponent(opts.input.displayName)}`,
+        // Canonical browser surface: public app at `/`, Studio at `/admin`.
+        // `/enter` remains an internal authentication bootstrap only.
+        mybrandStudioOrigin: adminUrl,
         mybrandUpstreamPublicOrigin: provisioned.upstreamPublicUrl || provisioned.publicUrl,
         mybrandUpstreamAdminOrigin:
           provisioned.upstreamAdminUrl ||
