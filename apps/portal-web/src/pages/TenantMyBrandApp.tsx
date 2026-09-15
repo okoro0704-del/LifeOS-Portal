@@ -126,23 +126,26 @@ export function TenantMyBrandApp({ subdomain, basename }: { subdomain: string; b
       trustId,
       displayName: meta.displayName,
     });
+    const runtimeOrigin = (import.meta.env.VITE_MYBRANDOS_URL || "https://mybrandos-production.up.railway.app").replace(/\/$/, "");
     const upstream =
       meta.mybrand?.upstreamPublicOrigin ||
-      `https://mybrandos-production.up.railway.app/u/${slug}`;
+      `${runtimeOrigin}/u/${slug}`;
     const upstreamAdmin =
       meta.mybrand?.upstreamAdminOrigin ||
       `https://mybrandos-production.up.railway.app${enterPath}`;
-    const onBrandHost = window.location.hostname.toLowerCase() === `${slug}.getlifeos.app`;
     return {
       slug,
       brandOrigin,
       enterPath,
       // USER APP embed
-      publicEmbed: onBrandHost ? upstream : meta.mybrand?.publicOrigin || `${brandOrigin}/`,
+      publicEmbed: upstream,
       // USER ADMIN: navigate browser to studio path on brand host (edge proxies /enter).
       adminBrowserUrl: `${brandOrigin}/admin`,
       adminEmbed: upstreamAdmin,
-      preferRedirectToBrand: !onBrandHost,
+      // Render the authoritative mybrandOS runtime directly. This keeps local
+      // verification on localhost and prevents the Portal shell from replacing
+      // the approved User App UI.
+      preferRedirectToBrand: false,
     };
   }, [meta]);
 
