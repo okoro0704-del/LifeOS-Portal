@@ -117,16 +117,26 @@ test("reconcile migrates non-compliant mybrandOS installs and is idempotent", ()
   assert.equal(second.rows[0]!.compliant, true);
 });
 
-test("directory publishes public URLs only — never /admin", async () => {
+test("directory publishes public URLs only — never /admin as productionUrl", async () => {
   const store = createStore();
   seedMybrand(store);
   const app = await buildApp({ store });
   const res = await app.inject({ method: "GET", url: "/v1/directory" });
   assert.equal(res.statusCode, 200);
-  const body = res.json() as { applications: Array<{ productionUrl: string; xperienceUrl: string }> };
+  const body = res.json() as {
+    applications: Array<{
+      productionUrl: string;
+      xperienceUrl: string;
+      managementUrl?: string;
+      managementOperatorIds?: string[];
+    }>;
+  };
   assert.equal(body.applications.length, 1);
   assert.equal(body.applications[0]!.productionUrl, "https://mrfundzman.getlifeos.app");
   assert.equal(body.applications[0]!.xperienceUrl, "https://mrfundzman.getlifeos.app");
   assert.ok(!body.applications[0]!.productionUrl.endsWith("/admin"));
+  assert.equal(body.applications[0]!.managementUrl, "https://mrfundzman.getlifeos.app/admin");
+  assert.ok(Array.isArray(body.applications[0]!.managementOperatorIds));
+  assert.ok(body.applications[0]!.managementOperatorIds!.length >= 1);
   await app.close();
 });

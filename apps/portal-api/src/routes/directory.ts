@@ -1,12 +1,29 @@
 import type { FastifyInstance } from "fastify";
-import { isUpstreamServiceUrl, mybrandOsDeliverables, mybrandUserAdminUrl, tenantDeliverables } from "@lifeos-portal/shared";
-import type { PortalStore } from "../store.js";
+import {
+  isUpstreamServiceUrl,
+  mybrandOsDeliverables,
+  mybrandUserAdminUrl,
+  tenantDeliverables,
+} from "@lifeos-portal/shared";
+import type { PortalInstall, PortalStore } from "../store.js";
 
 /** Consumer launch destination only — never Creator Admin `/admin`. */
-function publicUrlFor(row: ReturnType<PortalStore["listAllInstalls"]>[number]): string {
+function publicUrlFor(row: PortalInstall): string {
   return (row.osId === "mybrandos"
     ? mybrandOsDeliverables({ slug: row.subdomain, customDomain: row.customDomain }).guestApp.url
     : tenantDeliverables(row.subdomain, row.customDomain).guestApp.url).replace(/\/$/, "");
+}
+
+/**
+ * Canonical MANAGEMENT surface from Portal deliverables — never invented by Xperience.
+ * mybrandOS → `{origin}/admin`; other verticals → declared adminDashboard URL.
+ */
+function managementUrlFor(row: PortalInstall): string | undefined {
+  const url = (row.osId === "mybrandos"
+    ? mybrandOsDeliverables({ slug: row.subdomain, customDomain: row.customDomain }).adminDashboard.url
+    : tenantDeliverables(row.subdomain, row.customDomain).adminDashboard.url).replace(/\/$/, "");
+  if (!/^https:\/\//i.test(url) || isUpstreamServiceUrl(url)) return undefined;
+  return url;
 }
 
 /** Read-only projection consumed by OS Xperience's LifeOS catalog adapter. */
@@ -18,7 +35,7 @@ export async function registerDirectoryRoutes(app: FastifyInstance, store: Porta
       .map((row) => {
         const productionUrl = publicUrlFor(row);
         if (!/^https:\/\//i.test(productionUrl) || isUpstreamServiceUrl(productionUrl)) return null;
-        // Hard guard: directory must never publish Creator Admin as the launch URL.
+        // Hard guard: directory must never publish Creator Admin as the PUBLIC launch URL.
         if (productionUrl.endsWith("/admin") || productionUrl.includes("/admin/")) return null;
         if (
           row.osId === "mybrandos" &&
@@ -26,6 +43,10 @@ export async function registerDirectoryRoutes(app: FastifyInstance, store: Porta
         ) {
           return null;
         }
+        const managementUrl = managementUrlFor(row);
+        const managementOperatorIds = row.ownerTrustId?.trim()
+          ? [row.ownerTrustId.trim()]
+          : undefined;
         return {
           id: row.id,
           name: row.displayName,
@@ -33,6 +54,8 @@ export async function registerDirectoryRoutes(app: FastifyInstance, store: Porta
           origin: `${productionUrl}/`,
           productionUrl,
           xperienceUrl: productionUrl,
+          ...(managementUrl ? { managementUrl } : {}),
+          ...(managementOperatorIds ? { managementOperatorIds } : {}),
           category: "General" as const,
           capabilities: [],
           publicationState: "PUBLISHED" as const,
