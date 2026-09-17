@@ -72,6 +72,21 @@ export {
 } from "./catalog.js";
 
 export {
+  DIGICONOMY_BUCKETS,
+  digiconomyBucketFor,
+  listInstallableDigiconomyEntries,
+  digiconomyEntriesByBucket,
+  deriveDigiconomyApplicationProjection,
+  withDigiconomyTaxonomy,
+  businessOsCatalogWithTaxonomy,
+  personalOsCatalogWithTaxonomy,
+  assertAllInstallableEntriesClassified,
+  type DigiconomyBucket,
+  type DigiconomyEngineId,
+  type DigiconomyCatalogEntry,
+} from "./digiconomy.js";
+
+export {
   PORTAL_AUTH_SCOPES,
   PORTAL_SESSION_COOKIE,
   PORTAL_SESSION_HEADER,

@@ -1,3 +1,17 @@
+/**
+ * Portal Web marketplace VIEW of the canonical Digiconomy / shared catalog.
+ *
+ * Canonical install semantics (engine, verticalId, template, modules, taxonomy)
+ * come from `@lifeos-portal/shared`. This file only holds UI presentation overlays.
+ */
+
+import {
+  digiconomyBucketFor,
+  listInstallableDigiconomyEntries,
+  type DigiconomyBucket,
+  type DigiconomyCatalogEntry,
+} from "@lifeos-portal/shared";
+
 export type MarketplaceEngine = "hospitalityos" | "ecommerceos" | "transportationos" | "serviceos";
 
 export type MarketplaceCategory =
@@ -5,7 +19,10 @@ export type MarketplaceCategory =
   | "hospitality"
   | "retail"
   | "transport"
-  | "services";
+  | "services"
+  | "industry"
+  | "cross_industry"
+  | "ecommerce_ecosystem";
 
 export type TransportationPreset = "logistics" | "rentals" | "hub";
 export type ServiceOSPreset = "beauty" | "wellness" | "technical" | "culinary" | "pleasure";
@@ -17,317 +34,153 @@ export type MarketplaceVertical = {
   name: string;
   description: string;
   engine: MarketplaceEngine;
-  category: Exclude<MarketplaceCategory, "all">;
+  category: Exclude<MarketplaceCategory, "all" | "industry" | "cross_industry" | "ecommerce_ecosystem">;
+  /** Digiconomy taxonomy bucket (derived from shared catalog). */
+  bucket: DigiconomyBucket;
   modules: string[];
   features: string[];
   keywords: string[];
-  /** Portal billing / install vertical id when the engine is live. */
   verticalId: string;
   templateId: string;
   available: boolean;
-  /** Retail only: walk-in shop vs online-only. Both still dispatch local delivery. */
   hasPhysicalAddress?: boolean;
-  /** TransportationOS / ServiceOS / HospitalityOS commercial preset. */
   preset?: TransportationPreset | ServiceOSPreset | HospitalityOSPreset;
 };
 
-export function engineDisplayName(engine: string) {
-  if (engine === "ecommerceos") return "ECommerceOS";
-  if (engine === "transportationos") return "TransportationOS";
-  if (engine === "hospitalityos") return "HospitalityOS";
-  if (engine === "serviceos") return "ServiceOS";
-  return engine;
-}
+/** UI-only presentation keyed by shared catalogKey / templateId. */
+type MarketplacePresentation = {
+  icon: string;
+  /** Legacy marketplace filter group (presentation only). */
+  category: MarketplaceVertical["category"];
+  features: string[];
+  keywords: string[];
+  /** Optional display name override for marketplace cards. */
+  name?: string;
+};
 
-export const MARKETPLACE_CATEGORIES: Array<{ id: MarketplaceCategory; label: string }> = [
-  { id: "all", label: "All Verticals" },
-  { id: "hospitality", label: "Hospitality & Leisure" },
-  { id: "retail", label: "Retail & Commerce" },
-  { id: "transport", label: "Transport & Freight" },
-  { id: "services", label: "At-home services" },
-];
-
-export const VERTICAL_CATALOG: MarketplaceVertical[] = [
-  {
-    id: "hotel_resort",
+const MARKETPLACE_PRESENTATION: Record<string, MarketplacePresentation> = {
+  standalone_hotel: {
     icon: "🏨",
-    name: "Hotel & Resort",
-    description: "Rooms, stays, housekeeping, and front desk for hotels and resorts.",
-    engine: "hospitalityos",
     category: "hospitality",
-    modules: ["accommodation", "billing", "crm"],
     features: ["Rooms", "Reservations", "Restaurant & bar", "Self check-in", "Front desk", "Housekeeping"],
     keywords: ["hotel", "resort", "lodging", "rooms", "stay", "accommodation"],
-    verticalId: "hotel",
-    templateId: "standalone_hotel",
-    available: true,
+    name: "Hotel & Resort",
   },
-  {
-    id: "restaurant_dining",
+  standalone_restaurant: {
     icon: "🍽️",
-    name: "Restaurant & Dining",
-    description: "POS, menus, tables, and kitchen display for restaurants.",
-    engine: "hospitalityos",
     category: "hospitality",
-    modules: ["dining", "billing", "crm"],
     features: ["Menus", "Tables", "Kitchen display", "Billing & CRM"],
     keywords: ["restaurant", "dining", "food", "kitchen", "pos"],
-    verticalId: "restaurant",
-    templateId: "standalone_restaurant",
-    available: true,
+    name: "Restaurant & Dining",
   },
-  {
-    id: "local_food_home_kitchen",
+  standalone_local_food: {
     icon: "🍲",
-    name: "🍲 Local Food & Home Kitchen OS",
-    description:
-      "Home cooks, food stalls, and local caterers — GPS kitchens, delivery orders, and Finprove escrow. No brick-and-mortar venue required.",
-    engine: "hospitalityos",
     category: "hospitality",
-    modules: ["local_food", "billing", "crm"],
-    features: [
-      "GPS home kitchens",
-      "Delivery radius",
-      "Prep buffer",
-      "Instant payout",
-    ],
-    keywords: [
-      "local food",
-      "home kitchen",
-      "catering",
-      "delivery",
-      "cook",
-      "stall",
-      "apartment kitchen",
-    ],
-    verticalId: "local_food",
-    templateId: "standalone_local_food",
-    available: true,
-    preset: "local_food",
+    features: ["GPS home kitchens", "Delivery radius", "Prep buffer", "Instant payout"],
+    keywords: ["local food", "home kitchen", "catering", "delivery", "cook", "stall", "apartment kitchen"],
   },
-  {
-    id: "bar_nightclub",
-    icon: "🍹",
-    name: "Bar & Nightclub",
-    description: "Beverage POS, open tabs, and night-floor service.",
-    engine: "hospitalityos",
+  standalone_shared_homes: {
+    icon: "🏠",
     category: "hospitality",
-    modules: ["bar", "billing", "crm"],
+    features: ["Units", "Guest stays", "Billing & CRM"],
+    keywords: ["shared homes", "apartment", "short-let", "airbnb", "unit"],
+    name: "Shared Homes / Apartment",
+  },
+  standalone_bar: {
+    icon: "🍹",
+    category: "hospitality",
     features: ["Beverage POS", "Open tabs", "Floor service", "Billing & CRM"],
     keywords: ["bar", "nightclub", "lounge", "drinks", "tabs"],
-    verticalId: "bar",
-    templateId: "standalone_bar",
-    available: true,
+    name: "Bar & Nightclub",
   },
-  {
-    id: "gym_fitness",
+  standalone_gym_spa: {
     icon: "🏋️",
-    name: "Gym & Fitness Center",
-    description: "Memberships, class schedules, and day passes.",
-    engine: "hospitalityos",
     category: "hospitality",
-    modules: ["gym_spa", "billing", "crm"],
     features: ["Memberships", "Schedules", "Day passes", "Billing & CRM"],
     keywords: ["gym", "fitness", "spa", "membership", "workout"],
-    verticalId: "gym",
-    templateId: "standalone_gym_spa",
-    available: true,
+    name: "Gym & Fitness Center",
   },
-  {
-    id: "cinema_events",
+  standalone_events: {
     icon: "🎬",
-    name: "Cinema & Events Venue",
-    description: "Venues, ticketing, showtimes, and hall booking.",
-    engine: "hospitalityos",
     category: "hospitality",
-    modules: ["events", "billing", "crm"],
     features: ["Venues", "Ticketing", "Showtimes", "Billing & CRM"],
     keywords: ["cinema", "events", "venue", "tickets", "theater"],
-    verticalId: "events",
-    templateId: "standalone_events",
-    available: true,
+    name: "Cinema & Events Venue",
   },
-  {
-    id: "retail_store",
+  full_hotel_resort: {
+    icon: "🏰",
+    category: "hospitality",
+    features: ["Rooms", "Dining", "Bar", "Wellness", "Events", "Charge to folio"],
+    keywords: ["hotel", "resort", "leisure", "complex", "full", "bundle"],
+  },
+  custom: {
+    icon: "🧩",
+    category: "hospitality",
+    features: ["Custom modules", "Billing & CRM"],
+    keywords: ["custom", "compose", "hospitality"],
+    name: "Custom Hospitality Suite",
+  },
+  physical_retail: {
     icon: "🛍️",
-    name: "Retail with a physical address",
-    description:
-      "Catalog, checkout, and local delivery — plus a shop customers can walk into.",
-    engine: "ecommerceos",
     category: "retail",
-    modules: ["catalog", "pos", "checkout", "logisticsBridge"],
     features: ["Catalog", "Checkout", "Local delivery", "Walk-in shop"],
     keywords: ["retail", "store", "shop", "commerce", "pos", "physical", "address", "walk-in"],
-    verticalId: "retail",
-    templateId: "physical_retail",
-    available: true,
-    hasPhysicalAddress: true,
   },
-  {
-    id: "ecommerce_delivery",
+  ecommerce_delivery: {
     icon: "📦",
-    name: "Retail without a physical address",
-    description:
-      "The same catalog, checkout, and local delivery — no walk-in shop.",
-    engine: "ecommerceos",
     category: "retail",
-    modules: ["catalog", "pos", "checkout", "logisticsBridge"],
     features: ["Catalog", "Checkout", "Local delivery", "No shopfront"],
     keywords: ["retail", "ecommerce", "delivery", "shop", "commerce", "online", "no address"],
-    verticalId: "delivery",
-    templateId: "ecommerce_delivery",
-    available: true,
-    hasPhysicalAddress: false,
   },
-  {
-    id: "last_mile_courier",
+  logistics: {
     icon: "🚚",
-    name: "Last-Mile Delivery & Courier",
-    description: "Dispatch, rider fleets, and live customer tracking for last-mile fulfillment.",
-    engine: "transportationos",
     category: "transport",
-    modules: [
-      "fleet",
-      "dispatch",
-      "matching",
-      "telemetry",
-      "tracking",
-      "settlement",
-      "rider_console",
-      "billing",
-    ],
     features: ["Dispatch", "Rider fleets", "Live tracking", "Settlements"],
     keywords: ["logistics", "delivery", "courier", "last-mile", "rider", "fleet", "freight", "transport"],
-    verticalId: "logistics",
-    templateId: "logistics",
-    available: true,
-    preset: "logistics",
   },
-  {
-    id: "car_fleet_rental",
+  rentals: {
     icon: "🚗",
-    name: "Car & Fleet Rental Agency",
-    description:
-      "Hourly and daily vehicle rentals with Trust ID license checks and Finprove security deposits.",
-    engine: "transportationos",
     category: "transport",
-    modules: ["rental_fleet", "rental_bookings", "rental_inspections", "rental_escrow", "billing"],
     features: ["Vehicle inventory", "Bookings", "Inspection photos", "Deposit escrow"],
     keywords: ["rental", "car rental", "fleet rental", "vehicle", "license", "deposit", "agency"],
-    verticalId: "rentals",
-    templateId: "rentals",
-    available: true,
-    preset: "rentals",
   },
-  {
-    id: "transit_fleet_hub",
+  hub: {
     icon: "🚖",
-    name: "Integrated Transit & Fleet Hub",
-    description: "Courier dispatch plus car and fleet rentals on one TransportationOS tenant.",
-    engine: "transportationos",
     category: "transport",
-    modules: [
-      "fleet",
-      "dispatch",
-      "matching",
-      "telemetry",
-      "tracking",
-      "settlement",
-      "rider_console",
-      "rental_fleet",
-      "rental_bookings",
-      "rental_inspections",
-      "rental_escrow",
-      "billing",
-    ],
     features: ["Courier dispatch", "Rental fleet", "Tracking", "Deposits"],
     keywords: ["transit", "hub", "integrated", "courier", "fleet", "mobility"],
-    verticalId: "hub",
-    templateId: "hub",
-    available: true,
-    preset: "hub",
   },
-  {
-    id: "mobile_salon_grooming",
+  beauty: {
     icon: "✂️",
-    name: "Mobile Salon & Grooming OS",
-    description: "Home barbers, stylists, and makeup artists dispatched to the customer's doorstep.",
-    engine: "serviceos",
     category: "services",
-    modules: ["studio", "catalog", "dispatch", "matching", "telemetry", "tracking", "settlement", "provider_console", "billing"],
     features: ["Beauty catalog", "Travel surcharge", "Live ETA", "Doorstep PIN"],
     keywords: ["barber", "salon", "makeup", "stylist", "grooming", "beauty", "serviceos"],
-    verticalId: "beauty",
-    templateId: "beauty",
-    available: true,
-    preset: "beauty",
+    name: "Mobile Salon & Grooming OS",
   },
-  {
-    id: "home_wellness_spa",
+  wellness: {
     icon: "💆",
-    name: "Home Wellness & Spa OS",
-    description: "At-home massage and spa professionals with live tracking and Finprove escrow.",
-    engine: "serviceos",
     category: "services",
-    modules: ["studio", "catalog", "dispatch", "matching", "telemetry", "tracking", "settlement", "provider_console", "billing"],
     features: ["Wellness catalog", "Travel fee", "Proof of service", "ElfCom chat"],
     keywords: ["massage", "spa", "wellness", "home", "serviceos"],
-    verticalId: "wellness",
-    templateId: "wellness",
-    available: true,
-    preset: "wellness",
+    name: "Home Wellness & Spa OS",
   },
-  {
-    id: "field_technician",
+  technical: {
     icon: "🛠️",
-    name: "On-Demand Field Technician OS",
-    description: "Home repairs and appliance technicians matched by skill and proximity.",
-    engine: "serviceos",
     category: "services",
-    modules: ["studio", "catalog", "dispatch", "matching", "telemetry", "tracking", "settlement", "provider_console", "billing"],
     features: ["Technician catalog", "Skill matching", "Doorstep PIN", "Proof photos"],
     keywords: ["technician", "repair", "appliance", "field", "serviceos"],
-    verticalId: "technical",
-    templateId: "technical",
-    available: true,
-    preset: "technical",
+    name: "On-Demand Field Technician OS",
   },
-  {
-    id: "private_chef_culinary",
+  culinary: {
     icon: "👨‍🍳",
-    name: "Private Chef & Culinary OS",
-    description: "Private chefs and catering dispatched into the customer's kitchen.",
-    engine: "serviceos",
     category: "services",
-    modules: ["studio", "catalog", "dispatch", "matching", "telemetry", "tracking", "settlement", "provider_console", "billing"],
     features: ["Culinary catalog", "Travel surcharge", "Live tracking", "Escrow checkout"],
     keywords: ["chef", "catering", "culinary", "private chef", "serviceos"],
-    verticalId: "culinary",
-    templateId: "culinary",
-    available: true,
-    preset: "culinary",
+    name: "Private Chef & Culinary OS",
   },
-  {
-    id: "pleasure_os",
+  pleasure: {
     icon: "♥",
-    name: "PleasureOS",
-    description:
-      "One PleasureOS on ServiceOS. Specify gender, orientation, and Hooks MS / Gigolo MS — that identity is how you are searched on LifeOS.",
-    engine: "serviceos",
     category: "services",
-    modules: [
-      "studio",
-      "catalog",
-      "dispatch",
-      "matching",
-      "telemetry",
-      "tracking",
-      "settlement",
-      "provider_console",
-      "billing",
-      "pleasure_identity",
-      "discovery",
-    ],
     features: ["Gender", "Orientation", "Hooks MS", "Gigolo MS", "Identity search"],
     keywords: [
       "pleasure",
@@ -341,30 +194,102 @@ export const VERTICAL_CATALOG: MarketplaceVertical[] = [
       "gay",
       "bi",
     ],
-    verticalId: "pleasure",
-    templateId: "pleasure",
-    available: true,
-    preset: "pleasure",
   },
-  {
-    id: "full_resort",
-    icon: "🏰",
-    name: "Full Resort & Leisure Complex",
-    description:
-      "Hotel lodging plus dining, bar, wellness, and events — including charge to room folio.",
-    engine: "hospitalityos",
-    category: "hospitality",
-    modules: ["accommodation", "dining", "bar", "gym_spa", "events", "billing", "crm"],
-    features: ["Rooms", "Dining", "Bar", "Wellness", "Events", "Charge to folio"],
-    keywords: ["hotel", "resort", "leisure", "complex", "full", "bundle"],
-    verticalId: "resort",
-    templateId: "full_hotel_resort",
-    available: true,
-  },
+};
+
+function presentationFor(entry: DigiconomyCatalogEntry): MarketplacePresentation {
+  const key = entry.catalogKey;
+  const overlay = MARKETPLACE_PRESENTATION[key];
+  if (overlay) return overlay;
+  // Fallback presentation — never invent taxonomy; bucket already comes from shared.
+  const category: MarketplaceVertical["category"] =
+    entry.engine === "ecommerceos"
+      ? "retail"
+      : entry.engine === "transportationos"
+        ? "transport"
+        : entry.engine === "serviceos"
+          ? "services"
+          : "hospitality";
+  return {
+    icon: "◆",
+    category,
+    features: [...entry.modules].slice(0, 6),
+    keywords: [entry.verticalId, entry.engine, entry.displayName.toLowerCase()],
+  };
+}
+
+function toMarketplaceVertical(entry: DigiconomyCatalogEntry): MarketplaceVertical | null {
+  if (entry.lane !== "business" || entry.engine === "mybrandos") return null;
+  const ui = presentationFor(entry);
+  const preset = entry.preset;
+  return {
+    id: entry.catalogKey,
+    icon: ui.icon,
+    name: ui.name || entry.displayName,
+    description: entry.description,
+    engine: entry.engine,
+    category: ui.category,
+    bucket: entry.bucket,
+    modules: [...entry.modules],
+    features: ui.features,
+    keywords: ui.keywords,
+    verticalId: entry.verticalId,
+    templateId: entry.templateId || entry.catalogKey,
+    available: entry.available,
+    hasPhysicalAddress: entry.hasPhysicalAddress,
+    preset: typeof preset === "string" ? (preset as MarketplaceVertical["preset"]) : undefined,
+  };
+}
+
+/** Marketplace cards derived from the shared Digiconomy catalog (business lane only). */
+export const VERTICAL_CATALOG: MarketplaceVertical[] = listInstallableDigiconomyEntries()
+  .map(toMarketplaceVertical)
+  .filter((item): item is MarketplaceVertical => item !== null);
+
+export function engineDisplayName(engine: string) {
+  if (engine === "ecommerceos") return "ECommerceOS";
+  if (engine === "transportationos") return "TransportationOS";
+  if (engine === "hospitalityos") return "HospitalityOS";
+  if (engine === "serviceos") return "ServiceOS";
+  if (engine === "mybrandos") return "mybrandOS";
+  return engine;
+}
+
+export const MARKETPLACE_CATEGORIES: Array<{ id: MarketplaceCategory; label: string }> = [
+  { id: "all", label: "All Verticals" },
+  { id: "hospitality", label: "Hospitality & Leisure" },
+  { id: "retail", label: "Retail & Commerce" },
+  { id: "transport", label: "Transport & Freight" },
+  { id: "services", label: "At-home Services" },
+  { id: "industry", label: "Industry" },
+  { id: "cross_industry", label: "Cross-Industry" },
+  { id: "ecommerce_ecosystem", label: "Ecommerce Ecosystem" },
 ];
 
+/** Legacy marketplace card ids → shared catalogKey (template id). */
+const LEGACY_MARKETPLACE_IDS: Record<string, string> = {
+  hotel_resort: "standalone_hotel",
+  restaurant_dining: "standalone_restaurant",
+  local_food_home_kitchen: "standalone_local_food",
+  bar_nightclub: "standalone_bar",
+  gym_fitness: "standalone_gym_spa",
+  cinema_events: "standalone_events",
+  full_resort: "full_hotel_resort",
+  retail_store: "physical_retail",
+  ecommerce_delivery: "ecommerce_delivery",
+  last_mile_courier: "logistics",
+  car_fleet_rental: "rentals",
+  transit_fleet_hub: "hub",
+  mobile_salon_grooming: "beauty",
+  home_wellness_spa: "wellness",
+  field_technician: "technical",
+  private_chef_culinary: "culinary",
+  pleasure_os: "pleasure",
+};
+
 export function getMarketplaceVertical(id: string): MarketplaceVertical | undefined {
-  return VERTICAL_CATALOG.find((item) => item.id === id);
+  const resolved = LEGACY_MARKETPLACE_IDS[id] || id;
+  return VERTICAL_CATALOG.find((item) => item.id === resolved);
 }
 
 export function filterVerticalCatalog(
@@ -374,9 +299,23 @@ export function filterVerticalCatalog(
 ): MarketplaceVertical[] {
   const q = query.trim().toLowerCase();
   return items.filter((item) => {
-    if (category !== "all" && item.category !== category) return false;
+    if (category === "industry" || category === "cross_industry" || category === "ecommerce_ecosystem") {
+      if (item.bucket !== category) return false;
+    } else if (category !== "all" && item.category !== category) {
+      return false;
+    }
     if (!q) return true;
     const haystack = [item.name, item.description, ...item.keywords].join(" ").toLowerCase();
     return haystack.includes(q);
   });
+}
+
+/** Sanity helper for tests — marketplace taxonomy matches shared derivation. */
+export function assertMarketplaceBucketsMatchShared() {
+  for (const item of VERTICAL_CATALOG) {
+    const expected = digiconomyBucketFor({ engine: item.engine, verticalId: item.verticalId });
+    if (item.bucket !== expected) {
+      throw new Error(`Marketplace bucket drift for ${item.id}: ${item.bucket} !== ${expected}`);
+    }
+  }
 }

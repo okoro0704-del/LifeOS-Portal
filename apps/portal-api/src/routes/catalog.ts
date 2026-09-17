@@ -4,10 +4,15 @@ import {
   ECOMMERCEOS_MANIFEST,
   HOSPITALITYOS_MANIFEST,
   TRANSPORTATIONOS_MANIFEST,
+  SERVICEOS_MANIFEST,
   LIFEOS_PRIMITIVE_IDS,
   PERSONAL_OS_CATALOG,
   MYBRANDOS_MANIFEST,
   PORTAL_LANES,
+  DIGICONOMY_BUCKETS,
+  businessOsCatalogWithTaxonomy,
+  personalOsCatalogWithTaxonomy,
+  listInstallableDigiconomyEntries,
 } from "@lifeos-portal/shared";
 import { requireSession } from "../lib/auth.js";
 import { isGuestAuthEnabled } from "../lib/guest-auth.js";
@@ -25,6 +30,18 @@ export async function registerCatalogRoutes(app: FastifyInstance) {
       hospitalityos: HOSPITALITYOS_MANIFEST,
       ecommerceos: ECOMMERCEOS_MANIFEST,
       transportationos: TRANSPORTATIONOS_MANIFEST,
+      serviceos: SERVICEOS_MANIFEST,
+      // Additive Digiconomy taxonomy (Phase 1) — does not replace existing keys.
+      digiconomy: {
+        buckets: DIGICONOMY_BUCKETS,
+        /**
+         * ecommerce_ecosystem classifies the EcommerceOS catalog family in Phase 1.
+         * It does NOT mean only those apps may participate in commerce later.
+         */
+        personalOs: personalOsCatalogWithTaxonomy(),
+        businessOs: businessOsCatalogWithTaxonomy(),
+        installable: listInstallableDigiconomyEntries(),
+      },
     };
   });
 }
