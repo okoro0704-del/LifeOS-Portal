@@ -214,8 +214,41 @@ export function digiconomyEntriesByBucket(bucket: DigiconomyBucket): DigiconomyC
 }
 
 /**
+ * Additive Digiconomy identity fields for Directory / LifeOS / Shell projections.
+ * digiconomyApplicationId is ALWAYS the stable Portal install id — never a new UUID.
+ * Taxonomy comes only from digiconomyBucketFor (single authority).
+ */
+export function digiconomyIdentityFields(input: {
+  id: string;
+  appId?: string;
+  osId: string;
+  verticalId: string;
+}): {
+  digiconomyApplicationId: string;
+  bucket: DigiconomyBucket;
+  engine: string;
+  verticalId: string;
+} {
+  const engine = input.osId || input.appId || "";
+  return {
+    digiconomyApplicationId: input.id,
+    bucket: digiconomyBucketFor({
+      engine,
+      osId: input.osId,
+      appId: input.appId,
+      verticalId: input.verticalId,
+    }),
+    engine,
+    verticalId: input.verticalId,
+  };
+}
+
+/**
  * Digiconomy-facing application projection derived from Portal install fields.
  * digiconomyApplicationId uses the stable Portal install id (survives redeploy).
+ *
+ * publicUrl / adminUrl come from declared deliverable surface contracts —
+ * not invented per-bucket. Management is the declared adminDashboard surface.
  */
 export function deriveDigiconomyApplicationProjection(input: {
   id: string;
@@ -233,23 +266,14 @@ export function deriveDigiconomyApplicationProjection(input: {
   publicUrl: string;
   adminUrl: string;
 } {
-  const engine = input.osId || input.appId || "";
-  const bucket = digiconomyBucketFor({
-    engine,
-    osId: input.osId,
-    appId: input.appId,
-    verticalId: input.verticalId,
-  });
+  const identity = digiconomyIdentityFields(input);
   const deliverables =
-    engine === "mybrandos"
+    identity.engine === "mybrandos"
       ? mybrandOsDeliverables({ slug: input.subdomain, customDomain: input.customDomain })
       : tenantDeliverables(input.subdomain, input.customDomain);
 
   return {
-    digiconomyApplicationId: input.id,
-    bucket,
-    engine,
-    verticalId: input.verticalId,
+    ...identity,
     subdomain: input.subdomain,
     publicUrl: deliverables.guestApp.url,
     adminUrl: deliverables.adminDashboard.url,

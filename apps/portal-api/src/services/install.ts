@@ -382,8 +382,11 @@ export async function installDomainOs(opts: {
     });
 
     await projectInstallToLifeOsShell({
+      installId: ready.id,
       trustId: identitySubject(opts.user),
       appId: osId,
+      osId,
+      verticalId: ready.verticalId,
       tenantId: tenantIdReady ?? boot.tenantId,
       displayName: opts.input.displayName,
       subdomain,

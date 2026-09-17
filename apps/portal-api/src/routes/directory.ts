@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import {
+  digiconomyIdentityFields,
   isUpstreamServiceUrl,
   mybrandOsDeliverables,
   mybrandUserAdminUrl,
@@ -17,6 +18,7 @@ function publicUrlFor(row: PortalInstall): string {
 /**
  * Canonical MANAGEMENT surface from Portal deliverables — never invented by Xperience.
  * mybrandOS → `{origin}/admin`; other verticals → declared adminDashboard URL.
+ * If the declared surface is missing/invalid, omit (do not fabricate).
  */
 function managementUrlFor(row: PortalInstall): string | undefined {
   const url = (row.osId === "mybrandos"
@@ -24,6 +26,20 @@ function managementUrlFor(row: PortalInstall): string | undefined {
     : tenantDeliverables(row.subdomain, row.customDomain).adminDashboard.url).replace(/\/$/, "");
   if (!/^https:\/\//i.test(url) || isUpstreamServiceUrl(url)) return undefined;
   return url;
+}
+
+/**
+ * Additive Digiconomy enrichment for an eligible install.
+ * Taxonomy authority: shared digiconomyIdentityFields / digiconomyBucketFor only.
+ * Does NOT create a second application identity — digiconomyApplicationId === install.id.
+ */
+function digiconomyFieldsFor(row: PortalInstall) {
+  return digiconomyIdentityFields({
+    id: row.id,
+    appId: row.appId,
+    osId: row.osId,
+    verticalId: row.verticalId,
+  });
 }
 
 /** Read-only projection consumed by OS Xperience's LifeOS catalog adapter. */
@@ -47,6 +63,7 @@ export async function registerDirectoryRoutes(app: FastifyInstance, store: Porta
         const managementOperatorIds = row.ownerTrustId?.trim()
           ? [row.ownerTrustId.trim()]
           : undefined;
+        const digiconomy = digiconomyFieldsFor(row);
         return {
           id: row.id,
           name: row.displayName,
@@ -63,6 +80,12 @@ export async function registerDirectoryRoutes(app: FastifyInstance, store: Porta
           description: `${row.displayName} on LifeOS.`,
           developerName: row.displayName,
           ecosystemSource: "LIFEOS" as const,
+          // Additive Digiconomy application projection (Phase 2).
+          // Bucket ≠ commerce participation. Engine ≠ application identity.
+          digiconomyApplicationId: digiconomy.digiconomyApplicationId,
+          bucket: digiconomy.bucket,
+          engine: digiconomy.engine,
+          verticalId: digiconomy.verticalId,
         };
       })
       .filter((application): application is NonNullable<typeof application> => application !== null);

@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   assertAllInstallableEntriesClassified,
   digiconomyBucketFor,
+  digiconomyIdentityFields,
   deriveDigiconomyApplicationProjection,
   listInstallableDigiconomyEntries,
   mybrandUserAdminUrl,
@@ -65,6 +66,23 @@ describe("Digiconomy taxonomy (Phase 1)", () => {
     expect(projection.publicUrl).not.toContain("/admin");
     expect(projection.adminUrl).toContain("/admin");
     expect(projection.publicUrl).toContain("getlifeos.app");
+  });
+
+  test("digiconomyIdentityFields is deterministic and shared by projections", () => {
+    const a = digiconomyIdentityFields({
+      id: "ins_1",
+      osId: "ecommerceos",
+      verticalId: "delivery",
+    });
+    const b = digiconomyIdentityFields({
+      id: "ins_1",
+      osId: "ecommerceos",
+      verticalId: "delivery",
+    });
+    expect(a).toEqual(b);
+    expect(a.digiconomyApplicationId).toBe("ins_1");
+    expect(a.bucket).toBe("ecommerce_ecosystem");
+    expect(a.engine).toBe("ecommerceos");
   });
 
   test("industry install projection keeps public ≠ admin", () => {

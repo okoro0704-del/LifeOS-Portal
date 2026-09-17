@@ -1,5 +1,11 @@
 import { deflateSync } from "node:zlib";
-import { mybrandOsDeliverables, tenantDeliverables, tenantLabelFromHost } from "@lifeos-portal/shared";
+import {
+  digiconomyIdentityFields,
+  mybrandOsDeliverables,
+  tenantDeliverables,
+  tenantLabelFromHost,
+  type DigiconomyBucket,
+} from "@lifeos-portal/shared";
 import type { PortalInstall } from "../store.js";
 
 export type PublicTenantApp = {
@@ -12,6 +18,10 @@ export type PublicTenantApp = {
   guestAppUrl: string;
   adminDashboardUrl: string;
   status: string;
+  /** Stable Digiconomy application id (= Portal install id). */
+  digiconomyApplicationId: string;
+  bucket: DigiconomyBucket;
+  engine: string;
 };
 
 export function tenantSubdomainFromHost(hostHeader?: string) {
@@ -34,8 +44,14 @@ export function toPublicTenantApp(row: PortalInstall): PublicTenantApp & {
     row.osId === "mybrandos"
       ? mybrandOsDeliverables({ slug: row.subdomain, customDomain: row.customDomain })
       : tenantDeliverables(row.subdomain, row.customDomain);
+  const digiconomy = digiconomyIdentityFields({
+    id: row.id,
+    appId: row.appId,
+    osId: row.osId,
+    verticalId: row.verticalId,
+  });
   const site = (row.site ?? {}) as Record<string, unknown>;
-  const base = {
+  const base: PublicTenantApp = {
     subdomain: row.subdomain,
     displayName: row.displayName,
     osId: row.osId,
@@ -45,6 +61,9 @@ export function toPublicTenantApp(row: PortalInstall): PublicTenantApp & {
     guestAppUrl: deliverables.guestApp.url,
     adminDashboardUrl: deliverables.adminDashboard.url,
     status: row.status,
+    digiconomyApplicationId: digiconomy.digiconomyApplicationId,
+    bucket: digiconomy.bucket,
+    engine: digiconomy.engine,
   };
   if (row.osId !== "mybrandos") return base;
   const mybrandBase = (process.env.MYBRANDOS_URL || "https://mybrandos-production.up.railway.app").replace(/\/$/, "");

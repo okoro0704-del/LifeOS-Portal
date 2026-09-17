@@ -1,13 +1,21 @@
 /**
  * Project a Portal install into the LifeOS Universal Shell installed-apps registry
  * so downloadable verticals appear with preset icon + tag after provision.
+ *
+ * Phase 2: additive Digiconomy taxonomy/identity fields. Does not create a second
+ * application identity — digiconomyApplicationId is the Portal install id.
  */
+import { digiconomyIdentityFields } from "@lifeos-portal/shared";
 import { config } from "../config.js";
 import { httpJson } from "../lib/http.js";
 
 export type ShellProjectInput = {
+  /** Stable Portal install id — Digiconomy application identity. */
+  installId: string;
   trustId: string;
   appId: string;
+  osId: string;
+  verticalId: string;
   tenantId: string;
   displayName: string;
   subdomain: string;
@@ -47,6 +55,12 @@ export async function projectInstallToLifeOsShell(input: ShellProjectInput): Pro
   const origin = `https://${input.subdomain}.getlifeos.app`;
   const launchUrl = input.launchUrl || `${origin}/staff`;
   const preset = input.preset ?? null;
+  const digiconomy = digiconomyIdentityFields({
+    id: input.installId,
+    appId: input.appId,
+    osId: input.osId,
+    verticalId: input.verticalId,
+  });
   try {
     await httpJson(config.lifeosApiUrl, "/v1/distributor/tenants/bootstrap", {
       method: "POST",
@@ -64,6 +78,11 @@ export async function projectInstallToLifeOsShell(input: ShellProjectInput): Pro
         preset,
         icon: input.icon ?? null,
         launchUrl,
+        // Additive Digiconomy projection — same install identity, not a new registry.
+        digiconomyApplicationId: digiconomy.digiconomyApplicationId,
+        bucket: digiconomy.bucket,
+        engine: digiconomy.engine,
+        verticalId: digiconomy.verticalId,
       }),
     });
   } catch {

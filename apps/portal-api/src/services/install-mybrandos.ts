@@ -184,8 +184,11 @@ export async function installMyBrandOs(opts: {
     // LifeOS / OS Xperience consumer discovery launches the PUBLIC User App.
     // Creator Admin remains `{origin}/admin` and is never the catalog destination.
     await projectInstallToLifeOsShell({
+      installId: ready.id,
       trustId: ready.ownerTrustId || provisioned.trustId,
       appId: "mybrandos",
+      osId: "mybrandos",
+      verticalId: ready.verticalId || "creator",
       tenantId: ready.distributorTenantId,
       displayName: ready.displayName,
       subdomain: ready.subdomain,

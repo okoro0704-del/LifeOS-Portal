@@ -74,6 +74,7 @@ export {
 export {
   DIGICONOMY_BUCKETS,
   digiconomyBucketFor,
+  digiconomyIdentityFields,
   listInstallableDigiconomyEntries,
   digiconomyEntriesByBucket,
   deriveDigiconomyApplicationProjection,
