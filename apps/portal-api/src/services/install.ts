@@ -393,6 +393,8 @@ export async function installDomainOs(opts: {
       launchUrl: staffUrl,
       preset: installPreset,
       icon: shellIconForPreset(osId, installPreset),
+      enabledModules: ready.enabledModules,
+      modulesEnabled: ready.modulesEnabled,
     });
 
     return ready;

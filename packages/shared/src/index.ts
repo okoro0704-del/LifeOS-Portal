@@ -88,6 +88,18 @@ export {
 } from "./digiconomy.js";
 
 export {
+  DIGICONOMY_ECOSYSTEMS,
+  ECOMMERCE_ECOSYSTEM_CAPABILITIES,
+  deriveEcommerceParticipation,
+  ecommerceCapabilityIdsForDirectory,
+  type DigiconomyEcosystemId,
+  type EcommerceEcosystemCapability,
+  type DigiconomyParticipationStatus,
+  type DigiconomyCommerceDomainModel,
+  type DigiconomyEcosystemParticipation,
+} from "./digiconomy-participation.js";
+
+export {
   PORTAL_AUTH_SCOPES,
   PORTAL_SESSION_COOKIE,
   PORTAL_SESSION_HEADER,

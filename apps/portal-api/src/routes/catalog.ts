@@ -10,6 +10,8 @@ import {
   MYBRANDOS_MANIFEST,
   PORTAL_LANES,
   DIGICONOMY_BUCKETS,
+  DIGICONOMY_ECOSYSTEMS,
+  ECOMMERCE_ECOSYSTEM_CAPABILITIES,
   businessOsCatalogWithTaxonomy,
   personalOsCatalogWithTaxonomy,
   listInstallableDigiconomyEntries,
@@ -36,8 +38,11 @@ export async function registerCatalogRoutes(app: FastifyInstance) {
         buckets: DIGICONOMY_BUCKETS,
         /**
          * ecommerce_ecosystem classifies the EcommerceOS catalog family in Phase 1.
-         * It does NOT mean only those apps may participate in commerce later.
+         * It does NOT mean only those apps may participate in commerce.
+         * Phase 3 participation is a separate composition layer (see ecosystems).
          */
+        ecosystems: DIGICONOMY_ECOSYSTEMS,
+        ecommerceCapabilities: ECOMMERCE_ECOSYSTEM_CAPABILITIES,
         personalOs: personalOsCatalogWithTaxonomy(),
         businessOs: businessOsCatalogWithTaxonomy(),
         installable: listInstallableDigiconomyEntries(),

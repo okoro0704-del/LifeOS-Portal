@@ -195,6 +195,8 @@ export async function installMyBrandOs(opts: {
       launchUrl: deliverables.guestApp.url,
       preset: "mybrandos",
       icon: "✦",
+      enabledModules: ready.enabledModules,
+      modulesEnabled: ready.modulesEnabled,
     }).catch(() => null);
 
     activateBusinessPortal({

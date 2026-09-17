@@ -1,6 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import {
+  deriveEcommerceParticipation,
   digiconomyIdentityFields,
+  ecommerceCapabilityIdsForDirectory,
   isUpstreamServiceUrl,
   mybrandOsDeliverables,
   mybrandUserAdminUrl,
@@ -42,6 +44,16 @@ function digiconomyFieldsFor(row: PortalInstall) {
   });
 }
 
+function ecommerceParticipationFor(row: PortalInstall) {
+  return deriveEcommerceParticipation({
+    osId: row.osId,
+    appId: row.appId,
+    verticalId: row.verticalId,
+    enabledModules: row.enabledModules,
+    modulesEnabled: row.modulesEnabled,
+  });
+}
+
 /** Read-only projection consumed by OS Xperience's LifeOS catalog adapter. */
 export async function registerDirectoryRoutes(app: FastifyInstance, store: PortalStore) {
   app.get("/v1/directory", async () => {
@@ -64,6 +76,7 @@ export async function registerDirectoryRoutes(app: FastifyInstance, store: Porta
           ? [row.ownerTrustId.trim()]
           : undefined;
         const digiconomy = digiconomyFieldsFor(row);
+        const ecommerceParticipation = ecommerceParticipationFor(row);
         return {
           id: row.id,
           name: row.displayName,
@@ -74,7 +87,8 @@ export async function registerDirectoryRoutes(app: FastifyInstance, store: Porta
           ...(managementUrl ? { managementUrl } : {}),
           ...(managementOperatorIds ? { managementOperatorIds } : {}),
           category: "General" as const,
-          capabilities: [],
+          // Phase 3: semantic ecommerce capabilities (still one Directory identity).
+          capabilities: ecommerceCapabilityIdsForDirectory(ecommerceParticipation),
           publicationState: "PUBLISHED" as const,
           experienced: false,
           description: `${row.displayName} on LifeOS.`,
@@ -86,6 +100,8 @@ export async function registerDirectoryRoutes(app: FastifyInstance, store: Porta
           bucket: digiconomy.bucket,
           engine: digiconomy.engine,
           verticalId: digiconomy.verticalId,
+          // Additive Digiconomy participation (Phase 3). Not a second app.
+          ecommerceParticipation,
         };
       })
       .filter((application): application is NonNullable<typeof application> => application !== null);

@@ -1,10 +1,12 @@
 import { deflateSync } from "node:zlib";
 import {
+  deriveEcommerceParticipation,
   digiconomyIdentityFields,
   mybrandOsDeliverables,
   tenantDeliverables,
   tenantLabelFromHost,
   type DigiconomyBucket,
+  type DigiconomyEcosystemParticipation,
 } from "@lifeos-portal/shared";
 import type { PortalInstall } from "../store.js";
 
@@ -22,6 +24,8 @@ export type PublicTenantApp = {
   digiconomyApplicationId: string;
   bucket: DigiconomyBucket;
   engine: string;
+  /** Phase 3: ecommerce ecosystem participation — not a second app identity. */
+  ecommerceParticipation: DigiconomyEcosystemParticipation;
 };
 
 export function tenantSubdomainFromHost(hostHeader?: string) {
@@ -50,6 +54,13 @@ export function toPublicTenantApp(row: PortalInstall): PublicTenantApp & {
     osId: row.osId,
     verticalId: row.verticalId,
   });
+  const ecommerceParticipation = deriveEcommerceParticipation({
+    osId: row.osId,
+    appId: row.appId,
+    verticalId: row.verticalId,
+    enabledModules: row.enabledModules,
+    modulesEnabled: row.modulesEnabled,
+  });
   const site = (row.site ?? {}) as Record<string, unknown>;
   const base: PublicTenantApp = {
     subdomain: row.subdomain,
@@ -64,6 +75,7 @@ export function toPublicTenantApp(row: PortalInstall): PublicTenantApp & {
     digiconomyApplicationId: digiconomy.digiconomyApplicationId,
     bucket: digiconomy.bucket,
     engine: digiconomy.engine,
+    ecommerceParticipation,
   };
   if (row.osId !== "mybrandos") return base;
   const mybrandBase = (process.env.MYBRANDOS_URL || "https://mybrandos-production.up.railway.app").replace(/\/$/, "");

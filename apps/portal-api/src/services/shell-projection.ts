@@ -2,10 +2,10 @@
  * Project a Portal install into the LifeOS Universal Shell installed-apps registry
  * so downloadable verticals appear with preset icon + tag after provision.
  *
- * Phase 2: additive Digiconomy taxonomy/identity fields. Does not create a second
- * application identity — digiconomyApplicationId is the Portal install id.
+ * Phase 2: additive Digiconomy taxonomy/identity fields.
+ * Phase 3: additive ecommerce participation (capability composition, not a new app).
  */
-import { digiconomyIdentityFields } from "@lifeos-portal/shared";
+import { deriveEcommerceParticipation, digiconomyIdentityFields } from "@lifeos-portal/shared";
 import { config } from "../config.js";
 import { httpJson } from "../lib/http.js";
 
@@ -22,6 +22,8 @@ export type ShellProjectInput = {
   launchUrl: string;
   preset?: string | null;
   icon?: string | null;
+  enabledModules?: readonly string[] | null;
+  modulesEnabled?: readonly string[] | null;
 };
 
 const HOSPITALITY_SHELL_ICONS: Record<string, string> = {
@@ -61,6 +63,13 @@ export async function projectInstallToLifeOsShell(input: ShellProjectInput): Pro
     osId: input.osId,
     verticalId: input.verticalId,
   });
+  const ecommerceParticipation = deriveEcommerceParticipation({
+    osId: input.osId,
+    appId: input.appId,
+    verticalId: input.verticalId,
+    enabledModules: input.enabledModules,
+    modulesEnabled: input.modulesEnabled,
+  });
   try {
     await httpJson(config.lifeosApiUrl, "/v1/distributor/tenants/bootstrap", {
       method: "POST",
@@ -83,6 +92,7 @@ export async function projectInstallToLifeOsShell(input: ShellProjectInput): Pro
         bucket: digiconomy.bucket,
         engine: digiconomy.engine,
         verticalId: digiconomy.verticalId,
+        ecommerceParticipation,
       }),
     });
   } catch {
