@@ -6,6 +6,7 @@ import {
   SUITE_VERTICAL_MODULES,
   folioChargeEnabled,
   normalizeSuiteModules,
+  type EcommerceVerticalId,
   type HospitalityInstallTemplateId,
   type SuiteVerticalModuleId,
 } from "@lifeos-portal/shared";
@@ -61,7 +62,7 @@ export type WizardSelection = {
   storeCountry?: string;
   hasPhysicalAddress?: boolean;
   custom?: boolean;
-  preset?: TransportationPreset | ServiceOSPreset | HospitalityOSPreset;
+  preset?: TransportationPreset | ServiceOSPreset | HospitalityOSPreset | EcommerceVerticalId;
   defaultDailyRateNgn?: number;
   defaultHourlyRateNgn?: number;
   defaultSecurityDepositNgn?: number;
@@ -310,7 +311,7 @@ export function ProvisioningWizard() {
         : serviceosLive
           ? ((catalogItem?.preset ?? saved?.preset ?? "beauty") as ServiceOSPreset)
           : ecommerceLive
-            ? verticalId
+            ? (verticalId as EcommerceVerticalId)
             : hospitalityPreset,
       defaultDailyRateNgn: Number(dailyRateNgn) || DEFAULT_DAILY_RATE_NGN,
       defaultHourlyRateNgn: Number(hourlyRateNgn) || DEFAULT_HOURLY_RATE_NGN,
