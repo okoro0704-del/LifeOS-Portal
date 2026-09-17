@@ -3,9 +3,11 @@ import {
   deriveEcommerceParticipation,
   digiconomyIdentityFields,
   ecommerceCapabilityIdsForDirectory,
+  filterByEcommerceDiscovery,
   isUpstreamServiceUrl,
   mybrandOsDeliverables,
   mybrandUserAdminUrl,
+  parseEcommerceDiscoveryQuery,
   tenantDeliverables,
 } from "@lifeos-portal/shared";
 import type { PortalInstall, PortalStore } from "../store.js";
@@ -30,11 +32,6 @@ function managementUrlFor(row: PortalInstall): string | undefined {
   return url;
 }
 
-/**
- * Additive Digiconomy enrichment for an eligible install.
- * Taxonomy authority: shared digiconomyIdentityFields / digiconomyBucketFor only.
- * Does NOT create a second application identity — digiconomyApplicationId === install.id.
- */
 function digiconomyFieldsFor(row: PortalInstall) {
   return digiconomyIdentityFields({
     id: row.id,
@@ -54,9 +51,24 @@ function ecommerceParticipationFor(row: PortalInstall) {
   });
 }
 
-/** Read-only projection consumed by OS Xperience's LifeOS catalog adapter. */
+/**
+ * Read-only projection consumed by OS Xperience's LifeOS catalog adapter.
+ *
+ * Phase 4: optional derived discovery filters (ecosystem / capability / status).
+ * Unfiltered GET /v1/directory remains backward compatible.
+ */
 export async function registerDirectoryRoutes(app: FastifyInstance, store: PortalStore) {
-  app.get("/v1/directory", async () => {
+  app.get("/v1/directory", async (req, reply) => {
+    const q = (req.query ?? {}) as {
+      ecosystem?: string;
+      capability?: string;
+      status?: string;
+    };
+    const parsed = parseEcommerceDiscoveryQuery(q);
+    if (!parsed.ok) {
+      return reply.code(400).send({ error: parsed.error });
+    }
+
     const applications = store
       .listAllInstalls()
       .filter((row) => row.status === "ready" && row.seedApplied && !row.suspended)
@@ -94,17 +106,17 @@ export async function registerDirectoryRoutes(app: FastifyInstance, store: Porta
           description: `${row.displayName} on LifeOS.`,
           developerName: row.displayName,
           ecosystemSource: "LIFEOS" as const,
-          // Additive Digiconomy application projection (Phase 2).
-          // Bucket ≠ commerce participation. Engine ≠ application identity.
           digiconomyApplicationId: digiconomy.digiconomyApplicationId,
           bucket: digiconomy.bucket,
           engine: digiconomy.engine,
           verticalId: digiconomy.verticalId,
-          // Additive Digiconomy participation (Phase 3). Not a second app.
           ecommerceParticipation,
         };
       })
       .filter((application): application is NonNullable<typeof application> => application !== null);
-    return { applications };
+
+    // Phase 4: derive discovery from Phase 3 participation — no second registry.
+    const discovered = filterByEcommerceDiscovery(applications, parsed.query);
+    return { applications: discovered };
   });
 }

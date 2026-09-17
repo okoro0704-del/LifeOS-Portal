@@ -42,6 +42,8 @@ export {
   expandEcommerceModules,
   normalizeSuiteModules,
   folioChargeEnabled,
+  canonicalEcommerceVerticalId,
+  ECOMMERCE_VERTICAL_ID_ALIASES,
   type LifeOsPrimitiveId,
   type RequiredLifeOsPrimitive,
   type DistributorPrimitive,
@@ -98,6 +100,18 @@ export {
   type DigiconomyCommerceDomainModel,
   type DigiconomyEcosystemParticipation,
 } from "./digiconomy-participation.js";
+
+export {
+  matchesEcommerceDiscovery,
+  filterByEcommerceDiscovery,
+  toDigiconomyDiscoverableParticipant,
+  parseEcommerceDiscoveryQuery,
+  isDigiconomyEcosystemId,
+  isEcommerceEcosystemCapability,
+  isDigiconomyParticipationStatus,
+  type DigiconomyDiscoveryQuery,
+  type DigiconomyDiscoverableParticipant,
+} from "./digiconomy-discovery.js";
 
 export {
   MYBRANDOS_PACKS,
