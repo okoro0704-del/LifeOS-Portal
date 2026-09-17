@@ -40,7 +40,7 @@ after(async () => {
   if (app) await app.close();
 });
 
-test("GET /catalog lists ECommerceOS retail with and without a physical address", async () => {
+test("GET /catalog lists seven EcommerceOS verticals with canonical names", async () => {
   const { "x-portal-session": token } = await sessionHeaders("TD-ECO-CATALOG");
   const res = await app.inject({
     method: "GET",
@@ -60,10 +60,23 @@ test("GET /catalog lists ECommerceOS retail with and without a physical address"
   assert.equal(eco?.available, true);
   const retail = eco?.verticals.find((v) => v.id === "retail");
   const delivery = eco?.verticals.find((v) => v.id === "delivery");
-  assert.equal(retail?.displayName, "Retail with a physical address");
+  assert.equal(retail?.displayName, "Physical Store");
   assert.equal(retail?.available, true);
-  assert.equal(delivery?.displayName, "Retail without a physical address");
+  assert.equal(delivery?.displayName, "Online Store");
   assert.equal(delivery?.available, true);
+  assert.equal(eco?.verticals.length, 7);
+  assert.deepEqual(
+    eco?.verticals.map((v) => v.displayName),
+    [
+      "Physical Store",
+      "Online Store",
+      "Supermarket",
+      "Shopping Centre",
+      "Wholesaler",
+      "Shopping Mall",
+      "Marketplace",
+    ],
+  );
   assert.equal(body.ecommerceos.appId, "ecommerceos");
   assert.equal(body.ecommerceos.install.hosProvisionPath, "/internal/distributor/provision");
   assert.equal(ECOMMERCEOS_MANIFEST.install.hosProvisionPath, "/internal/distributor/provision");
@@ -147,3 +160,98 @@ test("TrustID login + retail-with-address wizard payload provisions a live store
   );
   assert.ok(body.install.launchUrls?.storefront);
 });
+
+async function payAndInstall(opts: {
+  trustId: string;
+  verticalId: string;
+  displayName: string;
+  modules: string[];
+  pickup?: { addressLine1: string; city: string; country: string };
+}) {
+  const { "x-portal-session": token, user } = await sessionHeaders(opts.trustId);
+  assert.equal(user.trustId, opts.trustId);
+  const paid = await app.inject({
+    method: "POST",
+    url: "/billing/checkout",
+    headers: { "x-portal-session": token },
+    payload: { osId: "ecommerceos", verticalId: opts.verticalId },
+  });
+  assert.equal(paid.statusCode, 201, paid.body);
+  const billingId = paid.json().billing.id as string;
+  const subdomain = `${opts.verticalId.replace(/_/g, "").slice(0, 8)}-${Date.now().toString(36)}`;
+  const res = await app.inject({
+    method: "POST",
+    url: "/installs",
+    headers: { "x-portal-session": token },
+    payload: {
+      osId: "ecommerceos",
+      appId: "ecommerceos",
+      verticalId: opts.verticalId,
+      billingId,
+      displayName: opts.displayName,
+      subdomain,
+      enabledModules: opts.modules,
+      pickup: opts.pickup,
+      seed: "default",
+      adminStaff: {
+        email: `owner@${subdomain}.example`,
+        displayName: "Operator",
+        role: "owner",
+      },
+    },
+  });
+  return { res, subdomain };
+}
+
+test("Supermarket provisions through the existing Portal install path", async () => {
+  const { res, subdomain } = await payAndInstall({
+    trustId: "TD-SUPERMARKET-OWNER",
+    verticalId: "supermarket",
+    displayName: "Harbor Fresh",
+    modules: ["catalog", "pos", "checkout", "logisticsBridge", "departments", "promotions"],
+    pickup: { addressLine1: "1 Market Road", city: "Lagos", country: "NG" },
+  });
+  assert.equal(res.statusCode, 201, res.body);
+  const body = res.json() as {
+    install: {
+      id: string;
+      verticalId: string;
+      preset?: string;
+      modulesEnabled: string[];
+      storefrontUrl?: string;
+      adminConsoleUrl?: string;
+    };
+  };
+  assert.equal(body.install.verticalId, "supermarket");
+  assert.equal(body.install.preset, "supermarket");
+  assert.ok(body.install.modulesEnabled.includes("departments"));
+  assert.ok(body.install.modulesEnabled.includes("promotions"));
+  assert.match(body.install.storefrontUrl ?? "", new RegExp(subdomain));
+  assert.match(body.install.adminConsoleUrl ?? "", /\/admin/);
+  assert.ok(body.install.id.startsWith("ins_"));
+});
+
+test("Shopping Centre provisions a destination directory, not a renamed supermarket", async () => {
+  const { res } = await payAndInstall({
+    trustId: "TD-CENTRE-OWNER",
+    verticalId: "shopping_centre",
+    displayName: "Marina Centre",
+    modules: ["directory", "units", "hours", "events", "offers"],
+    pickup: { addressLine1: "Marina", city: "Lagos", country: "NG" },
+  });
+  assert.equal(res.statusCode, 201, res.body);
+  const body = res.json() as {
+    install: {
+      verticalId: string;
+      preset?: string;
+      modulesEnabled: string[];
+    };
+  };
+  assert.equal(body.install.verticalId, "shopping_centre");
+  assert.equal(body.install.preset, "shopping_centre");
+  assert.ok(body.install.modulesEnabled.includes("directory"));
+  assert.ok(body.install.modulesEnabled.includes("units"));
+  assert.ok(!body.install.modulesEnabled.includes("checkout"));
+  assert.ok(!body.install.modulesEnabled.includes("departments"));
+});
+

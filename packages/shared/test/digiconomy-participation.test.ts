@@ -59,6 +59,20 @@ describe("Digiconomy ecommerce participation (Phase 3)", () => {
     );
   });
 
+  test("Shopping Centre participation is catalog-only and stays EcommerceOS", () => {
+    const modules = expandEcommerceModules(["directory", "units", "hours", "events", "offers"]);
+    const participation = deriveEcommerceParticipation({
+      osId: "ecommerceos",
+      verticalId: "shopping_centre",
+      modulesEnabled: modules,
+    });
+    expect(participation.status).toBe("active");
+    expect(participation.capabilities).toEqual(["catalog"]);
+    expect(digiconomyBucketFor({ engine: "ecommerceos", verticalId: "shopping_centre" })).toBe(
+      "ecommerce_ecosystem",
+    );
+  });
+
   test("pure accommodation hotel does not invent ecommerce participation", () => {
     const participation = deriveEcommerceParticipation({
       osId: "hospitalityos",

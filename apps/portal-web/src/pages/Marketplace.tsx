@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { VerticalCard } from "../components/VerticalCard";
 import { writeWizardSelection } from "../components/ProvisioningWizard";
 import {
@@ -8,6 +8,12 @@ import {
   type MarketplaceCategory,
   type MarketplaceVertical,
 } from "../data/verticalCatalog";
+
+function categoryFromParam(value: string | null): MarketplaceCategory {
+  return MARKETPLACE_CATEGORIES.some((tab) => tab.id === value)
+    ? (value as MarketplaceCategory)
+    : "all";
+}
 
 function slugFromName(name: string) {
   return name
@@ -19,8 +25,11 @@ function slugFromName(name: string) {
 
 export function Marketplace() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState<MarketplaceCategory>("all");
+  const [category, setCategory] = useState<MarketplaceCategory>(() =>
+    categoryFromParam(searchParams.get("category")),
+  );
 
   const items = useMemo(() => filterVerticalCatalog(query, category), [query, category]);
 
@@ -96,7 +105,13 @@ export function Marketplace() {
             role="tab"
             aria-selected={category === tab.id}
             className={`marketplace-tab ${category === tab.id ? "marketplace-tab--active" : ""}`}
-            onClick={() => setCategory(tab.id)}
+            onClick={() => {
+              setCategory(tab.id);
+              const next = new URLSearchParams(searchParams);
+              if (tab.id === "all") next.delete("category");
+              else next.set("category", tab.id);
+              setSearchParams(next, { replace: true });
+            }}
           >
             {tab.label}
           </button>

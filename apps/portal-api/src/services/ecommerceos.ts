@@ -31,6 +31,8 @@ export type EcoProvisionInput = {
     lng?: number;
   };
   walletPayoutAccount?: string;
+  verticalId?: string;
+  hasPhysicalAddress?: boolean;
 };
 
 export type EcoClient = {
@@ -68,6 +70,7 @@ export function createLocalEcommerceOs(): EcoClient {
         storefrontUrl,
         adminConsoleUrl,
         launchUrls: toLaunchUrls(storefrontUrl, adminConsoleUrl),
+        verticalId: input.verticalId,
       };
     },
   };
@@ -108,6 +111,8 @@ export function createRemoteEcommerceOs(): EcoClient {
             manifestVersion: ECOMMERCEOS_MANIFEST.version,
             pickup: input.pickup,
             walletPayoutAccount: input.walletPayoutAccount,
+            verticalId: input.verticalId,
+            hasPhysicalAddress: input.hasPhysicalAddress,
           }),
         },
         );

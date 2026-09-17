@@ -36,6 +36,8 @@ export type InstallRecordPublic = {
   staffId?: string;
   modulesEnabled: string[];
   enabledModules?: string[];
+  /** Domain OS preset (EcommerceOS vertical, TransportationOS hub, etc.) */
+  preset?: string;
   seedApplied: boolean;
   launchUrls?: LaunchUrls;
   deliverables?: TenantDeliverables;
@@ -69,6 +71,7 @@ export type InstallHospitalityInput = {
     lng?: number;
   };
   walletPayoutAccount?: string;
+  hasPhysicalAddress?: boolean;
   rentalSettings?: {
     defaultDailyRate?: number;
     defaultHourlyRate?: number;

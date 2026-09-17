@@ -39,6 +39,7 @@ function resolveHosInstallTemplate(verticalId: string, installTemplate?: string,
 
 function resolveInstallPreset(osId: string, verticalId: string, inputPreset?: string) {
   if (inputPreset) return inputPreset;
+  if (osId === "ecommerceos") return verticalId;
   if (osId === "hospitalityos" && (verticalId === "local_food" || verticalId === "shared_homes")) {
     return verticalId;
   }
@@ -284,6 +285,8 @@ export async function installDomainOs(opts: {
               ...provisionInput,
               pickup: opts.input.pickup,
               walletPayoutAccount: opts.input.walletPayoutAccount,
+              verticalId,
+              hasPhysicalAddress: opts.input.hasPhysicalAddress,
             })
           : osId === "transportationos"
             ? await opts.tos.provision({

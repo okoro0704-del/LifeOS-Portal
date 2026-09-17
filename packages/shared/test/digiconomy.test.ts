@@ -44,6 +44,12 @@ describe("Digiconomy taxonomy (Phase 1)", () => {
     expect(digiconomyBucketFor({ engine: "ecommerceos", verticalId: "delivery" })).toBe(
       "ecommerce_ecosystem",
     );
+    expect(digiconomyBucketFor({ engine: "ecommerceos", verticalId: "supermarket" })).toBe(
+      "ecommerce_ecosystem",
+    );
+    expect(digiconomyBucketFor({ engine: "ecommerceos", verticalId: "marketplace" })).toBe(
+      "ecommerce_ecosystem",
+    );
   });
 
   test("unclassified engines fail closed", () => {

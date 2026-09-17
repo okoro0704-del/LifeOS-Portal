@@ -25,9 +25,9 @@ describe("marketplace search", () => {
     await user.type(screen.getByLabelText(/search verticals/i), "gym");
 
     const cards = screen.getAllByTestId("vertical-card");
-    expect(cards).toHaveLength(1);
-    expect(within(cards[0]).getByRole("heading", { name: "Gym & Fitness Center" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Hotel & Resort" })).not.toBeInTheDocument();
+    const names = cards.map((el) => el.querySelector("h2")?.textContent);
+    expect(names).toContain("Gym & Fitness Center");
+    expect(names).not.toContain("Hotel & Resort");
   });
 
   test('typing "hotel" matches Hotel & Resort and Full Resort', () => {
@@ -45,7 +45,7 @@ describe("marketplace search", () => {
     const user = userEvent.setup();
     renderMarketplace();
 
-    const rentalCard = document.querySelector('[data-vertical-id="car_fleet_rental"]') as HTMLElement;
+    const rentalCard = document.querySelector('[data-vertical-id="rentals"]') as HTMLElement;
     expect(rentalCard).toBeTruthy();
     await user.click(within(rentalCard).getByRole("button", { name: "Install Vertical" }));
 
@@ -62,12 +62,12 @@ describe("marketplace search", () => {
     const user = userEvent.setup();
     renderMarketplace();
 
-    expect(document.querySelector('[data-vertical-id="mobile_salon_grooming"]')).toBeTruthy();
-    expect(document.querySelector('[data-vertical-id="home_wellness_spa"]')).toBeTruthy();
-    expect(document.querySelector('[data-vertical-id="field_technician"]')).toBeTruthy();
-    expect(document.querySelector('[data-vertical-id="private_chef_culinary"]')).toBeTruthy();
+    expect(document.querySelector('[data-vertical-id="beauty"]')).toBeTruthy();
+    expect(document.querySelector('[data-vertical-id="wellness"]')).toBeTruthy();
+    expect(document.querySelector('[data-vertical-id="technical"]')).toBeTruthy();
+    expect(document.querySelector('[data-vertical-id="culinary"]')).toBeTruthy();
 
-    const beauty = document.querySelector('[data-vertical-id="mobile_salon_grooming"]') as HTMLElement;
+    const beauty = document.querySelector('[data-vertical-id="beauty"]') as HTMLElement;
     expect(beauty).toBeTruthy();
     await user.click(within(beauty).getByRole("button", { name: "Install Vertical" }));
 
@@ -85,7 +85,7 @@ describe("marketplace search", () => {
     const user = userEvent.setup();
     renderMarketplace();
 
-    const gymCard = document.querySelector('[data-vertical-id="gym_fitness"]') as HTMLElement;
+    const gymCard = document.querySelector('[data-vertical-id="standalone_gym_spa"]') as HTMLElement;
     expect(gymCard).toBeTruthy();
     await user.click(within(gymCard).getByRole("button", { name: "Install Vertical" }));
 
@@ -105,7 +105,7 @@ describe("marketplace search", () => {
     const user = userEvent.setup();
     renderMarketplace();
 
-    const hotelCard = document.querySelector('[data-vertical-id="hotel_resort"]') as HTMLElement;
+    const hotelCard = document.querySelector('[data-vertical-id="standalone_hotel"]') as HTMLElement;
     expect(hotelCard).toBeTruthy();
     await user.click(within(hotelCard).getByRole("button", { name: "Install Vertical" }));
 

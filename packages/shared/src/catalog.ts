@@ -295,39 +295,108 @@ export const HOSPITALITY_VERTICALS: CatalogVertical[] = HOSPITALITYOS_INSTALL_TE
   },
 );
 
-export type EcommerceVerticalId = "retail" | "delivery";
+export type EcommerceVerticalId =
+  | "retail"
+  | "delivery"
+  | "supermarket"
+  | "shopping_centre"
+  | "wholesaler"
+  | "shopping_mall"
+  | "marketplace";
+
+export const ECOMMERCE_VERTICAL_ID_ALIASES: Record<string, EcommerceVerticalId> = {
+  physical_store: "retail",
+  online_store: "delivery",
+};
+
+export function canonicalEcommerceVerticalId(id: string): string {
+  return ECOMMERCE_VERTICAL_ID_ALIASES[id] ?? id;
+}
 
 export type EcommerceInstallTemplate = {
-  id: "physical_retail" | "ecommerce_delivery";
+  id:
+    | "physical_retail"
+    | "ecommerce_delivery"
+    | "supermarket"
+    | "shopping_centre"
+    | "wholesaler"
+    | "shopping_mall"
+    | "marketplace";
   verticalId: EcommerceVerticalId;
   label: string;
   description: string;
-  /** Same commerce stack; only the shop-address flag differs. */
+  /** Same commerce engine; only the shop-address / destination flag differs for store models. */
   hasPhysicalAddress: boolean;
+  operatingModel: "store" | "supermarket" | "destination" | "wholesale" | "marketplace";
   modules: string[];
 };
 
-/** Shared ECommerceOS stack — catalog, till, checkout, and local delivery. */
+/** Shared ECommerceOS store stack — catalog, till, checkout, and local delivery. */
 export const ECOMMERCE_CORE_MODULES = ["catalog", "pos", "checkout", "logisticsBridge"] as const;
 
 export const ECOMMERCEOS_INSTALL_TEMPLATES: EcommerceInstallTemplate[] = [
   {
     id: "physical_retail",
     verticalId: "retail",
-    label: "Retail with a physical address",
-    description:
-      "Same retail engine as online: catalog, checkout, and local delivery. Customers can also walk into a shop.",
+    label: "Physical Store",
+    description: "Run your physical shop and digital commerce together.",
     hasPhysicalAddress: true,
+    operatingModel: "store",
     modules: [...ECOMMERCE_CORE_MODULES],
   },
   {
     id: "ecommerce_delivery",
     verticalId: "delivery",
-    label: "Retail without a physical address",
-    description:
-      "Same retail engine: catalog, checkout, and local delivery. No walk-in shop — orders go out to the customer.",
+    label: "Online Store",
+    description: "Sell online without needing a customer-facing physical shop.",
     hasPhysicalAddress: false,
+    operatingModel: "store",
     modules: [...ECOMMERCE_CORE_MODULES],
+  },
+  {
+    id: "supermarket",
+    verticalId: "supermarket",
+    label: "Supermarket",
+    description: "Operate high-volume, multi-category retail.",
+    hasPhysicalAddress: true,
+    operatingModel: "supermarket",
+    modules: [...ECOMMERCE_CORE_MODULES, "departments", "promotions"],
+  },
+  {
+    id: "shopping_centre",
+    verticalId: "shopping_centre",
+    label: "Shopping Centre",
+    description: "Bring the businesses in your commercial centre together digitally.",
+    hasPhysicalAddress: true,
+    operatingModel: "destination",
+    modules: ["directory", "units", "hours", "events", "offers"],
+  },
+  {
+    id: "wholesaler",
+    verticalId: "wholesaler",
+    label: "Wholesaler",
+    description: "Run bulk and business-to-business commerce.",
+    hasPhysicalAddress: true,
+    operatingModel: "wholesale",
+    modules: ["catalog", "checkout", "bulk_orders", "wholesale_pricing"],
+  },
+  {
+    id: "shopping_mall",
+    verticalId: "shopping_mall",
+    label: "Shopping Mall",
+    description: "Operate a multi-store shopping destination.",
+    hasPhysicalAddress: true,
+    operatingModel: "destination",
+    modules: ["directory", "units", "hours", "events", "offers", "facilities"],
+  },
+  {
+    id: "marketplace",
+    verticalId: "marketplace",
+    label: "Marketplace",
+    description: "Operate a commerce platform for independent sellers.",
+    hasPhysicalAddress: false,
+    operatingModel: "marketplace",
+    modules: ["directory", "seller_participation", "catalog", "orders"],
   },
 ];
 
@@ -338,6 +407,18 @@ const ECOMMERCE_SUITE_TO_INTERNAL: Record<string, string[]> = {
   pos: ["cart", "orders"],
   checkout: ["checkout", "billing"],
   logisticsBridge: ["logistics_bridge"],
+  departments: ["departments"],
+  promotions: ["promotions"],
+  directory: ["directory", "storefront"],
+  units: ["units"],
+  hours: ["hours"],
+  events: ["events"],
+  offers: ["offers"],
+  facilities: ["facilities"],
+  bulk_orders: ["bulk_orders", "orders"],
+  wholesale_pricing: ["wholesale_pricing"],
+  seller_participation: ["seller_participation"],
+  orders: ["orders"],
 };
 
 export function expandEcommerceModules(input: readonly string[]): string[] {
@@ -357,6 +438,11 @@ export const ECOMMERCE_VERTICALS: CatalogVertical[] = ECOMMERCEOS_INSTALL_TEMPLA
   const prices: Record<EcommerceVerticalId, number> = {
     retail: 3900,
     delivery: 3900,
+    supermarket: 3900,
+    shopping_centre: 3900,
+    wholesaler: 3900,
+    shopping_mall: 3900,
+    marketplace: 3900,
   };
   return {
     id: template.verticalId,
@@ -657,7 +743,7 @@ export const BUSINESS_OS_CATALOG: CatalogBusinessOs[] = [
     displayName: "ECommerceOS",
     version: "0.1.0",
     description:
-      "Retail engine — catalog, checkout, and local delivery. Optional walk-in shop address.",
+      "Commerce-native operating software for physical stores, online stores, supermarkets, centres, wholesalers, malls, and marketplaces.",
     available: true,
     requiredPrimitives: ["identity", "messaging", "storage", "jobs", "distributor", "billing"],
     verticals: ECOMMERCE_VERTICALS,
@@ -697,7 +783,8 @@ export function getBusinessOs(osId: string): CatalogBusinessOs | undefined {
 }
 
 export function getVertical(osId: string, verticalId: string): CatalogVertical | undefined {
-  return getBusinessOs(osId)?.verticals.find((v) => v.id === verticalId);
+  const id = osId === "ecommerceos" ? canonicalEcommerceVerticalId(verticalId) : verticalId;
+  return getBusinessOs(osId)?.verticals.find((v) => v.id === id);
 }
 
 export function modulesForVertical(osId: string, verticalId: string): string[] {
@@ -867,7 +954,7 @@ export const ECOMMERCEOS_MANIFEST: ECommerceOSManifest = {
   displayName: "ECommerceOS",
   version: "0.1.0",
   description:
-    "Retail engine — catalog, checkout, local delivery, and an optional walk-in shop address.",
+    "Commerce-native operating software for physical stores, online stores, supermarkets, centres, wholesalers, malls, and marketplaces.",
   distributorPrimitives: ["commerce", "identity", "billing", "messaging"],
   requiredPrimitives: ["identity", "messaging", "storage", "jobs", "distributor", "billing"],
   defaultModules: ECOMMERCEOS_DEFAULT_MODULES,

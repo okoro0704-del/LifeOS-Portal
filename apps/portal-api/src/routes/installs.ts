@@ -35,6 +35,7 @@ function toPublic(row: PortalInstall): InstallRecordPublic {
     staffId: row.staffId,
     modulesEnabled: row.modulesEnabled,
     enabledModules: row.enabledModules,
+    preset: row.preset,
     seedApplied: row.seedApplied,
     launchUrls:
       row.osId === "mybrandos"
@@ -101,6 +102,7 @@ const installBody = z.object({
     })
     .optional(),
   walletPayoutAccount: z.string().optional(),
+  hasPhysicalAddress: z.boolean().optional(),
   preset: z.string().min(1).max(64).optional(),
   installTemplate: z.string().min(1).max(64).optional(),
   localFoodSettings: z

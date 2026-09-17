@@ -1,6 +1,11 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { getVertical, suiteModulesForVertical } from "@lifeos-portal/shared";
+import {
+  ECOMMERCEOS_INSTALL_TEMPLATES,
+  HOSPITALITYOS_INSTALL_TEMPLATES,
+  getVertical,
+  suiteModulesForVertical,
+} from "@lifeos-portal/shared";
 import { ApiError, portalApi } from "../lib/api";
 import {
   readWizardSelection,
@@ -9,7 +14,6 @@ import {
   verticalsFromPreset,
 } from "../components/ProvisioningWizard";
 import { engineDisplayName } from "../data/verticalCatalog";
-import { HOSPITALITYOS_INSTALL_TEMPLATES } from "@lifeos-portal/shared";
 import { readImageDataUrl } from "../lib/images";
 
 type SavedBilling = { billingId: string; osId: string; verticalId: string };
@@ -84,8 +88,10 @@ export function InstallVerticalPage() {
 
   const paid = billing;
   const wizardState = readWizardSelection();
+  const ecommerceTemplate = ECOMMERCEOS_INSTALL_TEMPLATES.find((t) => t.verticalId === verticalId);
   const showShopAddress =
-    osId === "ecommerceos" && (wizardState?.hasPhysicalAddress ?? verticalId === "retail");
+    osId === "ecommerceos" &&
+    (wizardState?.hasPhysicalAddress ?? ecommerceTemplate?.hasPhysicalAddress ?? verticalId === "retail");
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -140,6 +146,7 @@ export function InstallVerticalPage() {
               }
             : undefined,
         walletPayoutAccount: walletPayout || wizard?.walletPayout,
+        hasPhysicalAddress: osId === "ecommerceos" ? showShopAddress : undefined,
         preset:
           osId === "transportationos"
             ? tosPreset
@@ -147,7 +154,9 @@ export function InstallVerticalPage() {
               ? hosPreset
               : osId === "serviceos"
                 ? sosPreset
-                : undefined,
+                : osId === "ecommerceos"
+                  ? verticalId
+                  : undefined,
         verticals: osId === "transportationos" ? verticalsFromPreset(tosPreset) : undefined,
         rentalSettings:
           osId === "transportationos" ? rentalSettingsFromWizard(wizard, verticalId) : undefined,

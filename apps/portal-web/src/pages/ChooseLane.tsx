@@ -27,6 +27,9 @@ export function ChooseLanePage() {
             <Link className="btn btn-primary" to="/app/business/hospitality">
               Hospitality software
             </Link>
+            <Link className="btn btn-ghost" to="/app/business?category=ecommerce_ecosystem">
+              EcommerceOS
+            </Link>
             <Link className="btn btn-ghost" to="/app/business">
               All Business OS
             </Link>

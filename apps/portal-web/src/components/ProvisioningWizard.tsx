@@ -309,7 +309,9 @@ export function ProvisioningWizard() {
         ? transportationPreset
         : serviceosLive
           ? ((catalogItem?.preset ?? saved?.preset ?? "beauty") as ServiceOSPreset)
-          : hospitalityPreset,
+          : ecommerceLive
+            ? verticalId
+            : hospitalityPreset,
       defaultDailyRateNgn: Number(dailyRateNgn) || DEFAULT_DAILY_RATE_NGN,
       defaultHourlyRateNgn: Number(hourlyRateNgn) || DEFAULT_HOURLY_RATE_NGN,
       defaultSecurityDepositNgn: Number(depositNgn) || DEFAULT_DEPOSIT_NGN,
@@ -359,9 +361,10 @@ export function ProvisioningWizard() {
         <h1>{customPreset ? "Build a custom suite" : "Install this vertical"}</h1>
         <p className="lead">
           {ecommerceLive
-            ? hasPhysicalAddress
-              ? "Same retail engine as online: catalog, checkout, and local delivery. Add the shop address customers can visit."
-              : "Same retail engine as a shop: catalog, checkout, and local delivery. No walk-in address."
+            ? catalogItem?.description ??
+              (hasPhysicalAddress
+                ? "Run your physical shop and digital commerce together."
+                : "Sell online without needing a customer-facing physical shop.")
             : hospitalityLive
               ? "Confirm the engine, modules, property name, subdomain, and Finprove payout before billing."
               : transportationLive
@@ -447,14 +450,24 @@ export function ProvisioningWizard() {
         {ecommerceLive && hasPhysicalAddress ? (
           <>
             <label>
-              Shop address
+              {verticalId === "wholesaler"
+                ? "Warehouse / depot address"
+                : verticalId === "shopping_centre" || verticalId === "shopping_mall"
+                  ? "Centre / mall address"
+                  : "Shop address"}
               <input
                 value={storeAddress}
                 onChange={(e) => setStoreAddress(e.target.value)}
                 placeholder="12 Marina"
                 data-testid="wizard-store-address"
               />
-              <span className="hint">Public walk-in address. Riders also pick up from here.</span>
+              <span className="hint">
+                {verticalId === "wholesaler"
+                  ? "Pickup and dispatch location for bulk orders."
+                  : verticalId === "shopping_centre" || verticalId === "shopping_mall"
+                    ? "Public destination address. Occupant businesses keep their own apps."
+                    : "Public walk-in address. Riders also pick up from here."}
+              </span>
             </label>
             <label>
               City

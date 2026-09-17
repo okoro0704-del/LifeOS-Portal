@@ -81,18 +81,19 @@ function capsFromEcommerceModules(modules: Set<string>): EcommerceEcosystemCapab
   if (
     modules.has("catalog") ||
     modules.has("inventory") ||
-    modules.has("storefront")
+    modules.has("storefront") ||
+    modules.has("directory") ||
+    modules.has("departments")
   ) {
     caps.push("catalog");
   }
-  if (modules.has("pos") || modules.has("cart") || modules.has("orders")) {
+  if (modules.has("pos") || modules.has("cart") || modules.has("orders") || modules.has("bulk_orders")) {
     caps.push("ordering");
   }
   if (modules.has("checkout")) {
     caps.push("checkout");
   }
   if (modules.has("billing") || modules.has("checkout")) {
-    // Ecommerce checkout expands to checkout+billing; billing alone still implies payment rail.
     if (!caps.includes("payment")) caps.push("payment");
   }
   if (modules.has("logisticsbridge") || modules.has("logistics_bridge")) {
@@ -197,13 +198,16 @@ export function deriveEcommerceParticipation(input: {
 
   if (engine === "ecommerceos") {
     const capabilities = capsFromEcommerceModules(modules);
+    const legacyStore = verticalId === "retail" || verticalId === "delivery" || verticalId === "";
     return {
       ecosystem: "ecommerce",
       status: "active",
       capabilities:
         capabilities.length > 0
           ? capabilities
-          : uniqCaps(["catalog", "ordering", "checkout", "payment", "logistics"]),
+          : legacyStore
+            ? uniqCaps(["catalog", "ordering", "checkout", "payment", "logistics"])
+            : ["catalog"],
       domainModel: "retail_commerce",
     };
   }
