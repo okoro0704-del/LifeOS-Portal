@@ -10,6 +10,7 @@ import { LoginPage } from "./pages/Login";
 import { CallbackPage } from "./pages/Callback";
 import { ChooseLanePage } from "./pages/ChooseLane";
 import { PersonalOsPage } from "./pages/PersonalOs";
+import { MyBrandOsPacksPage } from "./pages/MyBrandOsPacks";
 import { Marketplace } from "./pages/Marketplace";
 import { ProvisioningWizard } from "./pages/ProvisioningWizard";
 import { BillingPage } from "./pages/Billing";
@@ -71,6 +72,7 @@ export function App() {
             <Route path="/app" element={<AppShell />}>
               <Route index element={<ChooseLanePage />} />
               <Route path="personal" element={<PersonalOsPage />} />
+              <Route path="personal/packs" element={<MyBrandOsPacksPage />} />
               <Route path="profile" element={<ProfilePage />} />
               <Route path="business" element={<Marketplace />} />
               <Route path="business/:osId" element={<ProvisioningWizard />} />

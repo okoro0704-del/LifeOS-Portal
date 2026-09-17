@@ -1,6 +1,11 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { MYBRANDOS_MANIFEST } from "@lifeos-portal/shared";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import {
+  MYBRANDOS_MANIFEST,
+  formatMyBrandOsPackPrice,
+  getMyBrandOsPack,
+  isMyBrandOsPackId,
+} from "@lifeos-portal/shared";
 import { ApiError, portalApi } from "../lib/api";
 
 function slugify(value: string) {
@@ -14,7 +19,12 @@ function slugify(value: string) {
 
 export function PersonalOsPage() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const product = MYBRANDOS_MANIFEST;
+  const packId = params.get("pack");
+  const selectedPack =
+    packId && isMyBrandOsPackId(packId) ? getMyBrandOsPack(packId) : getMyBrandOsPack("creator");
+
   const [displayName, setDisplayName] = useState("");
   const [subdomain, setSubdomain] = useState("");
   const [tagline, setTagline] = useState("");
@@ -35,7 +45,9 @@ export function PersonalOsPage() {
         bio: bio.trim() || undefined,
         ownerEmail: ownerEmail.trim() || undefined,
       });
-      navigate(`/app/installs/${res.install.id}`, { state: { justCreated: true } });
+      navigate(`/app/installs/${res.install.id}`, {
+        state: { justCreated: true, packId: selectedPack?.id },
+      });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not download mybrandOS.");
     } finally {
@@ -55,7 +67,40 @@ export function PersonalOsPage() {
         </p>
       </header>
 
-      <form className="card form" data-testid="mybrandos-download-form" onSubmit={(e) => void downloadWhiteLabel(e)}>
+      {selectedPack ? (
+        <section className="card pack-summary" aria-label="Selected pack">
+          <div className="pack-summary-row">
+            <div>
+              <p className="eyebrow">selected pack</p>
+              <h2>{selectedPack.name}</h2>
+              <p className="muted">{selectedPack.positioning}</p>
+            </div>
+            <div className="pack-summary-prices">
+              <p>
+                <span className="muted small">Software</span>
+                <strong>{formatMyBrandOsPackPrice(selectedPack.software.oneTimePriceMinor)} once</strong>
+              </p>
+              <p>
+                <span className="muted small">Services</span>
+                <strong>{formatMyBrandOsPackPrice(selectedPack.services.monthlyPriceMinor)}/mo</strong>
+              </p>
+            </div>
+          </div>
+          <p className="muted small">
+            Own your mybrandOS. Subscribe to the services that power it. Pack selection is commercial
+            configuration only — your application remains mybrandOS.
+          </p>
+          <Link className="btn btn-ghost" to={`/app/personal/packs?pack=${selectedPack.id}`}>
+            Change pack
+          </Link>
+        </section>
+      ) : null}
+
+      <form
+        className="card form"
+        data-testid="mybrandos-download-form"
+        onSubmit={(e) => void downloadWhiteLabel(e)}
+      >
         <p className="eyebrow">your brand</p>
         <h2>{product.displayName}</h2>
         <p>{product.description}</p>
@@ -112,9 +157,16 @@ export function PersonalOsPage() {
         {error ? <p className="banner-error">{error}</p> : null}
 
         <div className="actions" style={{ marginTop: "1rem", display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-          <button className="btn btn-primary" type="submit" disabled={busy || !displayName.trim() || subdomain.length < 3}>
+          <button
+            className="btn btn-primary"
+            type="submit"
+            disabled={busy || !displayName.trim() || subdomain.length < 3}
+          >
             {busy ? "Provisioning…" : "Download mybrandOS"}
           </button>
+          <Link className="btn btn-ghost" to="/app/personal/packs">
+            View packs
+          </Link>
           <Link className="btn btn-ghost" to="/app">
             Back
           </Link>

@@ -15,8 +15,8 @@ export function ChooseLanePage() {
           <p className="eyebrow">lane</p>
           <h2>Personal OS</h2>
           <p>Download mybrandOS — your creator Digital Life workstation.</p>
-          <Link className="btn btn-primary" to="/app/personal">
-            Open Personal OS
+          <Link className="btn btn-primary" to="/app/personal/packs">
+            Choose a pack
           </Link>
         </article>
         <article className="card card--choice">

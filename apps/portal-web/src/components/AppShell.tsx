@@ -62,6 +62,8 @@ const NAV = [
 
 function titleForPath(pathname: string) {
   if (pathname === "/app" || pathname === "/app/") return "Choose OS";
+  if (pathname.startsWith("/app/personal/packs")) return "mybrandOS Packs";
+  if (pathname.startsWith("/app/personal")) return "Personal OS";
   if (pathname.startsWith("/app/business")) return "Business OS";
   if (pathname.startsWith("/app/installs")) return "Installs";
   if (pathname.startsWith("/app/organizations")) return "Organizations";
