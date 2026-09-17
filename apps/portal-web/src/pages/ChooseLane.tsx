@@ -23,9 +23,14 @@ export function ChooseLanePage() {
           <p className="eyebrow">lane</p>
           <h2>Business OS</h2>
           <p>HospitalityOS, ServiceOS, ECommerceOS, or TransportationOS — then the vertical you run.</p>
-          <Link className="btn btn-primary" to="/app/business">
-            Open Business OS
-          </Link>
+          <div className="actions" style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+            <Link className="btn btn-primary" to="/app/business/hospitality">
+              Hospitality software
+            </Link>
+            <Link className="btn btn-ghost" to="/app/business">
+              All Business OS
+            </Link>
+          </div>
         </article>
       </div>
     </div>

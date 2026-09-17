@@ -11,6 +11,7 @@ import { CallbackPage } from "./pages/Callback";
 import { ChooseLanePage } from "./pages/ChooseLane";
 import { PersonalOsPage } from "./pages/PersonalOs";
 import { MyBrandOsPacksPage } from "./pages/MyBrandOsPacks";
+import { HospitalitySoftwarePage } from "./pages/HospitalitySoftware";
 import { Marketplace } from "./pages/Marketplace";
 import { ProvisioningWizard } from "./pages/ProvisioningWizard";
 import { BillingPage } from "./pages/Billing";
@@ -73,6 +74,7 @@ export function App() {
               <Route index element={<ChooseLanePage />} />
               <Route path="personal" element={<PersonalOsPage />} />
               <Route path="personal/packs" element={<MyBrandOsPacksPage />} />
+              <Route path="business/hospitality" element={<HospitalitySoftwarePage />} />
               <Route path="profile" element={<ProfilePage />} />
               <Route path="business" element={<Marketplace />} />
               <Route path="business/:osId" element={<ProvisioningWizard />} />

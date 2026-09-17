@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { VerticalCard } from "../components/VerticalCard";
 import { writeWizardSelection } from "../components/ProvisioningWizard";
 import {
@@ -64,6 +64,12 @@ export function Marketplace() {
         <h1>Find a vertical</h1>
         <p className="lead">
           Find the vertical you run, set the brand name in setup, then install it on your domain.
+          Prefer Hospitality? Start with the commercial catalog.
+        </p>
+        <p style={{ marginTop: "0.75rem" }}>
+          <Link className="btn btn-primary" to="/app/business/hospitality">
+            Hospitality software
+          </Link>
         </p>
       </header>
 

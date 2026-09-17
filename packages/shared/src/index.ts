@@ -117,6 +117,21 @@ export {
 } from "./mybrandos-packs.js";
 
 export {
+  HOSPITALITY_COMMERCIAL_PRODUCTS,
+  HOSPITALITY_COMMERCIAL_TAGLINE,
+  listHospitalityCommercialProducts,
+  getHospitalityCommercialProduct,
+  isHospitalityCommercialProductId,
+  hospitalityCommercialSoftwareCapabilities,
+  hospitalityCommercialServiceCapabilities,
+  formatHospitalityCommercialPrice,
+  type HospitalityCommercialProductId,
+  type HospitalityCommercialLayer,
+  type HospitalityCapabilityItem,
+  type HospitalityCommercialProduct,
+} from "./hospitality-commercial.js";
+
+export {
   PORTAL_AUTH_SCOPES,
   PORTAL_SESSION_COOKIE,
   PORTAL_SESSION_HEADER,
