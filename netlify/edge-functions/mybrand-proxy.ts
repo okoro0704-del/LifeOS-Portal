@@ -1,14 +1,21 @@
 /**
- * First-party mybrandOS on `{slug}.getlifeos.app`.
+ * First-party routing on `{slug}.getlifeos.app`.
  *
  * Surface routing:
- * - USER APP  → `/` and public Digital Life paths
- * - USER ADMIN → `/admin` (upstream white-label `/enter?wl=1…`)
+ * - /life        → Digital Life public doorway
+ * - USER APP     → `/` and other public mybrandOS paths
+ * - USER ADMIN   → `/admin` (upstream white-label `/enter?wl=1…`)
  *
  * Critical: never allow an upstream Studio callback to redirect the browser to
  * `/` on a brand host (`/` is the public user app).
+ * Never redirect /life to a Railway hostname.
  */
 import type { Context } from "https://edge.netlify.com";
+import {
+  isDigitalLifePath,
+  rewriteDigitalLifeLocation,
+  tenantLabelFromHost,
+} from "./lib/surface-routing.ts";
 
 const GATEWAY = Deno.env.get("GATEWAY_URL") || "https://gateway-production-c3f9.up.railway.app";
 const MYBRANDOS = (Deno.env.get("MYBRANDOS_URL") || "https://mybrandos-production.up.railway.app").replace(
@@ -19,18 +26,11 @@ const ECOMMERCEOS_WEB = (Deno.env.get("ECOMMERCEOS_WEB_URL") || "https://e-comme
   /\/$/,
   "",
 );
+const DIGITAL_LIFE = (Deno.env.get("DIGITAL_LIFE_URL") || "https://digital-life-production.up.railway.app").replace(
+  /\/$/,
+  "",
+);
 const ROOT = "getlifeos.app";
-const RESERVED = new Set([
-  "www",
-  "admin",
-  "hospitality",
-  "trust",
-  "business",
-  "api",
-  "transportation",
-  "e-commerce",
-  "ecommerce",
-]);
 
 type TenantBody = {
   tenant?: {
@@ -68,13 +68,6 @@ async function loadTenant(slug: string): Promise<TenantBody | null> {
   }
 }
 
-function tenantLabel(host: string): string | null {
-  if (!host.endsWith(`.${ROOT}`)) return null;
-  const label = host.slice(0, -(ROOT.length + 1));
-  if (!label || RESERVED.has(label)) return null;
-  return label;
-}
-
 function studioEnterPath(tenant: TenantBody, brandSlug: string, search: string): string {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   const upstream = tenant.tenant?.mybrand?.upstreamAdminOrigin;
@@ -82,7 +75,6 @@ function studioEnterPath(tenant: TenantBody, brandSlug: string, search: string):
     try {
       const u = new URL(upstream);
       if (u.pathname.startsWith("/enter")) {
-        // Merge Portal-stored enter params with the browser request (preserve returnTo).
         for (const [key, value] of u.searchParams.entries()) {
           if (!params.get(key)) params.set(key, value);
         }
@@ -118,6 +110,58 @@ function rewriteUpstreamLocation(location: string, brandHost: string, surface: "
   }
 }
 
+function digitalLifeUnavailable(): Response {
+  return new Response(
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>Digital Life</title></head><body><p>This Digital Life is temporarily unavailable.</p></body></html>`,
+    {
+      status: 502,
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    },
+  );
+}
+
+function proxyHeaders(request: Request, host: string, surface: string): Headers {
+  const headers = new Headers(request.headers);
+  headers.delete("x-forwarded-host");
+  headers.delete("x-forwarded-proto");
+  headers.set("X-Forwarded-Host", host);
+  headers.set("X-Forwarded-Proto", "https");
+  headers.set("X-LifeOS-Surface", surface);
+  headers.delete("host");
+  return headers;
+}
+
+async function proxyDigitalLife(request: Request, url: URL, host: string): Promise<Response> {
+  const target = new URL(url.pathname + url.search, `${DIGITAL_LIFE}/`);
+  const init: RequestInit = {
+    method: request.method,
+    headers: proxyHeaders(request, host, "digital-life"),
+    redirect: "manual",
+  };
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    init.body = request.body;
+  }
+  try {
+    const upstream = await fetch(target, init);
+    const outHeaders = new Headers(upstream.headers);
+    const loc = outHeaders.get("location");
+    if (loc) outHeaders.set("location", rewriteDigitalLifeLocation(loc, host, DIGITAL_LIFE));
+    outHeaders.set("cache-control", "public, max-age=30");
+    outHeaders.delete("x-railway-edge");
+    outHeaders.delete("x-railway-request-id");
+    return new Response(upstream.body, {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      headers: outHeaders,
+    });
+  } catch {
+    return digitalLifeUnavailable();
+  }
+}
+
 export default async (request: Request, context: Context) => {
   const url = new URL(request.url);
   const host = url.hostname.toLowerCase();
@@ -131,16 +175,18 @@ export default async (request: Request, context: Context) => {
     return context.next();
   }
 
-  const slug = tenantLabel(host);
+  const slug = tenantLabelFromHost(host);
   if (!slug) return context.next();
+
+  // /life must win before mybrandOS and EcommerceOS catch-alls.
+  if (isDigitalLifePath(url.pathname)) {
+    return proxyDigitalLife(request, url, host);
+  }
 
   const tenant = await loadTenant(slug);
   if (tenant?.tenant?.osId === "ecommerceos") {
     const target = new URL(url.pathname + url.search, `${ECOMMERCEOS_WEB}/`);
-    const headers = new Headers(request.headers);
-    headers.set("X-Forwarded-Host", host);
-    headers.set("X-Forwarded-Proto", "https");
-    headers.delete("host");
+    const headers = proxyHeaders(request, host, "user_app");
     const init: RequestInit = {
       method: request.method,
       headers,
@@ -181,12 +227,8 @@ export default async (request: Request, context: Context) => {
 
   const brandSlug = (tenant.tenant.mybrand?.slug || tenant.tenant.subdomain || slug).toLowerCase();
   const isAdminPath = url.pathname === "/admin" || url.pathname.startsWith("/admin/");
-  // Public `/` must resolve to the consumer app. Creator studio stays at `/admin`.
-  // Never reverse-proxy `/enter` HTML onto `/admin` — the SPA reads the browser URL.
   let upstreamPath = url.pathname === "/" ? `/u/${encodeURIComponent(brandSlug)}${url.search}` : url.pathname + url.search;
 
-  // Bare /enter on a brand host must carry white-label params in the *browser* URL
-  // so the SPA can auto-open the owner session and return to /admin.
   if (
     (request.method === "GET" || request.method === "HEAD") &&
     (url.pathname === "/enter" || url.pathname.startsWith("/enter/"))
@@ -200,13 +242,12 @@ export default async (request: Request, context: Context) => {
   }
 
   const target = new URL(upstreamPath, `${MYBRANDOS}/`);
-
-  const headers = new Headers(request.headers);
-  headers.set("X-Forwarded-Host", host);
+  const headers = proxyHeaders(
+    request,
+    host,
+    isAdminPath || url.pathname.startsWith("/enter") ? "studio" : "user_app",
+  );
   headers.set("X-Brand-Slug", brandSlug);
-  headers.set("X-Forwarded-Proto", "https");
-  headers.set("X-LifeOS-Surface", isAdminPath || url.pathname.startsWith("/enter") ? "studio" : "user_app");
-  headers.delete("host");
 
   const init: RequestInit = {
     method: request.method,
