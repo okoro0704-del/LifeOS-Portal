@@ -6,7 +6,7 @@ import {
 import { config } from "../config.js";
 import { newId } from "../lib/crypto.js";
 import { httpJson } from "../lib/http.js";
-import { isUpstreamUnavailable, useLocalDomainOs } from "../lib/os-mode.js";
+import { isLoopbackApi, isUpstreamUnavailable } from "../lib/os-mode.js";
 
 export type EcoProvisionInput = {
   distributorTenantId: string;
@@ -80,7 +80,7 @@ export function createRemoteEcommerceOs(): EcoClient {
   const local = createLocalEcommerceOs();
   return {
     async provision(input) {
-      if (useLocalDomainOs(config.ecommerceOsApi)) {
+      if (isLoopbackApi(config.ecommerceOsApi)) {
         return local.provision(input);
       }
       let raw: HosProvisionResult & { tenantId?: string };
