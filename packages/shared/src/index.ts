@@ -220,6 +220,25 @@ export {
 } from "./surfaces.js";
 
 export {
+  DIGICONOMY_SURFACE_IDS,
+  DIGICONOMY_SURFACE_DEFINITIONS,
+  DIGICONOMY_ACTIVE_ROOT_POLICY,
+  DIGICONOMY_SURFACE_HOST_PREFIXES,
+  classifyDigiconomyHost,
+  resolveDigiconomyRequest,
+  digiconomySurfaceUrl,
+  digiconomyCurrentSurfaceUrl,
+  digiconomyTargetSurfaceUrl,
+  pathMatchesSurfaceSegment,
+  isDigiconomySurfaceId,
+  type DigiconomySurfaceId,
+  type DigiconomyRootPolicy,
+  type DigiconomyHostKind,
+  type DigiconomyRequestResolution,
+  type DigiconomyConflictOutcome,
+} from "./digiconomy-surfaces.js";
+
+export {
   PLATFORM_COMMISSION_BPS,
   GMV_FROM_LICENSE_MULTIPLIER,
   ESCROW_HOLD_BPS,

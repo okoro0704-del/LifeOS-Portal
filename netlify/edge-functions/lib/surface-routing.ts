@@ -5,6 +5,10 @@
  * HOST identifies the tenant. PATH identifies the surface.
  * /space is Digital Space. /life is a compatibility alias.
  * /lifestyle and /spaceship are not.
+ *
+ * Digiconomy surface vocabulary (digital_space | app | news | digipedia | admin)
+ * lives in @lifeos-portal/shared digiconomy-surfaces.ts. Edge production mapping
+ * remains CURRENT POLICY: `/` = Public App (not Digital Space). Phase 4 flips root.
  */
 export const PUBLIC_ROOT_DOMAIN = "getlifeos.app";
 
@@ -22,20 +26,52 @@ export const RESERVED_TENANT_LABELS = new Set([
 
 export type BrandSurface = "digital-space" | "ecommerceos" | "mybrandos" | "passthrough";
 
+/** Canonical Digiconomy surface ids mirrored for edge classification (no production flip). */
+export type DigiconomyEdgeSurfaceId =
+  | "digital_space"
+  | "app"
+  | "news"
+  | "digipedia"
+  | "admin";
+
+function normalizePath(pathname: string): string {
+  if (!pathname || pathname === "") return "/";
+  let p = pathname.split("?")[0]!.split("#")[0]!;
+  if (!p.startsWith("/")) p = `/${p}`;
+  if (p.length > 1 && p.endsWith("/")) p = p.slice(0, -1);
+  return p || "/";
+}
+
+function pathSegment(pathname: string, segment: string): boolean {
+  const p = normalizePath(pathname);
+  return p === `/${segment}` || p.startsWith(`/${segment}/`);
+}
+
+/**
+ * Classify Digiconomy surface from path under CURRENT production policy (root = APP).
+ * Does not change upstream selection — representation only for edge/tests.
+ */
+export function digiconomyEdgeSurfaceFromPath(pathname: string): DigiconomyEdgeSurfaceId | null {
+  const p = normalizePath(pathname);
+  if (pathSegment(p, "admin")) return "admin";
+  if (pathSegment(p, "news")) return "news";
+  if (pathSegment(p, "digipedia")) return "digipedia";
+  if (pathSegment(p, "space") || pathSegment(p, "life")) return "digital_space";
+  if (pathSegment(p, "app")) return "app";
+  if (p === "/") return "app"; // CURRENT: root is Public App — do not return digital_space
+  return null;
+}
+
 export function isDigitalSpacePath(pathname: string): boolean {
-  return (
-    pathname === "/space" ||
-    pathname.startsWith("/space/") ||
-    pathname === "/life" ||
-    pathname.startsWith("/life/")
-  );
+  return pathSegment(pathname, "space") || pathSegment(pathname, "life");
 }
 
 /** @deprecated Use isDigitalSpacePath. */
 export const isDigitalLifePath = isDigitalSpacePath;
 
 export function shouldRedirectLifeToSpace(pathname: string): boolean {
-  return pathname === "/life" || pathname === "/life/";
+  const p = normalizePath(pathname);
+  return p === "/life";
 }
 
 /**
@@ -45,14 +81,11 @@ export function shouldRedirectLifeToSpace(pathname: string): boolean {
  * Assets stay under /space/ or /life/.
  */
 export function digitalSpaceUpstreamPath(pathname: string, slug: string): string {
-  if (
-    pathname === "/space" ||
-    pathname === "/space/" ||
-    pathname === "/life" ||
-    pathname === "/life/"
-  ) {
+  const p = normalizePath(pathname);
+  if (p === "/space" || p === "/life") {
     return `/u/${encodeURIComponent(slug)}`;
   }
+  // Preserve original path for assets (including trailing slash variants).
   return pathname;
 }
 
@@ -63,7 +96,7 @@ export function tenantLabelFromHost(host: string): string | null {
   const hostname = host.split(":")[0]!.toLowerCase();
   if (!hostname.endsWith(`.${PUBLIC_ROOT_DOMAIN}`)) return null;
   const label = hostname.slice(0, -(PUBLIC_ROOT_DOMAIN.length + 1));
-  if (!label || RESERVED_TENANT_LABELS.has(label)) return null;
+  if (!label || RESERVED_TENANT_LABELS.has(label) || label.includes(".")) return null;
   return label;
 }
 

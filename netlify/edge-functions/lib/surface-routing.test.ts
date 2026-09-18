@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
+  digiconomyEdgeSurfaceFromPath,
   digitalSpaceUpstreamPath,
   isDigitalSpacePath,
   rewriteDigitalSpaceLocation,
@@ -26,6 +27,19 @@ describe("Digital Space edge surface routing", () => {
     assert.equal(shouldRedirectLifeToSpace("/life/"), true);
     assert.equal(shouldRedirectLifeToSpace("/life/styles.css"), false);
     assert.equal(shouldRedirectLifeToSpace("/space"), false);
+  });
+
+  test("Digiconomy edge surface classification keeps CURRENT root = APP", () => {
+    assert.equal(digiconomyEdgeSurfaceFromPath("/"), "app");
+    assert.equal(digiconomyEdgeSurfaceFromPath("/space"), "digital_space");
+    assert.equal(digiconomyEdgeSurfaceFromPath("/life"), "digital_space");
+    assert.equal(digiconomyEdgeSurfaceFromPath("/news"), "news");
+    assert.equal(digiconomyEdgeSurfaceFromPath("/digipedia"), "digipedia");
+    assert.equal(digiconomyEdgeSurfaceFromPath("/admin"), "admin");
+    assert.equal(digiconomyEdgeSurfaceFromPath("/app"), "app");
+    assert.equal(digiconomyEdgeSurfaceFromPath("/lifestyle"), null);
+    assert.equal(digiconomyEdgeSurfaceFromPath("/newsletter"), null);
+    assert.equal(digiconomyEdgeSurfaceFromPath("/administrator"), null);
   });
 
   test("host identifies tenant; /space wins before mybrandOS catch-all", () => {
