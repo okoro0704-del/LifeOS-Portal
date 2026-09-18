@@ -25,6 +25,19 @@ export function isDigitalLifePath(pathname: string): boolean {
   return pathname === "/life" || pathname.startsWith("/life/");
 }
 
+/**
+ * Internal upstream path. Browser URL stays /life.
+ * Document requests carry the tenant in /u/{slug} so Digital Life still
+ * resolves when Railway overwrites Host / X-Forwarded-Host.
+ * Assets stay under /life/ so they are not rewritten to /u/{slug}/styles.css.
+ */
+export function digitalLifeUpstreamPath(pathname: string, slug: string): string {
+  if (pathname === "/life" || pathname === "/life/") {
+    return `/u/${encodeURIComponent(slug)}`;
+  }
+  return pathname;
+}
+
 export function tenantLabelFromHost(host: string): string | null {
   const hostname = host.split(":")[0]!.toLowerCase();
   if (!hostname.endsWith(`.${PUBLIC_ROOT_DOMAIN}`)) return null;

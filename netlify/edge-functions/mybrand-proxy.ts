@@ -12,6 +12,7 @@
  */
 import type { Context } from "https://edge.netlify.com";
 import {
+  digitalLifeUpstreamPath,
   isDigitalLifePath,
   rewriteDigitalLifeLocation,
   tenantLabelFromHost,
@@ -127,15 +128,20 @@ function proxyHeaders(request: Request, host: string, surface: string): Headers 
   const headers = new Headers(request.headers);
   headers.delete("x-forwarded-host");
   headers.delete("x-forwarded-proto");
+  headers.delete("x-lifeos-brand-host");
+  headers.delete("x-lifeos-surface");
   headers.set("X-Forwarded-Host", host);
   headers.set("X-Forwarded-Proto", "https");
+  headers.set("X-LifeOS-Brand-Host", host);
   headers.set("X-LifeOS-Surface", surface);
   headers.delete("host");
   return headers;
 }
 
 async function proxyDigitalLife(request: Request, url: URL, host: string): Promise<Response> {
-  const target = new URL(url.pathname + url.search, `${DIGITAL_LIFE}/`);
+  const slug = tenantLabelFromHost(host);
+  const upstreamPath = slug ? digitalLifeUpstreamPath(url.pathname, slug) : url.pathname;
+  const target = new URL(upstreamPath + url.search, `${DIGITAL_LIFE}/`);
   const init: RequestInit = {
     method: request.method,
     headers: proxyHeaders(request, host, "digital-life"),

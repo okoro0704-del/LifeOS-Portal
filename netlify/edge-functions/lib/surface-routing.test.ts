@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
+  digitalLifeUpstreamPath,
   isDigitalLifePath,
   rewriteDigitalLifeLocation,
   selectBrandSurface,
@@ -57,6 +58,14 @@ describe("Digital Life edge surface routing", () => {
     assert.equal(tenantLabelFromHost("kingbooker.getlifeos.app"), "kingbooker");
     assert.notEqual(tenantLabelFromHost("kingbooker.getlifeos.app"), "mrfundzman");
     assert.equal(tenantLabelFromHost("admin.getlifeos.app"), null);
+  });
+
+  test("document /life is internally /u/{slug}; assets stay under /life/", () => {
+    assert.equal(digitalLifeUpstreamPath("/life", "mrfundzman"), "/u/mrfundzman");
+    assert.equal(digitalLifeUpstreamPath("/life/", "kingbooker"), "/u/kingbooker");
+    assert.equal(digitalLifeUpstreamPath("/life/styles.css", "mrfundzman"), "/life/styles.css");
+    assert.equal(digitalLifeUpstreamPath("/life/favicon.svg", "mrfundzman"), "/life/favicon.svg");
+    assert.notEqual(digitalLifeUpstreamPath("/life", "kingbooker"), "/u/mrfundzman");
   });
 
   test("rewrites Railway Location onto the brand host", () => {
