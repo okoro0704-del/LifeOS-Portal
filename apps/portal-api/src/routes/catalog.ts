@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import {
-  BUSINESS_OS_CATALOG,
+  customerFacingBusinessOsCatalog,
   ECOMMERCEOS_MANIFEST,
   HOSPITALITYOS_MANIFEST,
   TRANSPORTATIONOS_MANIFEST,
@@ -27,7 +27,7 @@ export async function registerCatalogRoutes(app: FastifyInstance) {
       lanes: PORTAL_LANES,
       personalOs: PERSONAL_OS_CATALOG,
       mybrandos: MYBRANDOS_MANIFEST,
-      businessOs: BUSINESS_OS_CATALOG,
+      businessOs: customerFacingBusinessOsCatalog(),
       primitives: LIFEOS_PRIMITIVE_IDS,
       hospitalityos: HOSPITALITYOS_MANIFEST,
       ecommerceos: ECOMMERCEOS_MANIFEST,
@@ -44,7 +44,10 @@ export async function registerCatalogRoutes(app: FastifyInstance) {
         ecosystems: DIGICONOMY_ECOSYSTEMS,
         ecommerceCapabilities: ECOMMERCE_ECOSYSTEM_CAPABILITIES,
         personalOs: personalOsCatalogWithTaxonomy(),
-        businessOs: businessOsCatalogWithTaxonomy(),
+        businessOs: businessOsCatalogWithTaxonomy().map((os) => ({
+          ...os,
+          verticals: os.verticals.filter((vertical) => vertical.customerPurchase !== false),
+        })),
         installable: listInstallableDigiconomyEntries(),
       },
     };

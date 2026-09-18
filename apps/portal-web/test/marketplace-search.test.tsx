@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, test } from "vitest";
 import { Marketplace } from "../src/pages/Marketplace";
+import { HospitalitySoftwarePage } from "../src/pages/HospitalitySoftware";
 import { ProvisioningWizard } from "../src/components/ProvisioningWizard";
 import { filterVerticalCatalog } from "../src/data/verticalCatalog";
 
@@ -11,9 +12,18 @@ function renderMarketplace() {
     <MemoryRouter initialEntries={["/app/business"]}>
       <Routes>
         <Route path="/app/business" element={<Marketplace />} />
+        <Route path="/app/business/hospitality" element={<HospitalitySoftwarePage />} />
         <Route path="/app/business/:osId" element={<ProvisioningWizard />} />
       </Routes>
     </MemoryRouter>,
+  );
+}
+
+async function continueHospitality(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await user.click(
+    screen.getByRole("button", {
+      name: new RegExp(`Continue with ${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i"),
+    }),
   );
 }
 
@@ -88,6 +98,7 @@ describe("marketplace search", () => {
     const gymCard = document.querySelector('[data-vertical-id="standalone_gym_spa"]') as HTMLElement;
     expect(gymCard).toBeTruthy();
     await user.click(within(gymCard).getByRole("button", { name: "Install Vertical" }));
+    await continueHospitality(user, "Gym / Fitness");
 
     expect(screen.getByTestId("provisioning-wizard")).toBeInTheDocument();
     expect(screen.getByTestId("wizard-app-id")).toHaveTextContent("hospitalityos");
@@ -108,6 +119,7 @@ describe("marketplace search", () => {
     const hotelCard = document.querySelector('[data-vertical-id="standalone_hotel"]') as HTMLElement;
     expect(hotelCard).toBeTruthy();
     await user.click(within(hotelCard).getByRole("button", { name: "Install Vertical" }));
+    await continueHospitality(user, "Hotel");
 
     expect(screen.getByTestId("provisioning-wizard")).toBeInTheDocument();
     expect(screen.getByTestId("wizard-app-id")).toHaveTextContent("hospitalityos");

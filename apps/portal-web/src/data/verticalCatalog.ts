@@ -252,6 +252,7 @@ function presentationFor(entry: DigiconomyCatalogEntry): MarketplacePresentation
 
 function toMarketplaceVertical(entry: DigiconomyCatalogEntry): MarketplaceVertical | null {
   if (entry.lane !== "business" || entry.engine === "mybrandos") return null;
+  if (entry.customerPurchase === false) return null;
   const ui = presentationFor(entry);
   const preset = entry.preset;
   return {

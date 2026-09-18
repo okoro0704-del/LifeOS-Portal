@@ -175,6 +175,7 @@ export function listOwnerVerticals(store: PortalStore, user: PortalUser): Tenant
   for (const os of BUSINESS_OS_CATALOG) {
     for (const vertical of os.verticals) {
       if (owned.some((i) => i.osId === os.osId && i.verticalId === vertical.id)) continue;
+      if (vertical.customerPurchase === false) continue;
       rows.push({
         installId: "",
         osId: os.osId,

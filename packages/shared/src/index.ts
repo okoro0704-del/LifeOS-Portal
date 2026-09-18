@@ -17,6 +17,8 @@ export {
   ECOMMERCEOS_MANIFEST,
   ECOMMERCEOS_DEFAULT_MODULES,
   ECOMMERCEOS_INSTALL_TEMPLATES,
+  customerFacingEcommerceTemplates,
+  customerFacingBusinessOsCatalog,
   ECOMMERCE_CORE_MODULES,
   ECOMMERCE_VERTICALS,
   TRANSPORTATIONOS_MANIFEST,
@@ -144,6 +146,36 @@ export {
   type HospitalityCapabilityItem,
   type HospitalityCommercialProduct,
 } from "./hospitality-commercial.js";
+
+export {
+  PORTAL_INDUSTRY_GROUPS,
+  PORTAL_INDUSTRY_GROUP_IDS,
+  listPortalIndustryGroups,
+  getPortalIndustryGroup,
+  portalIndustryGroupForEngine,
+  portalIndustryGroupForEntry,
+  assertAllInstallableEntriesHaveIndustryGroup,
+  type PortalIndustryGroupId,
+  type PortalIndustryGroup,
+} from "./industry-groups.js";
+
+export {
+  ECOMMERCE_COMMERCIAL_PRODUCTS,
+  ECOMMERCE_COMMERCIAL_TAGLINE,
+  listEcommerceCommercialProducts,
+  getEcommerceCommercialProduct,
+  getEcommerceCommercialProductByVerticalId,
+  isEcommerceCommercialProductId,
+  ecommerceCommercialSoftwareCapabilities,
+  ecommerceCommercialServiceCapabilities,
+  ecommerceCommercialMonthlyPriceMinor,
+  formatEcommerceCommercialPrice,
+  type EcommerceCommercialProductId,
+  type EcommerceCommercialLayer,
+  type EcommerceCommercialProductType,
+  type EcommerceCapabilityItem,
+  type EcommerceCommercialProduct,
+} from "./ecommerce-commercial.js";
 
 export {
   PORTAL_AUTH_SCOPES,

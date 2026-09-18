@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   ECOMMERCEOS_INSTALL_TEMPLATES,
   canonicalEcommerceVerticalId,
+  customerFacingEcommerceTemplates,
   deriveEcommerceParticipation,
   expandEcommerceModules,
   getVertical,
@@ -9,9 +10,9 @@ import {
 } from "@lifeos-portal/shared";
 
 describe("EcommerceOS seven canonical verticals", () => {
-  test("catalog exposes exactly the seven customer-facing names", () => {
-    const names = ECOMMERCEOS_INSTALL_TEMPLATES.map((t) => t.label);
-    expect(names).toEqual([
+  test("internal taxonomy keeps seven IDs; customer purchase is six applications", () => {
+    const internalNames = ECOMMERCEOS_INSTALL_TEMPLATES.map((t) => t.label);
+    expect(internalNames).toEqual([
       "Physical Store",
       "Online Store",
       "Supermarket",
@@ -21,7 +22,21 @@ describe("EcommerceOS seven canonical verticals", () => {
       "Marketplace",
     ]);
     expect(new Set(ECOMMERCEOS_INSTALL_TEMPLATES.map((t) => t.verticalId)).size).toBe(7);
-    expect(names.some((n) => n.includes("physical address"))).toBe(false);
+    expect(internalNames.some((n) => n.includes("physical address"))).toBe(false);
+
+    const customer = customerFacingEcommerceTemplates();
+    expect(customer.map((t) => t.label)).toEqual([
+      "Physical Store",
+      "Online Store",
+      "Supermarket",
+      "Shopping Centre",
+      "Wholesaler",
+      "Shopping Mall",
+    ]);
+    expect(customer.some((t) => t.verticalId === "marketplace")).toBe(false);
+    expect(ECOMMERCEOS_INSTALL_TEMPLATES.find((t) => t.verticalId === "marketplace")?.customerPurchase).toBe(
+      false,
+    );
   });
 
   test("stable IDs for the two existing store models are preserved", () => {
@@ -30,6 +45,8 @@ describe("EcommerceOS seven canonical verticals", () => {
     expect(getVertical("ecommerceos", "retail")?.displayName).toBe("Physical Store");
     expect(getVertical("ecommerceos", "delivery")?.displayName).toBe("Online Store");
     expect(getVertical("ecommerceos", "physical_store")?.id).toBe("retail");
+    expect(getVertical("ecommerceos", "marketplace")?.id).toBe("marketplace");
+    expect(getVertical("ecommerceos", "marketplace")?.customerPurchase).toBe(false);
   });
 
   test("shared Digiconomy catalog lists seven EcommerceOS entries under ecommerce_ecosystem", () => {

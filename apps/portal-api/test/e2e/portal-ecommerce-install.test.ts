@@ -40,7 +40,7 @@ after(async () => {
   if (app) await app.close();
 });
 
-test("GET /catalog lists seven EcommerceOS verticals with canonical names", async () => {
+test("GET /catalog lists customer-facing EcommerceOS verticals without Marketplace purchase", async () => {
   const { "x-portal-session": token } = await sessionHeaders("TD-ECO-CATALOG");
   const res = await app.inject({
     method: "GET",
@@ -64,7 +64,7 @@ test("GET /catalog lists seven EcommerceOS verticals with canonical names", asyn
   assert.equal(retail?.available, true);
   assert.equal(delivery?.displayName, "Online Store");
   assert.equal(delivery?.available, true);
-  assert.equal(eco?.verticals.length, 7);
+  assert.equal(eco?.verticals.length, 6);
   assert.deepEqual(
     eco?.verticals.map((v) => v.displayName),
     [
@@ -74,9 +74,9 @@ test("GET /catalog lists seven EcommerceOS verticals with canonical names", asyn
       "Shopping Centre",
       "Wholesaler",
       "Shopping Mall",
-      "Marketplace",
     ],
   );
+  assert.equal(eco?.verticals.some((v) => v.id === "marketplace"), false);
   assert.equal(body.ecommerceos.appId, "ecommerceos");
   assert.equal(body.ecommerceos.install.hosProvisionPath, "/internal/distributor/provision");
   assert.equal(ECOMMERCEOS_MANIFEST.install.hosProvisionPath, "/internal/distributor/provision");

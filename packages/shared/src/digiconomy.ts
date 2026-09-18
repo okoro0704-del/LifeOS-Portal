@@ -54,6 +54,7 @@ export type DigiconomyCatalogEntry = {
   currency?: "USD";
   hasPhysicalAddress?: boolean;
   preset?: string | string[];
+  customerPurchase?: boolean;
 };
 
 /**
@@ -150,6 +151,7 @@ export function listInstallableDigiconomyEntries(): DigiconomyCatalogEntry[] {
       priceMonthlyMinor: vertical.priceMonthlyMinor,
       currency: vertical.currency,
       hasPhysicalAddress: template.hasPhysicalAddress,
+      customerPurchase: template.customerPurchase !== false,
     });
   }
 

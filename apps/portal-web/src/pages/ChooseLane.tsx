@@ -1,40 +1,56 @@
-import { Link } from "react-router-dom";
+import { FormEvent, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { listPortalIndustryGroups } from "@lifeos-portal/shared";
 
 export function ChooseLanePage() {
+  const industries = listPortalIndustryGroups();
+  const navigate = useNavigate();
+  const [query, setQuery] = useState("");
+
+  function onSearch(event: FormEvent) {
+    event.preventDefault();
+    const q = query.trim();
+    navigate(q ? `/app/business?q=${encodeURIComponent(q)}` : "/app/business");
+  }
+
   return (
-    <div className="page">
+    <div className="page industry-hub">
       <header className="page-head">
-        <p className="eyebrow">workspace</p>
-        <h1>What do you want to run?</h1>
+        <p className="eyebrow">LifeOS Portal</p>
+        <h1>What do you want to build?</h1>
         <p className="lead">
-          Choose Personal OS to download mybrandOS, or Business OS to license a vertical.
+          Choose an industry to browse software for your business — or search the full catalog.
         </p>
+        <form className="marketplace-search" onSubmit={onSearch} style={{ marginTop: "1rem" }}>
+          <label className="marketplace-search-label" htmlFor="industry-hub-search">
+            Search businesses, software, industries
+          </label>
+          <input
+            id="industry-hub-search"
+            className="marketplace-search-input"
+            type="search"
+            placeholder="Search supermarket, hotel, creator…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            autoComplete="off"
+          />
+        </form>
       </header>
-      <div className="cards cards--choice">
-        <article className="card card--choice">
-          <p className="eyebrow">lane</p>
-          <h2>Personal OS</h2>
-          <p>Download mybrandOS — your creator Digital Life workstation.</p>
-          <Link className="btn btn-primary" to="/app/personal/packs">
-            Choose a pack
-          </Link>
-        </article>
-        <article className="card card--choice">
-          <p className="eyebrow">lane</p>
-          <h2>Business OS</h2>
-          <p>HospitalityOS, ServiceOS, ECommerceOS, or TransportationOS — then the vertical you run.</p>
-          <div className="actions" style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-            <Link className="btn btn-primary" to="/app/business/hospitality">
-              Hospitality software
+
+      <p className="eyebrow" style={{ marginTop: "1.5rem" }}>
+        Industries
+      </p>
+      <div className="hos-grid industry-grid">
+        {industries.map((industry) => (
+          <article key={industry.id} className="card hos-card industry-card">
+            <p className="eyebrow">Industry</p>
+            <h2>{industry.label}</h2>
+            <p className="muted">{industry.description}</p>
+            <Link className="btn btn-primary" to={industry.href}>
+              Open {industry.label}
             </Link>
-            <Link className="btn btn-ghost" to="/app/business?category=ecommerce_ecosystem">
-              EcommerceOS
-            </Link>
-            <Link className="btn btn-ghost" to="/app/business">
-              All Business OS
-            </Link>
-          </div>
-        </article>
+          </article>
+        ))}
       </div>
     </div>
   );

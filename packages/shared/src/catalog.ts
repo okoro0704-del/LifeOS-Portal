@@ -257,6 +257,11 @@ export type CatalogVertical = {
   priceMonthlyMinor: number;
   currency: "USD";
   modules: readonly string[];
+  /**
+   * Customer-facing Portal purchase. Internal IDs may remain for compatibility
+   * even when this is false (operator capability, not a separately bought vertical).
+   */
+  customerPurchase?: boolean;
 };
 
 export type CatalogBusinessOs = {
@@ -329,6 +334,8 @@ export type EcommerceInstallTemplate = {
   hasPhysicalAddress: boolean;
   operatingModel: "store" | "supermarket" | "destination" | "wholesale" | "marketplace";
   modules: string[];
+  /** False = operator capability / compatibility ID, not a Portal purchase card. */
+  customerPurchase?: boolean;
 };
 
 /** Shared ECommerceOS store stack — catalog, till, checkout, and local delivery. */
@@ -397,8 +404,14 @@ export const ECOMMERCEOS_INSTALL_TEMPLATES: EcommerceInstallTemplate[] = [
     hasPhysicalAddress: false,
     operatingModel: "marketplace",
     modules: ["directory", "seller_participation", "catalog", "orders"],
+    customerPurchase: false,
   },
 ];
+
+/** Customer Portal purchase list — Marketplace is an operator capability, not a bought vertical. */
+export function customerFacingEcommerceTemplates(): EcommerceInstallTemplate[] {
+  return ECOMMERCEOS_INSTALL_TEMPLATES.filter((template) => template.customerPurchase !== false);
+}
 
 const ECOMMERCE_PLATFORM_MODULES = ["staff_management"] as const;
 
@@ -435,14 +448,16 @@ export function expandEcommerceModules(input: readonly string[]): string[] {
 }
 
 export const ECOMMERCE_VERTICALS: CatalogVertical[] = ECOMMERCEOS_INSTALL_TEMPLATES.map((template) => {
+  // Monthly service prices — commercial authority lives in ecommerce-commercial.ts;
+  // keep catalog.priceMonthlyMinor aligned so Finprove checkout matches Services layer.
   const prices: Record<EcommerceVerticalId, number> = {
-    retail: 3900,
-    delivery: 3900,
-    supermarket: 3900,
+    delivery: 900,
+    retail: 1500,
+    wholesaler: 1900,
+    supermarket: 2900,
     shopping_centre: 3900,
-    wholesaler: 3900,
-    shopping_mall: 3900,
-    marketplace: 3900,
+    shopping_mall: 6900,
+    marketplace: 7900,
   };
   return {
     id: template.verticalId,
@@ -453,6 +468,7 @@ export const ECOMMERCE_VERTICALS: CatalogVertical[] = ECOMMERCEOS_INSTALL_TEMPLA
     priceMonthlyMinor: prices[template.verticalId],
     currency: "USD",
     modules: expandEcommerceModules(template.modules),
+    customerPurchase: template.customerPurchase !== false,
   };
 });
 
@@ -780,6 +796,13 @@ export const BUSINESS_OS_CATALOG: CatalogBusinessOs[] = [
 
 export function getBusinessOs(osId: string): CatalogBusinessOs | undefined {
   return BUSINESS_OS_CATALOG.find((os) => os.osId === osId);
+}
+
+export function customerFacingBusinessOsCatalog() {
+  return BUSINESS_OS_CATALOG.map((os) => ({
+    ...os,
+    verticals: os.verticals.filter((vertical) => vertical.customerPurchase !== false),
+  }));
 }
 
 export function getVertical(osId: string, verticalId: string): CatalogVertical | undefined {
