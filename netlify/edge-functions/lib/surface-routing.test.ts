@@ -1,32 +1,38 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
-  digitalLifeUpstreamPath,
-  isDigitalLifePath,
-  rewriteDigitalLifeLocation,
+  digitalSpaceUpstreamPath,
+  isDigitalSpacePath,
+  rewriteDigitalSpaceLocation,
   selectBrandSurface,
+  shouldRedirectLifeToSpace,
   tenantLabelFromHost,
 } from "./surface-routing.ts";
 
-describe("Digital Life edge surface routing", () => {
-  test("/life is Digital Life and /lifestyle is not", () => {
-    assert.equal(isDigitalLifePath("/life"), true);
-    assert.equal(isDigitalLifePath("/life/"), true);
-    assert.equal(isDigitalLifePath("/life/styles.css"), true);
-    assert.equal(isDigitalLifePath("/life/favicon.svg"), true);
-    assert.equal(isDigitalLifePath("/lifestyle"), false);
-    assert.equal(isDigitalLifePath("/lifelong"), false);
-    assert.equal(isDigitalLifePath("/lifeinsurance"), false);
-    assert.equal(isDigitalLifePath("/"), false);
-    assert.equal(isDigitalLifePath("/news"), false);
-    assert.equal(isDigitalLifePath("/digipedia"), false);
-    assert.equal(isDigitalLifePath("/admin"), false);
+describe("Digital Space edge surface routing", () => {
+  test("/space is Digital Space; /life is compatibility; lookalikes are not", () => {
+    assert.equal(isDigitalSpacePath("/space"), true);
+    assert.equal(isDigitalSpacePath("/space/"), true);
+    assert.equal(isDigitalSpacePath("/space/styles.css"), true);
+    assert.equal(isDigitalSpacePath("/life"), true);
+    assert.equal(isDigitalSpacePath("/life/styles.css"), true);
+    assert.equal(isDigitalSpacePath("/lifestyle"), false);
+    assert.equal(isDigitalSpacePath("/spaceship"), false);
+    assert.equal(isDigitalSpacePath("/"), false);
+    assert.equal(isDigitalSpacePath("/news"), false);
+    assert.equal(isDigitalSpacePath("/digipedia"), false);
+    assert.equal(isDigitalSpacePath("/admin"), false);
+    assert.equal(shouldRedirectLifeToSpace("/life"), true);
+    assert.equal(shouldRedirectLifeToSpace("/life/"), true);
+    assert.equal(shouldRedirectLifeToSpace("/life/styles.css"), false);
+    assert.equal(shouldRedirectLifeToSpace("/space"), false);
   });
 
-  test("host identifies tenant; /life wins before mybrandOS catch-all", () => {
+  test("host identifies tenant; /space wins before mybrandOS catch-all", () => {
     const host = "mrfundzman.getlifeos.app";
     assert.equal(tenantLabelFromHost(host), "mrfundzman");
-    assert.equal(selectBrandSurface({ host, pathname: "/life", tenantOsId: "mybrandos" }), "digital-life");
+    assert.equal(selectBrandSurface({ host, pathname: "/space", tenantOsId: "mybrandos" }), "digital-space");
+    assert.equal(selectBrandSurface({ host, pathname: "/life", tenantOsId: "mybrandos" }), "digital-space");
     assert.equal(selectBrandSurface({ host, pathname: "/", tenantOsId: "mybrandos" }), "mybrandos");
     assert.equal(selectBrandSurface({ host, pathname: "/admin", tenantOsId: "mybrandos" }), "mybrandos");
     assert.equal(selectBrandSurface({ host, pathname: "/news", tenantOsId: "mybrandos" }), "mybrandos");
@@ -34,19 +40,16 @@ describe("Digital Life edge surface routing", () => {
     assert.equal(selectBrandSurface({ host, pathname: "/lifestyle", tenantOsId: "mybrandos" }), "mybrandos");
   });
 
-  test("ecommerceos /life still goes to Digital Life, not the storefront catch-all", () => {
+  test("ecommerceos /space still goes to Digital Space, not the storefront catch-all", () => {
     const host = "mpa-6ppyad.getlifeos.app";
-    assert.equal(
-      selectBrandSurface({ host, pathname: "/life", tenantOsId: "ecommerceos" }),
-      "digital-life",
-    );
+    assert.equal(selectBrandSurface({ host, pathname: "/space", tenantOsId: "ecommerceos" }), "digital-space");
     assert.equal(selectBrandSurface({ host, pathname: "/", tenantOsId: "ecommerceos" }), "ecommerceos");
   });
 
-  test("unknown tenant /life still selects Digital Life for a truthful 404", () => {
+  test("unknown tenant /space still selects Digital Space for a truthful 404", () => {
     assert.equal(
-      selectBrandSurface({ host: "unknownslug.getlifeos.app", pathname: "/life", tenantOsId: null }),
-      "digital-life",
+      selectBrandSurface({ host: "unknownslug.getlifeos.app", pathname: "/space", tenantOsId: null }),
+      "digital-space",
     );
     assert.equal(
       selectBrandSurface({ host: "unknownslug.getlifeos.app", pathname: "/", tenantOsId: null }),
@@ -60,20 +63,21 @@ describe("Digital Life edge surface routing", () => {
     assert.equal(tenantLabelFromHost("admin.getlifeos.app"), null);
   });
 
-  test("document /life is internally /u/{slug}; assets stay under /life/", () => {
-    assert.equal(digitalLifeUpstreamPath("/life", "mrfundzman"), "/u/mrfundzman");
-    assert.equal(digitalLifeUpstreamPath("/life/", "kingbooker"), "/u/kingbooker");
-    assert.equal(digitalLifeUpstreamPath("/life/styles.css", "mrfundzman"), "/life/styles.css");
-    assert.equal(digitalLifeUpstreamPath("/life/favicon.svg", "mrfundzman"), "/life/favicon.svg");
-    assert.notEqual(digitalLifeUpstreamPath("/life", "kingbooker"), "/u/mrfundzman");
+  test("document /space is internally /u/{slug}; assets stay under /space/", () => {
+    assert.equal(digitalSpaceUpstreamPath("/space", "mrfundzman"), "/u/mrfundzman");
+    assert.equal(digitalSpaceUpstreamPath("/space/", "kingbooker"), "/u/kingbooker");
+    assert.equal(digitalSpaceUpstreamPath("/space/styles.css", "mrfundzman"), "/space/styles.css");
+    assert.equal(digitalSpaceUpstreamPath("/life", "mrfundzman"), "/u/mrfundzman");
+    assert.equal(digitalSpaceUpstreamPath("/life/favicon.svg", "mrfundzman"), "/life/favicon.svg");
+    assert.notEqual(digitalSpaceUpstreamPath("/space", "kingbooker"), "/u/mrfundzman");
   });
 
-  test("rewrites Railway Location onto the brand host", () => {
-    const loc = rewriteDigitalLifeLocation(
+  test("rewrites Railway Location onto the brand host /space", () => {
+    const loc = rewriteDigitalSpaceLocation(
       "https://digital-life-production.up.railway.app/life",
       "mrfundzman.getlifeos.app",
       "https://digital-life-production.up.railway.app",
     );
-    assert.equal(loc, "https://mrfundzman.getlifeos.app/life");
+    assert.equal(loc, "https://mrfundzman.getlifeos.app/space");
   });
 });

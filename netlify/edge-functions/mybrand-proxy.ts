@@ -2,19 +2,21 @@
  * First-party routing on `{slug}.getlifeos.app`.
  *
  * Surface routing:
- * - /life        → Digital Life public doorway
+ * - /space       → Digital Space public doorway
+ * - /life        → permanent compatibility redirect to /space
  * - USER APP     → `/` and other public mybrandOS paths
  * - USER ADMIN   → `/admin` (upstream white-label `/enter?wl=1…`)
  *
  * Critical: never allow an upstream Studio callback to redirect the browser to
  * `/` on a brand host (`/` is the public user app).
- * Never redirect /life to a Railway hostname.
+ * Never redirect /space or /life to a Railway hostname.
  */
 import type { Context } from "https://edge.netlify.com";
 import {
-  digitalLifeUpstreamPath,
-  isDigitalLifePath,
-  rewriteDigitalLifeLocation,
+  digitalSpaceUpstreamPath,
+  isDigitalSpacePath,
+  rewriteDigitalSpaceLocation,
+  shouldRedirectLifeToSpace,
   tenantLabelFromHost,
 } from "./lib/surface-routing.ts";
 
@@ -113,7 +115,7 @@ function rewriteUpstreamLocation(location: string, brandHost: string, surface: "
 
 function digitalLifeUnavailable(): Response {
   return new Response(
-    `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>Digital Life</title></head><body><p>This Digital Life is temporarily unavailable.</p></body></html>`,
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>Digital Space</title></head><body><p>This Digital Space is temporarily unavailable.</p></body></html>`,
     {
       status: 502,
       headers: {
@@ -138,13 +140,13 @@ function proxyHeaders(request: Request, host: string, surface: string): Headers 
   return headers;
 }
 
-async function proxyDigitalLife(request: Request, url: URL, host: string): Promise<Response> {
+async function proxyDigitalSpace(request: Request, url: URL, host: string): Promise<Response> {
   const slug = tenantLabelFromHost(host);
-  const upstreamPath = slug ? digitalLifeUpstreamPath(url.pathname, slug) : url.pathname;
+  const upstreamPath = slug ? digitalSpaceUpstreamPath(url.pathname, slug) : url.pathname;
   const target = new URL(upstreamPath + url.search, `${DIGITAL_LIFE}/`);
   const init: RequestInit = {
     method: request.method,
-    headers: proxyHeaders(request, host, "digital-life"),
+    headers: proxyHeaders(request, host, "digital-space"),
     redirect: "manual",
   };
   if (request.method !== "GET" && request.method !== "HEAD") {
@@ -154,7 +156,7 @@ async function proxyDigitalLife(request: Request, url: URL, host: string): Promi
     const upstream = await fetch(target, init);
     const outHeaders = new Headers(upstream.headers);
     const loc = outHeaders.get("location");
-    if (loc) outHeaders.set("location", rewriteDigitalLifeLocation(loc, host, DIGITAL_LIFE));
+    if (loc) outHeaders.set("location", rewriteDigitalSpaceLocation(loc, host, DIGITAL_LIFE));
     outHeaders.set("cache-control", "public, max-age=30");
     outHeaders.delete("x-railway-edge");
     outHeaders.delete("x-railway-request-id");
@@ -184,9 +186,13 @@ export default async (request: Request, context: Context) => {
   const slug = tenantLabelFromHost(host);
   if (!slug) return context.next();
 
-  // /life must win before mybrandOS and EcommerceOS catch-alls.
-  if (isDigitalLifePath(url.pathname)) {
-    return proxyDigitalLife(request, url, host);
+  // /space must win before mybrandOS and EcommerceOS catch-alls.
+  // /life documents permanently redirect to /space; /life assets still proxy.
+  if (shouldRedirectLifeToSpace(url.pathname)) {
+    return Response.redirect(`https://${host}/space${url.search}`, 301);
+  }
+  if (isDigitalSpacePath(url.pathname)) {
+    return proxyDigitalSpace(request, url, host);
   }
 
   const tenant = await loadTenant(slug);
