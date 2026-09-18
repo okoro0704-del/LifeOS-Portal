@@ -24,7 +24,7 @@ export const RESERVED_TENANT_LABELS = new Set([
   "ecommerce",
 ]);
 
-export type BrandSurface = "digital-space" | "ecommerceos" | "mybrandos" | "passthrough";
+export type BrandSurface = "digital-space" | "news" | "digipedia" | "ecommerceos" | "mybrandos" | "passthrough";
 
 /** Canonical Digiconomy surface ids mirrored for edge classification (no production flip). */
 export type DigiconomyEdgeSurfaceId =
@@ -66,6 +66,14 @@ export function isDigitalSpacePath(pathname: string): boolean {
   return pathSegment(pathname, "space") || pathSegment(pathname, "life");
 }
 
+export function isNewsPath(pathname: string): boolean {
+  return pathSegment(pathname, "news");
+}
+
+export function isDigipediaPath(pathname: string): boolean {
+  return pathSegment(pathname, "digipedia");
+}
+
 /** @deprecated Use isDigitalSpacePath. */
 export const isDigitalLifePath = isDigitalSpacePath;
 
@@ -89,6 +97,26 @@ export function digitalSpaceUpstreamPath(pathname: string, slug: string): string
   return pathname;
 }
 
+/**
+ * Document requests carry the tenant in /u/{slug} so News still resolves
+ * when Railway overwrites Host / X-Forwarded-Host. Assets stay under /news/.
+ */
+export function newsUpstreamPath(pathname: string, slug: string): string {
+  const p = normalizePath(pathname);
+  if (p === "/news") {
+    return `/u/${encodeURIComponent(slug)}`;
+  }
+  return pathname;
+}
+
+export function digipediaUpstreamPath(pathname: string, slug: string): string {
+  const p = normalizePath(pathname);
+  if (p === "/digipedia") {
+    return `/u/${encodeURIComponent(slug)}`;
+  }
+  return pathname;
+}
+
 /** @deprecated Use digitalSpaceUpstreamPath. */
 export const digitalLifeUpstreamPath = digitalSpaceUpstreamPath;
 
@@ -107,27 +135,46 @@ export function selectBrandSurface(input: {
 }): BrandSurface {
   if (!tenantLabelFromHost(input.host)) return "passthrough";
   if (isDigitalSpacePath(input.pathname)) return "digital-space";
+  if (isNewsPath(input.pathname)) return "news";
+  if (isDigipediaPath(input.pathname)) return "digipedia";
   if (input.tenantOsId === "ecommerceos") return "ecommerceos";
   if (input.tenantOsId === "mybrandos") return "mybrandos";
   return "passthrough";
 }
 
-/** First-party rewrite of Digital Space Location headers. Never expose Railway. */
-export function rewriteDigitalSpaceLocation(location: string, brandHost: string, digitalSpaceOrigin: string): string {
+function rewriteIndependentSurfaceLocation(
+  location: string,
+  brandHost: string,
+  origin: string,
+  documentPath: "/space" | "/news" | "/digipedia",
+): string {
   try {
-    const originHost = new URL(digitalSpaceOrigin).hostname.toLowerCase();
+    const originHost = new URL(origin).hostname.toLowerCase();
     const next = new URL(location, `https://${brandHost}`);
     if (next.hostname === originHost || next.hostname.endsWith(".up.railway.app") || next.hostname.endsWith(".railway.app")) {
       next.protocol = "https:";
       next.host = brandHost;
     }
-    if (next.pathname === "/life" || next.pathname === "/life/") {
+    if (documentPath === "/space" && (next.pathname === "/life" || next.pathname === "/life/")) {
       next.pathname = "/space";
     }
     return next.toString();
   } catch {
     return location;
   }
+}
+
+/** First-party rewrite of Digital Space Location headers. Never expose Railway. */
+export function rewriteDigitalSpaceLocation(location: string, brandHost: string, digitalSpaceOrigin: string): string {
+  return rewriteIndependentSurfaceLocation(location, brandHost, digitalSpaceOrigin, "/space");
+}
+
+export function rewriteNewsLocation(location: string, brandHost: string, newsOrigin: string): string {
+  return rewriteIndependentSurfaceLocation(location, brandHost, newsOrigin, "/news");
+}
+
+export function rewriteDigipediaLocation(location: string, brandHost: string, digipediaOrigin: string): string {
+  return rewriteIndependentSurfaceLocation(location, brandHost, digipediaOrigin, "/digipedia");
 }
 
 /** @deprecated Use rewriteDigitalSpaceLocation. */

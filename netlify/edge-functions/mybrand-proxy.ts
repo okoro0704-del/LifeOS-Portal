@@ -3,6 +3,7 @@
  *
  * Surface routing:
  * - /space       → Digital Space public doorway
+ * - /news        → independent Digiconomy News
  * - /life        → permanent compatibility redirect to /space
  * - USER APP     → `/` and other public mybrandOS paths
  * - USER ADMIN   → `/admin` (upstream white-label `/enter?wl=1…`)
@@ -13,9 +14,15 @@
  */
 import type { Context } from "https://edge.netlify.com";
 import {
+  digipediaUpstreamPath,
   digitalSpaceUpstreamPath,
+  isDigipediaPath,
   isDigitalSpacePath,
+  isNewsPath,
+  newsUpstreamPath,
+  rewriteDigipediaLocation,
   rewriteDigitalSpaceLocation,
+  rewriteNewsLocation,
   shouldRedirectLifeToSpace,
   tenantLabelFromHost,
 } from "./lib/surface-routing.ts";
@@ -33,6 +40,13 @@ const DIGITAL_LIFE = (Deno.env.get("DIGITAL_LIFE_URL") || "https://digital-life-
   /\/$/,
   "",
 );
+const DIGICONOMY_NEWS = (Deno.env.get("DIGICONOMY_NEWS_URL") || "https://digiconomy-news-production.up.railway.app").replace(
+  /\/$/,
+  "",
+);
+const DIGICONOMY_DIGIPEDIA = (
+  Deno.env.get("DIGICONOMY_DIGIPEDIA_URL") || "https://digiconomy-digipedia-production.up.railway.app"
+).replace(/\/$/, "");
 const ROOT = "getlifeos.app";
 
 type TenantBody = {
@@ -113,6 +127,32 @@ function rewriteUpstreamLocation(location: string, brandHost: string, surface: "
   }
 }
 
+function newsUnavailable(): Response {
+  return new Response(
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>News</title></head><body><p>News is temporarily unavailable.</p></body></html>`,
+    {
+      status: 502,
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    },
+  );
+}
+
+function digipediaUnavailable(): Response {
+  return new Response(
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>DigiPedia</title></head><body><p>DigiPedia is temporarily unavailable.</p></body></html>`,
+    {
+      status: 502,
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    },
+  );
+}
+
 function digitalLifeUnavailable(): Response {
   return new Response(
     `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>Digital Space</title></head><body><p>This Digital Space is temporarily unavailable.</p></body></html>`,
@@ -170,6 +210,66 @@ async function proxyDigitalSpace(request: Request, url: URL, host: string): Prom
   }
 }
 
+async function proxyNews(request: Request, url: URL, host: string): Promise<Response> {
+  const slug = tenantLabelFromHost(host);
+  const upstreamPath = slug ? newsUpstreamPath(url.pathname, slug) : url.pathname;
+  const target = new URL(upstreamPath + url.search, `${DIGICONOMY_NEWS}/`);
+  const init: RequestInit = {
+    method: request.method,
+    headers: proxyHeaders(request, host, "news"),
+    redirect: "manual",
+  };
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    init.body = request.body;
+  }
+  try {
+    const upstream = await fetch(target, init);
+    const outHeaders = new Headers(upstream.headers);
+    const loc = outHeaders.get("location");
+    if (loc) outHeaders.set("location", rewriteNewsLocation(loc, host, DIGICONOMY_NEWS));
+    outHeaders.set("cache-control", "public, max-age=30");
+    outHeaders.delete("x-railway-edge");
+    outHeaders.delete("x-railway-request-id");
+    return new Response(upstream.body, {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      headers: outHeaders,
+    });
+  } catch {
+    return newsUnavailable();
+  }
+}
+
+async function proxyDigipedia(request: Request, url: URL, host: string): Promise<Response> {
+  const slug = tenantLabelFromHost(host);
+  const upstreamPath = slug ? digipediaUpstreamPath(url.pathname, slug) : url.pathname;
+  const target = new URL(upstreamPath + url.search, `${DIGICONOMY_DIGIPEDIA}/`);
+  const init: RequestInit = {
+    method: request.method,
+    headers: proxyHeaders(request, host, "digipedia"),
+    redirect: "manual",
+  };
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    init.body = request.body;
+  }
+  try {
+    const upstream = await fetch(target, init);
+    const outHeaders = new Headers(upstream.headers);
+    const loc = outHeaders.get("location");
+    if (loc) outHeaders.set("location", rewriteDigipediaLocation(loc, host, DIGICONOMY_DIGIPEDIA));
+    outHeaders.set("cache-control", "public, max-age=30");
+    outHeaders.delete("x-railway-edge");
+    outHeaders.delete("x-railway-request-id");
+    return new Response(upstream.body, {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      headers: outHeaders,
+    });
+  } catch {
+    return digipediaUnavailable();
+  }
+}
+
 export default async (request: Request, context: Context) => {
   const url = new URL(request.url);
   const host = url.hostname.toLowerCase();
@@ -193,6 +293,12 @@ export default async (request: Request, context: Context) => {
   }
   if (isDigitalSpacePath(url.pathname)) {
     return proxyDigitalSpace(request, url, host);
+  }
+  if (isNewsPath(url.pathname)) {
+    return proxyNews(request, url, host);
+  }
+  if (isDigipediaPath(url.pathname)) {
+    return proxyDigipedia(request, url, host);
   }
 
   const tenant = await loadTenant(slug);

@@ -3,8 +3,14 @@ import { describe, test } from "node:test";
 import {
   digiconomyEdgeSurfaceFromPath,
   digitalSpaceUpstreamPath,
+  digipediaUpstreamPath,
   isDigitalSpacePath,
+  isDigipediaPath,
+  isNewsPath,
+  newsUpstreamPath,
+  rewriteDigipediaLocation,
   rewriteDigitalSpaceLocation,
+  rewriteNewsLocation,
   selectBrandSurface,
   shouldRedirectLifeToSpace,
   tenantLabelFromHost,
@@ -49,14 +55,16 @@ describe("Digital Space edge surface routing", () => {
     assert.equal(selectBrandSurface({ host, pathname: "/life", tenantOsId: "mybrandos" }), "digital-space");
     assert.equal(selectBrandSurface({ host, pathname: "/", tenantOsId: "mybrandos" }), "mybrandos");
     assert.equal(selectBrandSurface({ host, pathname: "/admin", tenantOsId: "mybrandos" }), "mybrandos");
-    assert.equal(selectBrandSurface({ host, pathname: "/news", tenantOsId: "mybrandos" }), "mybrandos");
-    assert.equal(selectBrandSurface({ host, pathname: "/digipedia", tenantOsId: "mybrandos" }), "mybrandos");
+    assert.equal(selectBrandSurface({ host, pathname: "/news", tenantOsId: "mybrandos" }), "news");
+    assert.equal(selectBrandSurface({ host, pathname: "/digipedia", tenantOsId: "mybrandos" }), "digipedia");
     assert.equal(selectBrandSurface({ host, pathname: "/lifestyle", tenantOsId: "mybrandos" }), "mybrandos");
   });
 
   test("ecommerceos /space still goes to Digital Space, not the storefront catch-all", () => {
     const host = "mpa-6ppyad.getlifeos.app";
     assert.equal(selectBrandSurface({ host, pathname: "/space", tenantOsId: "ecommerceos" }), "digital-space");
+    assert.equal(selectBrandSurface({ host, pathname: "/news", tenantOsId: "ecommerceos" }), "news");
+    assert.equal(selectBrandSurface({ host, pathname: "/digipedia", tenantOsId: "ecommerceos" }), "digipedia");
     assert.equal(selectBrandSurface({ host, pathname: "/", tenantOsId: "ecommerceos" }), "ecommerceos");
   });
 
@@ -86,6 +94,15 @@ describe("Digital Space edge surface routing", () => {
     assert.notEqual(digitalSpaceUpstreamPath("/space", "kingbooker"), "/u/mrfundzman");
   });
 
+  test("document /news is internally /u/{slug}; assets stay under /news/", () => {
+    assert.equal(isNewsPath("/news"), true);
+    assert.equal(isNewsPath("/news/styles.css"), true);
+    assert.equal(isNewsPath("/newsletter"), false);
+    assert.equal(newsUpstreamPath("/news", "mrfundzman"), "/u/mrfundzman");
+    assert.equal(newsUpstreamPath("/news/styles.css", "mrfundzman"), "/news/styles.css");
+    assert.notEqual(newsUpstreamPath("/news", "kingbooker"), "/u/mrfundzman");
+  });
+
   test("rewrites Railway Location onto the brand host /space", () => {
     const loc = rewriteDigitalSpaceLocation(
       "https://digital-life-production.up.railway.app/life",
@@ -93,5 +110,32 @@ describe("Digital Space edge surface routing", () => {
       "https://digital-life-production.up.railway.app",
     );
     assert.equal(loc, "https://mrfundzman.getlifeos.app/space");
+  });
+
+  test("rewrites Railway Location onto the brand host /news", () => {
+    const loc = rewriteNewsLocation(
+      "https://news-production.up.railway.app/u/mrfundzman",
+      "mrfundzman.getlifeos.app",
+      "https://news-production.up.railway.app",
+    );
+    assert.equal(loc, "https://mrfundzman.getlifeos.app/u/mrfundzman");
+  });
+
+  test("document /digipedia is internally /u/{slug}; assets stay under /digipedia/", () => {
+    assert.equal(isDigipediaPath("/digipedia"), true);
+    assert.equal(isDigipediaPath("/digipedia/styles.css"), true);
+    assert.equal(isDigipediaPath("/digipediatest"), false);
+    assert.equal(digipediaUpstreamPath("/digipedia", "mrfundzman"), "/u/mrfundzman");
+    assert.equal(digipediaUpstreamPath("/digipedia/styles.css", "mrfundzman"), "/digipedia/styles.css");
+    assert.notEqual(digipediaUpstreamPath("/digipedia", "kingbooker"), "/u/mrfundzman");
+  });
+
+  test("rewrites Railway Location onto the brand host /digipedia", () => {
+    const loc = rewriteDigipediaLocation(
+      "https://digipedia-production.up.railway.app/u/mrfundzman",
+      "mrfundzman.getlifeos.app",
+      "https://digipedia-production.up.railway.app",
+    );
+    assert.equal(loc, "https://mrfundzman.getlifeos.app/u/mrfundzman");
   });
 });

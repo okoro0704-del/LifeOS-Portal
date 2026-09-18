@@ -18,6 +18,8 @@
   ECOMMERCEOS_WEB_URL = "https://e-commerceos.netlify.app"
   VITE_ECOMMERCEOS_WEB_URL = "https://e-commerceos.netlify.app"
   DIGITAL_LIFE_URL = "https://digital-life-production.up.railway.app"
+  DIGICONOMY_NEWS_URL = "https://digiconomy-news-production.up.railway.app"
+  DIGICONOMY_DIGIPEDIA_URL = "https://digiconomy-digipedia-production.up.railway.app"
 
 # Run before SPA fallback so mybrand tenants never load the Portal shell.
 [[edge_functions]]

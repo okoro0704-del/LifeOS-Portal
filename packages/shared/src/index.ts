@@ -239,6 +239,32 @@ export {
 } from "./digiconomy-surfaces.js";
 
 export {
+  CANONICAL_ENTITY_KINDS,
+  canonicalEntityKindFor,
+  publicationRelationForSubject,
+  isPubliclyProjectablePublication,
+  sourceFromPublication,
+  entityProvidedSource,
+  type CanonicalEntityKind,
+  type CanonicalEntityReference,
+  type CanonicalAssetReference,
+  type SourceReference,
+  type CanonicalPublicationProjection,
+  type DigiPediaSectionProjection,
+  type DigiPediaEntryProjection,
+} from "./digiconomy-universal.js";
+
+export {
+  DIGICONOMY_NEWS_PUBLIC_STATUS,
+  DIGICONOMY_NEWS_PUBLIC_AUDIENCE,
+  digiconomyNewsRelation,
+  type DigiconomyNewsContentReference,
+  type DigiconomyNewsMediaReference,
+  type DigiconomyNewsProvenance,
+  type DigiconomyNewsPublicationProjection,
+} from "./news-publication.js";
+
+export {
   PLATFORM_COMMISSION_BPS,
   GMV_FROM_LICENSE_MULTIPLIER,
   ESCROW_HOLD_BPS,
