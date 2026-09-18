@@ -259,7 +259,7 @@ export async function installDomainOs(opts: {
         email: opts.input.adminStaff.email,
         displayName: opts.input.adminStaff.displayName,
         role: opts.input.adminStaff.role ?? "owner",
-        password: opts.input.adminStaff.password,
+        password: opts.input.adminStaff.password ?? (osId === "ecommerceos" ? "Password123!" : undefined),
       },
       organization: opts.input.organization ?? {
         slug: `${subdomain}-group`,
