@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   DIGICONOMY_ACTIVE_ROOT_POLICY,
+  DIGICONOMY_SURFACE_DEFINITIONS,
   DIGICONOMY_SURFACE_IDS,
   classifyDigiconomyHost,
   digiconomyCurrentSurfaceUrl,
@@ -21,6 +22,11 @@ describe("Digiconomy surface contract", () => {
       "admin",
     ]);
     expect(DIGICONOMY_ACTIVE_ROOT_POLICY).toBe("root_is_app");
+    expect(DIGICONOMY_SURFACE_DEFINITIONS.news).toMatchObject({
+      id: "news",
+      label: "DigiNews",
+    });
+    expect(digiconomyCurrentSurfaceUrl("mrfundzman", "news")).toBe("https://mrfundzman.getlifeos.app/news");
   });
 });
 

@@ -1,5 +1,5 @@
 /**
- * Minimal universal-surface contracts for News and DigiPedia.
+ * Minimal universal-surface contracts for DigiNews and DigiPedia.
  *
  * These are projections over canonical Digital Life identity.
  * They do NOT create a second tenant/entity registry, CMS, or asset store.

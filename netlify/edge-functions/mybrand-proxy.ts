@@ -129,7 +129,7 @@ function rewriteUpstreamLocation(location: string, brandHost: string, surface: "
 
 function newsUnavailable(): Response {
   return new Response(
-    `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>News</title></head><body><p>News is temporarily unavailable.</p></body></html>`,
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>DigiNews</title></head><body><p>DigiNews is temporarily unavailable.</p></body></html>`,
     {
       status: 502,
       headers: {

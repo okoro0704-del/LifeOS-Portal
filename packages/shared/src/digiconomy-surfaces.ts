@@ -58,9 +58,9 @@ export const DIGICONOMY_SURFACE_DEFINITIONS: Record<
   },
   news: {
     id: "news",
-    label: "News",
+    label: "DigiNews",
     public: true,
-    description: "Chronological News surface.",
+    description: "Chronological record of what happened / what was published.",
   },
   digipedia: {
     id: "digipedia",

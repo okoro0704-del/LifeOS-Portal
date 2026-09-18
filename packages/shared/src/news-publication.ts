@@ -1,5 +1,5 @@
 /**
- * Compatibility aliases for the universal News projection.
+ * Compatibility aliases for the universal DigiNews projection.
  *
  * Canonical types live in digiconomy-universal.ts.
  * Do not invent a second News source or publication authority here.
