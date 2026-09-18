@@ -29,6 +29,7 @@ import { registerGatewayRoutes } from "./routes/gateway.js";
 import { registerFinproveRoutes } from "./routes/finprove.js";
 import { registerDataZoneAdminRoutes } from "./routes/datazone-admin.js";
 import { registerDirectoryRoutes } from "./routes/directory.js";
+import { registerEcommerceOsInternalRoutes } from "./routes/ecommerceos-internal.js";
 import { registerUserAdminRoutes } from "./routes/users.js";
 import { registerPushRoutes } from "./routes/push.js";
 import { seedLocalAdmin } from "./lib/seed-admin.js";
@@ -118,6 +119,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   await registerCatalogRoutes(app);
   await registerBillingRoutes(app, store);
   await registerInstallRoutes(app, store, distributor, hos, eco, tos, sos);
+  await registerEcommerceOsInternalRoutes(app, store);
   await registerOrganizationRoutes(app, store);
   await registerTenantRoutes(app, store, distributor);
   await registerTenantAppRoutes(app, store, distributor);

@@ -15,6 +15,10 @@ const MYBRANDOS = (Deno.env.get("MYBRANDOS_URL") || "https://mybrandos-productio
   /\/$/,
   "",
 );
+const ECOMMERCEOS_WEB = (Deno.env.get("ECOMMERCEOS_WEB_URL") || "https://e-commerceos.netlify.app").replace(
+  /\/$/,
+  "",
+);
 const ROOT = "getlifeos.app";
 const RESERVED = new Set([
   "www",
@@ -131,6 +135,46 @@ export default async (request: Request, context: Context) => {
   if (!slug) return context.next();
 
   const tenant = await loadTenant(slug);
+  if (tenant?.tenant?.osId === "ecommerceos") {
+    const target = new URL(url.pathname + url.search, `${ECOMMERCEOS_WEB}/`);
+    const headers = new Headers(request.headers);
+    headers.set("X-Forwarded-Host", host);
+    headers.set("X-Forwarded-Proto", "https");
+    headers.delete("host");
+    const init: RequestInit = {
+      method: request.method,
+      headers,
+      redirect: "manual",
+    };
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      init.body = request.body;
+    }
+    const upstream = await fetch(target, init);
+    const outHeaders = new Headers(upstream.headers);
+    const loc = outHeaders.get("location");
+    if (loc) {
+      try {
+        const next = new URL(loc, `https://${host}`);
+        if (
+          next.hostname === "e-commerceos.netlify.app" ||
+          next.hostname === "e-commerce.getlifeos.app" ||
+          next.hostname.endsWith(".up.railway.app")
+        ) {
+          next.protocol = "https:";
+          next.host = host;
+        }
+        outHeaders.set("location", next.toString());
+      } catch {
+        /* keep upstream location */
+      }
+    }
+    outHeaders.set("cache-control", "private, no-store");
+    return new Response(upstream.body, {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      headers: outHeaders,
+    });
+  }
   if (!tenant?.tenant || tenant.tenant.osId !== "mybrandos") {
     return context.next();
   }

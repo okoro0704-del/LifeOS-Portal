@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { portalApiBase } from "../lib/api";
 import { TenantDiningApp } from "./TenantDiningApp";
 import { TenantHotelApp } from "./TenantHotelApp";
+import { TenantEcommerceApp } from "./TenantEcommerceApp";
 import { TenantFallbackApp } from "./TenantFallbackApp";
 import { TenantMyBrandApp } from "./TenantMyBrandApp";
 
@@ -51,6 +52,9 @@ export function TenantApp({ subdomain, basename }: { subdomain: string; basename
   if (verticalId === "hotel") return <TenantHotelApp subdomain={subdomain} basename={basename} />;
   if (verticalId === "restaurant" || verticalId === "local_food") {
     return <TenantDiningApp subdomain={subdomain} basename={basename} />;
+  }
+  if (osId === "ecommerceos") {
+    return <TenantEcommerceApp subdomain={subdomain} basename={basename} />;
   }
   return <TenantFallbackApp subdomain={subdomain} basename={basename} />;
 }

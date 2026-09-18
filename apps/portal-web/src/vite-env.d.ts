@@ -12,6 +12,7 @@ interface ImportMetaEnv {
   readonly VITE_BYPASS_AUTH_FOR_TESTING?: string;
   readonly VITE_DEFAULT_USER_ROLE?: string;
   readonly NEXT_PUBLIC_DEFAULT_USER_ROLE?: string;
+  readonly VITE_ECOMMERCEOS_WEB_URL?: string;
 }
 
 interface ImportMeta {
