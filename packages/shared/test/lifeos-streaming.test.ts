@@ -40,11 +40,13 @@ describe("LifeOS streaming eligibility (Portal catalog)", () => {
     expect(engineHasLifeOsCapability("financeos", "lifeos_publication_projection")).toBe(false);
   });
 
-  test("HospitalityOS / ServiceOS / TransportationOS are not falsely READY", () => {
+  test("HospitalityOS is READY with public LifeOS feed contract; ServiceOS / TransportationOS are not falsely READY", () => {
     const rows = listLifeOsStreamingEligibility();
-    expect(rows.filter((r) => r.engine === "hospitalityos").every((r) => r.readiness === "partial")).toBe(
+    expect(rows.filter((r) => r.engine === "hospitalityos").every((r) => r.readiness === "ready")).toBe(
       true,
     );
+    expect(engineHasLifeOsCapability("hospitalityos", "lifeos_catalogue_projection")).toBe(true);
+    expect(listLifeOsReadyEngines()).toContain("hospitalityos");
     expect(rows.filter((r) => r.engine === "serviceos").every((r) => r.readiness === "partial")).toBe(
       true,
     );

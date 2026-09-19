@@ -129,14 +129,12 @@ const ENGINE_STREAMING_TRUTH: Record<
     missing: [],
   },
   hospitalityos: {
-    readiness: "partial",
-    capabilities: [],
-    families: ["catalogue"],
-    publicContract: null,
-    missing: [
-      "machine-readable public catalogue projection API for LifeOS",
-      "canonical asset references on public offerings",
-    ],
+    readiness: "ready",
+    capabilities: ["lifeos_catalogue_projection", "lifeos_publication_projection"],
+    families: ["catalogue", "publication"],
+    publicContract:
+      "GET /v1/public/lifeos/feed?kind=offering|publication|all&cursor=&limit= (cross-tenant; active+public offerings + published business media)",
+    missing: [],
   },
   serviceos: {
     readiness: "partial",
