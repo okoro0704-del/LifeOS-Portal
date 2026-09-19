@@ -255,6 +255,30 @@ export {
 } from "./digiconomy-universal.js";
 
 export {
+  LIFEOS_STREAMING_PROJECTION_VERSION,
+  LIFEOS_PROJECTION_FAMILIES,
+  LIFEOS_STREAMING_CAPABILITIES,
+  listLifeOsStreamingEligibility,
+  listLifeOsReadyEngines,
+  lifeOsStreamingEligibilityForEntry,
+  engineHasLifeOsCapability,
+  isPubliclyEligibleLifeOsItem,
+  projectMybrandPublicAssets,
+  projectEcommerceStorefrontProduct,
+  projectEcommercePublicPublication,
+  assembleLifeOsStream,
+  assertNoLifeOsOwnershipCopy,
+  type LifeOsProjectionFamily,
+  type LifeOsStreamingCapability,
+  type LifeOsStreamingReadiness,
+  type LifeOsSourceFailureKind,
+  type LifeOsSourceResult,
+  type CanonicalLifeOsProjection,
+  type LifeOsStreamingEligibility,
+  type LifeOsVerticalAdapter,
+} from "./lifeos-streaming.js";
+
+export {
   DIGICONOMY_NEWS_PUBLIC_STATUS,
   DIGICONOMY_NEWS_PUBLIC_AUDIENCE,
   digiconomyNewsRelation,
