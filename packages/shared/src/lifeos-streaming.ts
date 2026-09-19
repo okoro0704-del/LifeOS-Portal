@@ -121,15 +121,12 @@ const ENGINE_STREAMING_TRUTH: Record<
     missing: [],
   },
   ecommerceos: {
-    readiness: "partial",
+    readiness: "ready",
     capabilities: ["lifeos_catalogue_projection", "lifeos_publication_projection"],
     families: ["catalogue", "publication"],
     publicContract:
-      "GET /v1/storefront/products + /v1/storefront/publications (host or x-store-subdomain; not unauthenticated open internet without tenant scope)",
-    missing: [
-      "unauthenticated public catalogue URL without tenant header/host resolution",
-      "LifeOS runtime adapter not wired to storefront probe",
-    ],
+      "GET /v1/public/lifeos/feed?kind=product|publication|all&cursor=&limit= (cross-tenant; active+public only)",
+    missing: [],
   },
   hospitalityos: {
     readiness: "partial",

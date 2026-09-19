@@ -27,13 +27,12 @@ describe("LifeOS streaming eligibility (Portal catalog)", () => {
     expect(engineHasLifeOsCapability("mybrandos", "lifeos_publication_projection")).toBe(true);
   });
 
-  test("EcommerceOS is PARTIAL — catalogue capability declared, missing open public URL", () => {
+  test("EcommerceOS is READY with public LifeOS feed contract", () => {
     const eco = listLifeOsStreamingEligibility().filter((r) => r.engine === "ecommerceos");
     expect(eco.length).toBeGreaterThan(0);
-    expect(eco.every((r) => r.readiness === "partial")).toBe(true);
-    expect(eco[0]!.missing.some((m) => m.includes("unauthenticated") || m.includes("adapter"))).toBe(
-      true,
-    );
+    expect(eco.every((r) => r.readiness === "ready")).toBe(true);
+    expect(engineHasLifeOsCapability("ecommerceos", "lifeos_catalogue_projection")).toBe(true);
+    expect(listLifeOsReadyEngines()).toContain("ecommerceos");
   });
 
   test("unknown / finance engines are not invented as ready", () => {
