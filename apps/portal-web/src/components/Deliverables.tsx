@@ -122,6 +122,32 @@ export function DeliverablesCard({
             </button>
           </div>
         </article>
+        {isPersonal ? (
+          <>
+            <article className="card" data-testid="tv-deliverable">
+              <span className="badge">Broadcast</span>
+              <h2>TV</h2>
+              <p className="small muted">Creator TV station — programmed via Offline Kernel. Opens inside the public Space.</p>
+              <p className="mono small">{deliverables.guestApp.url} · surface TV</p>
+              <div className="actions">
+                <a className="btn btn-primary" href={deliverables.guestApp.url} target="_blank" rel="noreferrer">
+                  Open Space
+                </a>
+              </div>
+            </article>
+            <article className="card" data-testid="radio-deliverable">
+              <span className="badge">Broadcast</span>
+              <h2>Radio</h2>
+              <p className="small muted">Creator Radio station — same station identity as TV.</p>
+              <p className="mono small">{deliverables.guestApp.url} · surface Radio</p>
+              <div className="actions">
+                <a className="btn btn-primary" href={deliverables.guestApp.url} target="_blank" rel="noreferrer">
+                  Open Space
+                </a>
+              </div>
+            </article>
+          </>
+        ) : null}
       </div>
     </section>
   );

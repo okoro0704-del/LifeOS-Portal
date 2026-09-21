@@ -8,6 +8,7 @@ import { projectInstallToLifeOsShell } from "./shell-projection.js";
 import { provisionTenantHostname } from "./tenant-hostname.js";
 import { claimSubdomain } from "./subdomain-claim.js";
 import { activateBusinessPortal } from "./tenant-portal.js";
+import { provisionCreatorStation } from "./offline-kernel.js";
 
 const subdomainRe = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i;
 
@@ -145,6 +146,12 @@ export async function installMyBrandOs(opts: {
       slug: provisioned.slug || subdomain,
       customDomain: opts.input.customDomain,
     });
+
+    const station = await provisionCreatorStation({
+      ownerId: provisioned.trustId,
+      slug: provisioned.slug || subdomain,
+    });
+
     const launchUrls = {
       guest: deliverables.guestApp.url,
       storefront: deliverables.guestApp.url,
@@ -175,6 +182,9 @@ export async function installMyBrandOs(opts: {
         mybrandSlug: provisioned.slug || subdomain,
         mybrandTrustId: provisioned.trustId,
         mybrandToken: provisioned.token,
+        offlineKernelStationId: station?.id ?? null,
+        tvDeliverable: station ? "ACTIVE" : "NOT_PROVISIONED",
+        radioDeliverable: station ? "ACTIVE" : "NOT_PROVISIONED",
         primaryColor: opts.input.brand?.primaryColor ?? "#0B0C10",
         writeup: opts.input.tagline,
       },

@@ -16,6 +16,7 @@
     "@fastify/rate-limit": "^10.3.0",
     "@lifeos-portal/env": "*",
     "@lifeos-portal/finprove": "*",
+    "@lifeos-portal/offline-kernel": "*",
     "@lifeos-portal/shared": "*",
     "@sinclair/typebox": "^0.34.41",
     "fastify": "^5.2.1",
