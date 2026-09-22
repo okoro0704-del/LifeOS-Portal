@@ -16,7 +16,7 @@
     "dev:platform-admin": "npm run dev -w @lifeos-portal/platform-admin",
     "dev:finprove": "npm run dev -w @lifeos-portal/finprove-engine",
     "build": "npm run build -w @lifeos-portal/shared && npm run build -w @lifeos-portal/env && npm run build -w @lifeos-portal/finprove && npm run build -w @lifeos-portal/offline-kernel && npm run build -w @lifeos-portal/api && npm run build -w @lifeos-portal/finprove-engine && npm run build -w @lifeos-portal/offline-kernel-service && npm run build -w @lifeos-portal/web && npm run build -w @lifeos-portal/business-portal && npm run build -w @lifeos-portal/platform-admin",
-    "build:gateway": "npm run build -w @lifeos-portal/shared && npm run build -w @lifeos-portal/env && npm run build -w @lifeos-portal/finprove && npm run build -w @lifeos-portal/api",
+    "build:gateway": "npm run build -w @lifeos-portal/shared && npm run build -w @lifeos-portal/env && npm run build -w @lifeos-portal/finprove && npm run build -w @lifeos-portal/offline-kernel && npm run build -w @lifeos-portal/api",
     "build:offline-kernel": "npm run build -w @lifeos-portal/offline-kernel && npm run build -w @lifeos-portal/offline-kernel-service",
     "start": "node index.js",
     "start:finprove": "node --conditions=production apps/finprove/dist/index.js",
