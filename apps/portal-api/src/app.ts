@@ -29,6 +29,8 @@ import { registerGatewayRoutes } from "./routes/gateway.js";
 import { registerFinproveRoutes } from "./routes/finprove.js";
 import { registerDataZoneAdminRoutes } from "./routes/datazone-admin.js";
 import { registerDirectoryRoutes } from "./routes/directory.js";
+import { registerExperienceRoutes } from "./routes/experience.js";
+import type { LifeOsExperienceReader } from "./services/lifeos-experience.js";
 import { registerEcommerceOsInternalRoutes } from "./routes/ecommerceos-internal.js";
 import { registerUserAdminRoutes } from "./routes/users.js";
 import { registerPushRoutes } from "./routes/push.js";
@@ -41,6 +43,8 @@ export type BuildAppOptions = {
   eco?: EcoClient;
   tos?: TosClient;
   sos?: SosClient;
+  /** Test boundary only. Production uses the public-contract reader. */
+  lifeOsExperienceReader?: LifeOsExperienceReader;
 };
 
 const defaultPersist = path.resolve(
@@ -130,6 +134,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   await registerGatewayRoutes(app);
   await registerDataZoneAdminRoutes(app, store);
   await registerDirectoryRoutes(app, store);
+  await registerExperienceRoutes(app, store, opts.lifeOsExperienceReader);
 
   return app;
 }
