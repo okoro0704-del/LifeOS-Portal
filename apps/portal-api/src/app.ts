@@ -35,6 +35,8 @@ import { registerEcommerceOsInternalRoutes } from "./routes/ecommerceos-internal
 import { registerUserAdminRoutes } from "./routes/users.js";
 import { registerPushRoutes } from "./routes/push.js";
 import { seedLocalAdmin } from "./lib/seed-admin.js";
+import { registerDomainInfrastructureRoutes } from "./routes/domain-infrastructure.js";
+import { createDomainInfrastructure, type DomainInfraOptions } from "./domains/index.js";
 
 export type BuildAppOptions = {
   store?: PortalStore;
@@ -45,6 +47,8 @@ export type BuildAppOptions = {
   sos?: SosClient;
   /** Test boundary only. Production uses the public-contract reader. */
   lifeOsExperienceReader?: LifeOsExperienceReader;
+  /** Test boundary for registrar/hosting/DNS/HTTPS transports. */
+  domainInfra?: DomainInfraOptions;
 };
 
 const defaultPersist = path.resolve(
@@ -135,6 +139,14 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   await registerDataZoneAdminRoutes(app, store);
   await registerDirectoryRoutes(app, store);
   await registerExperienceRoutes(app, store, opts.lifeOsExperienceReader);
+
+  const domainInfra = createDomainInfrastructure(store, opts.domainInfra);
+  const recovered = domainInfra.service.recoverInterruptedIntents();
+  if (env.nodeEnv !== "test") {
+    console.info(domainInfra.summary);
+    if (recovered) console.info(`[domains] ${recovered} interrupted purchase intent(s) marked for reconciliation`);
+  }
+  await registerDomainInfrastructureRoutes(app, domainInfra.service);
 
   return app;
 }

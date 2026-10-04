@@ -16,6 +16,7 @@ import type { Context } from "https://edge.netlify.com";
 import {
   digipediaUpstreamPath,
   digitalSpaceUpstreamPath,
+  isCustomDomainCandidate,
   isDigipediaPath,
   isDigitalSpacePath,
   isNewsPath,
@@ -83,6 +84,34 @@ async function loadTenant(slug: string): Promise<TenantBody | null> {
     tenantCache.set(slug, { at: Date.now(), body: null });
     return null;
   }
+}
+
+const customHostCache = new Map<string, { at: number; slug: string | null }>();
+
+/** Owner domain → tenant slug via Domain Infrastructure bindings on the gateway. */
+async function resolveCustomHost(host: string): Promise<string | null> {
+  const hit = customHostCache.get(host);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.slug;
+  let slug: string | null = null;
+  try {
+    const res = await fetch(`${GATEWAY}/public/tenants/resolve?host=${encodeURIComponent(host)}`, {
+      headers: { accept: "application/json" },
+    });
+    if (res.ok) {
+      const body = (await res.json()) as { tenant?: { subdomain?: string } };
+      slug = body.tenant?.subdomain?.toLowerCase() || null;
+    }
+  } catch {
+    slug = null;
+  }
+  customHostCache.set(host, { at: Date.now(), slug });
+  return slug;
+}
+
+function tagTenant(response: Response, slug: string): Response {
+  const headers = new Headers(response.headers);
+  headers.set("X-LifeOS-Tenant", slug);
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
 function studioEnterPath(tenant: TenantBody, brandSlug: string, search: string): string {
@@ -180,9 +209,8 @@ function proxyHeaders(request: Request, host: string, surface: string): Headers 
   return headers;
 }
 
-async function proxyDigitalSpace(request: Request, url: URL, host: string): Promise<Response> {
-  const slug = tenantLabelFromHost(host);
-  const upstreamPath = slug ? digitalSpaceUpstreamPath(url.pathname, slug) : url.pathname;
+async function proxyDigitalSpace(request: Request, url: URL, host: string, slug: string): Promise<Response> {
+  const upstreamPath = digitalSpaceUpstreamPath(url.pathname, slug);
   const target = new URL(upstreamPath + url.search, `${DIGITAL_LIFE}/`);
   const init: RequestInit = {
     method: request.method,
@@ -210,9 +238,8 @@ async function proxyDigitalSpace(request: Request, url: URL, host: string): Prom
   }
 }
 
-async function proxyNews(request: Request, url: URL, host: string): Promise<Response> {
-  const slug = tenantLabelFromHost(host);
-  const upstreamPath = slug ? newsUpstreamPath(url.pathname, slug) : url.pathname;
+async function proxyNews(request: Request, url: URL, host: string, slug: string): Promise<Response> {
+  const upstreamPath = newsUpstreamPath(url.pathname, slug);
   const target = new URL(upstreamPath + url.search, `${DIGICONOMY_NEWS}/`);
   const init: RequestInit = {
     method: request.method,
@@ -240,9 +267,8 @@ async function proxyNews(request: Request, url: URL, host: string): Promise<Resp
   }
 }
 
-async function proxyDigipedia(request: Request, url: URL, host: string): Promise<Response> {
-  const slug = tenantLabelFromHost(host);
-  const upstreamPath = slug ? digipediaUpstreamPath(url.pathname, slug) : url.pathname;
+async function proxyDigipedia(request: Request, url: URL, host: string, slug: string): Promise<Response> {
+  const upstreamPath = digipediaUpstreamPath(url.pathname, slug);
   const target = new URL(upstreamPath + url.search, `${DIGICONOMY_DIGIPEDIA}/`);
   const init: RequestInit = {
     method: request.method,
@@ -283,22 +309,29 @@ export default async (request: Request, context: Context) => {
     return context.next();
   }
 
-  const slug = tenantLabelFromHost(host);
-  if (!slug) return context.next();
+  const platformSlug = tenantLabelFromHost(host);
+  if (platformSlug) return routeTenant(request, context, url, host, platformSlug);
 
+  if (!isCustomDomainCandidate(host)) return context.next();
+  const customSlug = await resolveCustomHost(host);
+  if (!customSlug) return context.next();
+  return tagTenant(await routeTenant(request, context, url, host, customSlug), customSlug);
+};
+
+async function routeTenant(request: Request, context: Context, url: URL, host: string, slug: string): Promise<Response> {
   // /space must win before mybrandOS and EcommerceOS catch-alls.
   // /life documents permanently redirect to /space; /life assets still proxy.
   if (shouldRedirectLifeToSpace(url.pathname)) {
     return Response.redirect(`https://${host}/space${url.search}`, 301);
   }
   if (isDigitalSpacePath(url.pathname)) {
-    return proxyDigitalSpace(request, url, host);
+    return proxyDigitalSpace(request, url, host, slug);
   }
   if (isNewsPath(url.pathname)) {
-    return proxyNews(request, url, host);
+    return proxyNews(request, url, host, slug);
   }
   if (isDigipediaPath(url.pathname)) {
-    return proxyDigipedia(request, url, host);
+    return proxyDigipedia(request, url, host, slug);
   }
 
   const tenant = await loadTenant(slug);
@@ -394,4 +427,4 @@ export default async (request: Request, context: Context) => {
     statusText: upstream.statusText,
     headers: outHeaders,
   });
-};
+}

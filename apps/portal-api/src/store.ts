@@ -17,6 +17,12 @@ import type {
   TrustIdRole,
 } from "@lifeos-portal/shared";
 import { newId } from "./lib/crypto.js";
+import {
+  DOMAIN_INFRA_KINDS,
+  type DomainInfraCollections,
+  type DomainInfraKind,
+  type DomainInfraSnapshot,
+} from "./domains/types.js";
 
 export type PortalUser = {
   id: string;
@@ -129,6 +135,7 @@ export type Snapshot = {
   dataZoneTombstones: DataZoneTombstone[];
   dataZoneAudit: DataZoneAuditEvent[];
   pushTokens: PortalPushToken[];
+  domainInfra?: DomainInfraSnapshot;
 };
 
 export type PortalPushToken = {
@@ -218,6 +225,10 @@ export type PortalStore = {
   listDataZoneAudit(): DataZoneAuditEvent[];
   upsertPushToken(input: PortalPushToken): PortalPushToken;
   getPushToken(userId: string): PortalPushToken | undefined;
+  /** Domain Infrastructure collections (registrar domains, quotes, intents, bindings, registrants, audit). */
+  domainInfraPut<K extends DomainInfraKind>(kind: K, row: DomainInfraCollections[K]): DomainInfraCollections[K];
+  domainInfraGet<K extends DomainInfraKind>(kind: K, id: string): DomainInfraCollections[K] | undefined;
+  domainInfraList<K extends DomainInfraKind>(kind: K): DomainInfraCollections[K][];
   flush(): Promise<void>;
   close(): Promise<void>;
 };
@@ -262,6 +273,9 @@ export function createStore(opts?: {
   const dataZoneTombstones = new Map<string, DataZoneTombstone>();
   const dataZoneAudit = new Map<string, DataZoneAuditEvent>();
   const pushTokens = new Map<string, PortalPushToken>();
+  const domainInfra = Object.fromEntries(DOMAIN_INFRA_KINDS.map((kind) => [kind, new Map()])) as {
+    [K in DomainInfraKind]: Map<string, DomainInfraCollections[K]>;
+  };
   const persistPath = opts?.persistPath;
 
   function snapshot(): Snapshot {
@@ -280,6 +294,9 @@ export function createStore(opts?: {
       dataZoneTombstones: [...dataZoneTombstones.values()],
       dataZoneAudit: [...dataZoneAudit.values()],
       pushTokens: [...pushTokens.values()],
+      domainInfra: Object.fromEntries(
+        DOMAIN_INFRA_KINDS.map((kind) => [kind, [...domainInfra[kind].values()]]),
+      ) as DomainInfraSnapshot,
     };
   }
 
@@ -322,6 +339,10 @@ export function createStore(opts?: {
       for (const t of snap.dataZoneTombstones ?? []) dataZoneTombstones.set(t.id, t);
       for (const a of snap.dataZoneAudit ?? []) dataZoneAudit.set(a.id, a);
       for (const t of snap.pushTokens ?? []) pushTokens.set(t.userId, t);
+      for (const kind of DOMAIN_INFRA_KINDS) {
+        const map = domainInfra[kind] as Map<string, { id: string }>;
+        for (const row of (snap.domainInfra?.[kind] ?? []) as Array<{ id: string }>) map.set(row.id, row);
+      }
     } catch {
       /* start empty */
     }
@@ -724,6 +745,19 @@ export function createStore(opts?: {
     },
     getPushToken(userId) {
       return pushTokens.get(userId);
+    },
+    domainInfraPut(kind, row) {
+      const copy = structuredClone(row);
+      (domainInfra[kind] as Map<string, typeof row>).set(row.id, copy);
+      persist();
+      return structuredClone(copy);
+    },
+    domainInfraGet(kind, id) {
+      const row = domainInfra[kind].get(id);
+      return row ? structuredClone(row) : undefined;
+    },
+    domainInfraList(kind) {
+      return [...domainInfra[kind].values()].map((row) => structuredClone(row));
     },
     async flush() {
       persist();

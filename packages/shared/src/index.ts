@@ -331,6 +331,33 @@ export {
 } from "./billing.js";
 
 export {
+  DOMAIN_SEARCH_TLDS,
+  type DomainSearchTld,
+  type DomainProviderEnvironment,
+  type DomainProviderKind,
+  type DomainProviderCapabilityStatus,
+  type DomainEgressIpStatus,
+  type DomainInfrastructureStatus,
+  type DomainLifecycleState,
+  type DomainPurchaseIntentState,
+  type DomainPrivacyStatus,
+  type DomainErrorCode,
+  type DomainMoney,
+  type DomainSearchResult,
+  type DomainQuotePublic,
+  type DomainPurchaseIntentPublic,
+  type InfraDnsRecordType,
+  type InfraDnsRecord,
+  type DomainBindingStatus,
+  type DomainBindingPublic,
+  type DomainPublic,
+  type DomainBindingTarget,
+  type RegistrantContact,
+  type RegistrantProfileSummary,
+  type DomainAuditEventPublic,
+} from "./domain-infrastructure.js";
+
+export {
   type GatewayEngineId,
   type GatewayPrivilege,
   type GatewayUpstream,

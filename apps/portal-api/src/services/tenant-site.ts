@@ -1,5 +1,6 @@
 import { tenantDeliverables } from "@lifeos-portal/shared";
 import type { PortalInstall, PortalStore } from "../store.js";
+import { installIdForBoundHost } from "../domains/service.js";
 
 export type DashboardStyle = "console" | "greetings";
 
@@ -125,6 +126,11 @@ export function updateTenantSite(
 
 export function findInstallByHost(store: PortalStore, hostHeader: string) {
   const host = hostHeader.split(":")[0]?.toLowerCase() ?? "";
+  const boundInstallId = installIdForBoundHost(store, host);
+  if (boundInstallId) {
+    const bound = store.getInstall(boundInstallId);
+    if (bound) return bound;
+  }
   const matches = store.listAllInstalls().filter((row) => {
     if (row.customDomain?.toLowerCase() === host) return true;
     return `${row.subdomain.toLowerCase()}.getlifeos.app` === host;

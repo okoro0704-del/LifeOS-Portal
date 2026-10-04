@@ -1,7 +1,18 @@
 import {
   BUSINESS_PORTAL_ORIGIN,
   PORTAL_AUTH_SCOPES,
+  type DomainAuditEventPublic,
+  type DomainBindingTarget,
+  type DomainInfrastructureStatus,
+  type DomainMoney,
+  type DomainPublic,
+  type DomainPurchaseIntentPublic,
+  type DomainQuotePublic,
+  type DomainSearchResult,
+  type InfraDnsRecord,
   type PortalUserPublic,
+  type RegistrantContact,
+  type RegistrantProfileSummary,
   type TenantDomain,
   type TenantPortalAccess,
   type TenantVertical,
@@ -166,3 +177,85 @@ export const portalApi = {
       method: "POST",
     }),
 };
+
+export type RegistrantProfileInput = {
+  label: string;
+  registrant: RegistrantContact;
+  admin?: RegistrantContact | null;
+  tech?: RegistrantContact | null;
+  billing?: RegistrantContact | null;
+};
+
+export type DomainDetail = {
+  domain: DomainPublic;
+  purchase: DomainPurchaseIntentPublic | null;
+  registrant: RegistrantProfileSummary | null;
+  audit: DomainAuditEventPublic[];
+};
+
+const DOMAINS = "/v1/infrastructure/domains";
+const post = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
+
+/** Domain Infrastructure. Registrar credentials stay on the gateway; the browser only sees normalized data. */
+export const domainsApi = {
+  status: () => api<{ status: DomainInfrastructureStatus }>(`${DOMAINS}/status`),
+  search: (query: string, tlds?: string[]) =>
+    api<{ results: DomainSearchResult[] }>(`${DOMAINS}/search`, post({ query, tlds })),
+  quote: (domain: string) => api<{ quote: DomainQuotePublic }>(`${DOMAINS}/quotes`, post({ domain, years: 1 })),
+  getQuote: (id: string) => api<{ quote: DomainQuotePublic }>(`${DOMAINS}/quotes/${encodeURIComponent(id)}`),
+  createIntent: (quoteId: string, idempotencyKey: string) =>
+    api<{ intent: DomainPurchaseIntentPublic }>(`${DOMAINS}/purchase-intents`, post({ quoteId, idempotencyKey })),
+  getIntent: (id: string) =>
+    api<{ intent: DomainPurchaseIntentPublic }>(`${DOMAINS}/purchase-intents/${encodeURIComponent(id)}`),
+  confirmIntent: (
+    id: string,
+    body: { confirmDomain: string; confirmTotal: DomainMoney; registrantProfileId: string; requestPrivacy: boolean },
+  ) => api<{ intent: DomainPurchaseIntentPublic }>(`${DOMAINS}/purchase-intents/${encodeURIComponent(id)}/confirm`, post(body)),
+  reconcileIntent: (id: string) =>
+    api<{ intent: DomainPurchaseIntentPublic }>(`${DOMAINS}/purchase-intents/${encodeURIComponent(id)}/reconcile`, post({})),
+  cancelIntent: (id: string) =>
+    api<{ intent: DomainPurchaseIntentPublic }>(`${DOMAINS}/purchase-intents/${encodeURIComponent(id)}/cancel`, post({})),
+  registrants: () => api<{ profiles: RegistrantProfileSummary[] }>(`${DOMAINS}/registrant-profiles`),
+  getRegistrant: (id: string) =>
+    api<{ profile: RegistrantProfileInput & { id: string } }>(`${DOMAINS}/registrant-profiles/${encodeURIComponent(id)}`),
+  saveRegistrant: (input: RegistrantProfileInput, id?: string) =>
+    api<{ profile: RegistrantProfileSummary }>(
+      id ? `${DOMAINS}/registrant-profiles/${encodeURIComponent(id)}` : `${DOMAINS}/registrant-profiles`,
+      { method: id ? "PUT" : "POST", body: JSON.stringify(input) },
+    ),
+  targets: () => api<{ targets: DomainBindingTarget[] }>(`${DOMAINS}/targets`),
+  audit: () => api<{ events: DomainAuditEventPublic[] }>(`${DOMAINS}/audit`),
+  list: () => api<{ domains: DomainPublic[] }>(DOMAINS),
+  connect: (domain: string) => api<{ domain: DomainPublic }>(`${DOMAINS}/connect`, post({ domain })),
+  detail: (id: string) => api<DomainDetail>(`${DOMAINS}/${encodeURIComponent(id)}`),
+  refresh: (id: string) => api<{ domain: DomainPublic }>(`${DOMAINS}/${encodeURIComponent(id)}/refresh`, post({})),
+  verifyOwnership: (id: string) =>
+    api<{ domain: DomainPublic }>(`${DOMAINS}/${encodeURIComponent(id)}/verify-ownership`, post({})),
+  bind: (id: string, body: { targetId: string; subdomain?: string | null; includeWww?: boolean }) =>
+    api<{ domain: DomainPublic }>(`${DOMAINS}/${encodeURIComponent(id)}/bindings`, post(body)),
+  advanceBinding: (id: string, bindingId: string) =>
+    api<{ domain: DomainPublic }>(
+      `${DOMAINS}/${encodeURIComponent(id)}/bindings/${encodeURIComponent(bindingId)}/advance`,
+      post({}),
+    ),
+  removeBinding: (id: string, bindingId: string) =>
+    api<{ domain: DomainPublic }>(`${DOMAINS}/${encodeURIComponent(id)}/bindings/${encodeURIComponent(bindingId)}`, {
+      method: "DELETE",
+    }),
+  dns: (id: string) =>
+    api<{ managed: boolean; records: InfraDnsRecord[]; emailType: string | null }>(
+      `${DOMAINS}/${encodeURIComponent(id)}/dns`,
+    ),
+  changeDns: (
+    id: string,
+    changes: Array<
+      | { op: "upsert"; record: InfraDnsRecord }
+      | { op: "delete"; record: Pick<InfraDnsRecord, "name" | "type" | "address"> }
+    >,
+  ) => api<{ records: InfraDnsRecord[] }>(`${DOMAINS}/${encodeURIComponent(id)}/dns`, post({ changes })),
+};
+
+export function formatDomainMoney(value: DomainMoney | null | undefined) {
+  if (!value) return "Price unavailable";
+  return `${value.amount} ${value.currency}`;
+}

@@ -1,11 +1,11 @@
 import { FormEvent, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import type { TenantDomain } from "@lifeos-portal/shared";
 import { ApiError, portalApi } from "../lib/api";
 
 export function DomainsPage() {
   const [domains, setDomains] = useState<TenantDomain[]>([]);
   const [hostname, setHostname] = useState("");
-  const [buyDomain, setBuyDomain] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -44,26 +44,11 @@ export function DomainsPage() {
     }
   }
 
-  async function purchase(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      await portalApi.purchaseDomain(buyDomain.trim().toLowerCase());
-      setBuyDomain("");
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Purchase failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <div className="page marketplace">
       <header className="page-head">
         <p className="eyebrow">Master Distributor</p>
-        <h1>Domains</h1>
+        <h1>App hostnames</h1>
         <p className="lead">
           LifeOS subdomains are live after provision. Attach a custom hostname and we generate the CNAME
           records to verify.
@@ -122,21 +107,11 @@ export function DomainsPage() {
         </button>
       </form>
 
-      <form className="form" onSubmit={(e) => void purchase(e)}>
-        <h2 className="section-title">Buy and attach</h2>
-        <label>
-          Domain to purchase
-          <input
-            value={buyDomain}
-            onChange={(e) => setBuyDomain(e.target.value)}
-            placeholder="apex-stays.com"
-            required
-          />
-        </label>
-        <button className="btn btn-ghost" disabled={busy}>
-          Search, buy, attach
-        </button>
-      </form>
+      <h2 className="section-title">Buy a domain</h2>
+      <p className="muted">
+        Domain search, registration and DNS live in{" "}
+        <Link to="/infrastructure/domains">Infrastructure → Domains</Link>.
+      </p>
     </div>
   );
 }

@@ -128,6 +128,19 @@ export function tenantLabelFromHost(host: string): string | null {
   return label;
 }
 
+/**
+ * A host that may be an owner's own domain bound to a tenant App through
+ * Domain Infrastructure. Platform, preview and raw-IP hosts never are.
+ */
+export function isCustomDomainCandidate(host: string): boolean {
+  const hostname = host.split(":")[0]!.toLowerCase().replace(/\.$/, "");
+  if (!hostname.includes(".")) return false;
+  if (hostname === PUBLIC_ROOT_DOMAIN || hostname.endsWith(`.${PUBLIC_ROOT_DOMAIN}`)) return false;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)) return false;
+  const platformSuffixes = [".netlify.app", ".netlify.live", ".railway.app", ".localhost"];
+  return !platformSuffixes.some((suffix) => hostname.endsWith(suffix));
+}
+
 export function selectBrandSurface(input: {
   host: string;
   pathname: string;

@@ -4,6 +4,7 @@ import {
   digiconomyEdgeSurfaceFromPath,
   digitalSpaceUpstreamPath,
   digipediaUpstreamPath,
+  isCustomDomainCandidate,
   isDigitalSpacePath,
   isDigipediaPath,
   isNewsPath,
@@ -137,5 +138,24 @@ describe("Digital Space edge surface routing", () => {
       "https://digipedia-production.up.railway.app",
     );
     assert.equal(loc, "https://mrfundzman.getlifeos.app/u/mrfundzman");
+  });
+});
+
+describe("custom domain hosts", () => {
+  test("owner domains are candidates for Domain Infrastructure resolution", () => {
+    assert.equal(isCustomDomainCandidate("brand.example"), true);
+    assert.equal(isCustomDomainCandidate("www.brand.example"), true);
+    assert.equal(isCustomDomainCandidate("brand.example:443"), true);
+  });
+
+  test("platform, preview and raw hosts are not", () => {
+    assert.equal(isCustomDomainCandidate("getlifeos.app"), false);
+    assert.equal(isCustomDomainCandidate("mrfundzman.getlifeos.app"), false);
+    assert.equal(isCustomDomainCandidate("lifeos-portal1.netlify.app"), false);
+    assert.equal(isCustomDomainCandidate("deploy-preview-1--lifeos-portal1.netlify.app"), false);
+    assert.equal(isCustomDomainCandidate("gateway-production-c3f9.up.railway.app"), false);
+    assert.equal(isCustomDomainCandidate("localhost"), false);
+    assert.equal(isCustomDomainCandidate("75.2.60.5"), false);
+    assert.equal(tenantLabelFromHost("brand.example"), null);
   });
 });

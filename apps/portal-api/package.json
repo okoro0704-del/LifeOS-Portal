@@ -19,6 +19,7 @@
     "@lifeos-portal/offline-kernel": "*",
     "@lifeos-portal/shared": "*",
     "@sinclair/typebox": "^0.34.41",
+    "fast-xml-parser": "^5.11.2",
     "fastify": "^5.2.1",
     "fastify-plugin": "^5.0.1",
     "pg": "^8.23.0",

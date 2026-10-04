@@ -11,9 +11,11 @@ export function AppShell() {
           LifeOS <span>Business</span>
         </p>
         <nav>
-          <NavLink to="/dashboard/domains">Domains</NavLink>
+          <NavLink to="/dashboard/domains">App hostnames</NavLink>
           <NavLink to="/dashboard/verticals">Verticals</NavLink>
           <a href={`${GUEST_PORTAL_ORIGIN}/app/business`}>Add verticals</a>
+          <p className="nav-group">Infrastructure</p>
+          <NavLink to="/infrastructure/domains">Domains</NavLink>
         </nav>
         <div className="sidebar-foot">
           <p className="mono muted small">{user?.trustId}</p>

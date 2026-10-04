@@ -482,6 +482,64 @@ fieldset {
   border-radius: 12px;
 }
 
+.banner-info {
+  background: var(--los-accent-soft);
+  color: var(--los-accent-strong);
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  margin: 1rem 0;
+}
+.banner-info p,
+.banner-error p {
+  margin: 0.35rem 0 0;
+}
+.badge + .badge,
+.mono .badge,
+td .badge + .badge {
+  margin-left: 0.4rem;
+}
+.badge-ok {
+  background: var(--los-accent-soft);
+  color: var(--los-accent-strong);
+}
+.badge-warn {
+  background: #fff4dc;
+  color: #8a5a00;
+}
+.badge-bad {
+  background: var(--los-danger-soft);
+  color: var(--los-danger);
+}
+.nav-group {
+  margin: 0.9rem 0 0.2rem;
+  padding: 0 0.75rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 650;
+  color: var(--los-muted);
+}
+.form select {
+  font: inherit;
+  padding: 0.7rem 0.8rem;
+  border-radius: 12px;
+  border: 1px solid var(--los-border-strong);
+  background: var(--los-surface);
+}
+.confirm-box {
+  margin-top: 1.5rem;
+  padding: 1.25rem 1.35rem;
+  border-radius: var(--los-radius);
+  border: 2px solid var(--los-accent);
+  background: var(--los-surface);
+}
+.confirm-grid {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+.purchase-status {
+  margin-top: 1.5rem;
+}
+
 .stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
