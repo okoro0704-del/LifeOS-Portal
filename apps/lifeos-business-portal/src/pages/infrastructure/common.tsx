@@ -3,6 +3,7 @@ import { ApiError } from "../../lib/api";
 
 const FRIENDLY: Record<string, string> = {
   guest_not_permitted: "Sign in with your Portal account. Guest/test sessions cannot change domains.",
+  insecure_auth_mode: "Production domain changes are locked while development sign-in is enabled on the gateway.",
   origin_not_allowed: "This page is not a trusted origin for domain changes.",
   master_device_required: "This action needs TrustID confirmation on your bound Master Device.",
   biometric_required: "This action needs TrustID biometric confirmation.",
@@ -33,7 +34,12 @@ export function ProviderBanner({ status }: { status: DomainInfrastructureStatus 
           ) : null}
         </p>
       ) : null}
-      {!sandbox && !status.purchasesEnabled ? (
+      {status.insecureAuth ? (
+        <p className="small">
+          Production domain changes are locked: the gateway still allows development sign-in. Turn off
+          BYPASS_TRUST_ID and use a real owner sign-in first.
+        </p>
+      ) : !sandbox && !status.purchasesEnabled ? (
         <p className="small">Production purchases are switched off (DOMAIN_PURCHASES_ENABLED).</p>
       ) : null}
       <p className="small muted">

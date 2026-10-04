@@ -69,15 +69,13 @@ test("guest operator can search but cannot create intents, connect or confirm", 
   assert.equal(fake.count("namecheap.domains.create"), 0);
 });
 
-test("production purchases are refused until DOMAIN_PURCHASES_ENABLED=true", async () => {
+async function productionService(extraEnv: Record<string, string> = {}) {
   const { createStore } = await import("../../src/store.js");
   const { DomainInfrastructureService } = await import("../../src/domains/service.js");
   const { resolveDomainProviderConfig } = await import("../../src/domains/config.js");
   const store = createStore();
-  const cfg = resolveDomainProviderConfig({ ...process.env, NODE_ENV: "production", NAMECHEAP_ENV: "production" });
-  assert.equal(cfg.environment, "PRODUCTION");
-  assert.equal(cfg.purchasesEnabled, false);
-  let registerCalls = 0;
+  const cfg = resolveDomainProviderConfig({ ...process.env, NODE_ENV: "production", NAMECHEAP_ENV: "production", ...extraEnv });
+  const calls = { register: 0 };
   const provider = {
     kind: "namecheap" as const,
     label: "Stub",
@@ -96,7 +94,7 @@ test("production purchases are refused until DOMAIN_PURCHASES_ENABLED=true", asy
       priceSource: "PROVIDER_PRICE_LIST" as const,
     }),
     register: async () => {
-      registerCalls += 1;
+      calls.register += 1;
       throw new Error("must not be called");
     },
     listOwnedDomains: async () => [],
@@ -121,6 +119,13 @@ test("production purchases are refused until DOMAIN_PURCHASES_ENABLED=true", asy
     resolver: { resolve4: async () => [], resolveCname: async () => [], resolveTxt: async () => [] },
     httpsProbe: async () => ({ status: "PENDING", httpStatus: null, tenant: null, detail: null }),
   });
+  return { cfg, service, calls };
+}
+
+test("production purchases are refused until DOMAIN_PURCHASES_ENABLED=true", async () => {
+  const { cfg, service, calls } = await productionService();
+  assert.equal(cfg.environment, "PRODUCTION");
+  assert.equal(cfg.purchasesEnabled, false);
   const actor = { userId: "u_admin", subject: "TD-PLATFORM", isAdmin: true };
   const profile = service.saveRegistrant(actor, {
     label: "P",
@@ -147,5 +152,55 @@ test("production purchases are refused until DOMAIN_PURCHASES_ENABLED=true", asy
     }),
     (err: unknown) => (err as { code?: string }).code === "PURCHASES_DISABLED",
   );
-  assert.equal(registerCalls, 0);
+  assert.equal(calls.register, 0);
+});
+
+test("production domain changes are refused while dev-session sign-in is enabled", async () => {
+  const Fastify = (await import("fastify")).default;
+  const { registerDomainInfrastructureRoutes } = await import("../../src/routes/domain-infrastructure.js");
+  const { service, calls } = await productionService({ DOMAIN_PURCHASES_ENABLED: "true" });
+  const quote = await service.createQuote({ userId: "u_dev_admin", subject: "TD-PORTAL-DEV", isAdmin: true }, "dev-hole.com");
+
+  async function appWith(devAuthEnabled: boolean) {
+    const mini = Fastify();
+    // Exactly what /auth/dev-session { platformAdmin: true } yields: a real, non-guest ADMIN session.
+    mini.addHook("preHandler", async (req) => {
+      req.portalUser = { id: "u_dev_admin", trustId: "TD-PORTAL-DEV", role: "ADMIN", roles: ["tenant", "platform_admin"] } as never;
+      req.portalSessionToken = "dev-session-token";
+    });
+    await registerDomainInfrastructureRoutes(mini, service, { devAuthEnabled: () => devAuthEnabled });
+    await mini.ready();
+    return mini;
+  }
+
+  const insecure = await appWith(true);
+  const headers = { origin: "https://business.getlifeos.app", "x-portal-session": "dev-session-token" };
+  const status = await insecure.inject({ method: "GET", url: "/v1/infrastructure/domains/status", headers });
+  assert.equal(status.json().status.insecureAuth, true);
+  assert.equal(status.json().status.purchasesEnabled, false);
+  for (const [method, url, payload] of [
+    ["POST", "/v1/infrastructure/domains/purchase-intents", { quoteId: quote.id, idempotencyKey: "dev-hole-0123456789" }],
+    ["POST", "/v1/infrastructure/domains/purchase-intents/dpi_any/confirm", { confirmDomain: "dev-hole.com", confirmTotal: quote.total, registrantProfileId: "reg_x" }],
+    ["POST", "/v1/infrastructure/domains/registrant-profiles", { label: "x" }],
+    ["POST", "/v1/infrastructure/domains/connect", { domain: "dev-hole.example" }],
+    ["POST", "/v1/infrastructure/domains/dom_any/dns", { changes: [] }],
+  ] as const) {
+    const res = await insecure.inject({ method, url, headers, payload });
+    assert.equal(res.statusCode, 403, `${url}: ${res.body}`);
+    assert.equal(res.json().error, "insecure_auth_mode", url);
+  }
+  const search = await insecure.inject({ method: "POST", url: "/v1/infrastructure/domains/search", headers, payload: { query: "devhole", tlds: ["com"] } });
+  assert.equal(search.statusCode, 200, "read-only search stays available");
+  await insecure.close();
+
+  const secure = await appWith(false);
+  const intent = await secure.inject({
+    method: "POST",
+    url: "/v1/infrastructure/domains/purchase-intents",
+    headers,
+    payload: { quoteId: quote.id, idempotencyKey: "dev-hole-0123456789" },
+  });
+  assert.equal(intent.statusCode, 200, intent.body);
+  await secure.close();
+  assert.equal(calls.register, 0);
 });

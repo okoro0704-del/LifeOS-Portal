@@ -23,6 +23,8 @@ export type DomainInfrastructureStatus = {
   egressIp: DomainEgressIpStatus;
   supportedTlds: readonly string[];
   purchaseMode: "OWNER_ADMIN_TEST";
+  /** True when the gateway still allows development sign-in, so PRODUCTION domain changes are refused. */
+  insecureAuth?: boolean;
 };
 
 /** Lifecycle of a domain owned or connected through Domain Infrastructure. */

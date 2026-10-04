@@ -3,6 +3,7 @@ import { z, ZodError } from "zod";
 import { BUSINESS_PORTAL_ORIGIN, PLATFORM_ADMIN_ORIGIN } from "@lifeos-portal/shared";
 import { config } from "../config.js";
 import { hasRole, requireSession } from "../lib/auth.js";
+import { isDevAuthEnabled } from "../lib/dev-auth.js";
 import { GUEST_ADMIN_ID, GUEST_TESTER_ID } from "../lib/guest-auth.js";
 import { HttpError } from "../lib/http.js";
 import { identitySubject } from "../lib/local-auth.js";
@@ -57,8 +58,16 @@ function actorOf(req: FastifyRequest): DomainActor {
  * domain.search/quote/dns.read → read
  * domain.bind / registrant / connect / purchase-intent → write (real session, trusted origin)
  * domain.purchase / domain.dns.write (manual) → strong (+ platform admin + TrustID Master Device step-up)
+ *
+ * `insecureAuth`: PRODUCTION registrar + development sign-in enabled. /auth/dev-session can mint
+ * admin sessions for anyone in that mode, so every production domain change is refused.
  */
-async function authorize(req: FastifyRequest, reply: FastifyReply, level: Authority): Promise<DomainActor | null> {
+async function authorize(
+  req: FastifyRequest,
+  reply: FastifyReply,
+  level: Authority,
+  insecureAuth = false,
+): Promise<DomainActor | null> {
   if (!requireSession(req, reply)) return null;
   if (level === "read") return actorOf(req);
 
@@ -66,6 +75,14 @@ async function authorize(req: FastifyRequest, reply: FastifyReply, level: Author
     reply.code(403).send({
       error: "guest_not_permitted",
       message: "Sign in with your Portal account. Guest/test sessions cannot change domains.",
+    });
+    return null;
+  }
+  if (insecureAuth) {
+    reply.code(403).send({
+      error: "insecure_auth_mode",
+      message:
+        "Production domain changes are disabled while development sign-in (BYPASS_TRUST_ID / dev-session) is enabled on the gateway.",
     });
     return null;
   }
@@ -148,14 +165,29 @@ const dnsBody = z.object({
     .max(20),
 });
 
-export async function registerDomainInfrastructureRoutes(app: FastifyInstance, service: DomainInfrastructureService) {
+export type DomainRouteOptions = {
+  /** Defaults to the gateway's real dev-session switch. */
+  devAuthEnabled?: () => boolean;
+};
+
+export async function registerDomainInfrastructureRoutes(
+  app: FastifyInstance,
+  service: DomainInfrastructureService,
+  options: DomainRouteOptions = {},
+) {
+  const devAuthEnabled = options.devAuthEnabled ?? (() => isDevAuthEnabled(config));
+  const insecureAuth = () => service.status(null).environment === "PRODUCTION" && devAuthEnabled();
+  const guard = (req: FastifyRequest, reply: FastifyReply, level: Authority) =>
+    authorize(req, reply, level, insecureAuth());
+
   app.get(`${PREFIX}/status`, async (req, reply) => {
     if (!requireSession(req, reply)) return;
-    return { status: service.status(actorOf(req)) };
+    const status = service.status(actorOf(req));
+    return { status: insecureAuth() ? { ...status, purchasesEnabled: false, insecureAuth: true } : status };
   });
 
   app.get(`${PREFIX}/status/egress`, async (req, reply) => {
-    const actor = await authorize(req, reply, "read");
+    const actor = await guard(req, reply, "read");
     if (!actor) return;
     if (!actor.isAdmin) return reply.code(403).send({ error: "FORBIDDEN", message: "Administrator access required." });
     if (process.env.NODE_ENV === "test") return { observedIp: null, note: "network disabled in tests" };
@@ -172,7 +204,7 @@ export async function registerDomainInfrastructureRoutes(app: FastifyInstance, s
   });
 
   app.post(`${PREFIX}/search`, async (req, reply) => {
-    const actor = await authorize(req, reply, "read");
+    const actor = await guard(req, reply, "read");
     if (!actor) return;
     try {
       const body = searchBody.parse(req.body ?? {});
@@ -183,7 +215,7 @@ export async function registerDomainInfrastructureRoutes(app: FastifyInstance, s
   });
 
   app.post(`${PREFIX}/quotes`, async (req, reply) => {
-    const actor = await authorize(req, reply, "read");
+    const actor = await guard(req, reply, "read");
     if (!actor) return;
     try {
       const body = quoteBody.parse(req.body ?? {});
@@ -194,7 +226,7 @@ export async function registerDomainInfrastructureRoutes(app: FastifyInstance, s
   });
 
   app.get(`${PREFIX}/quotes/:id`, async (req, reply) => {
-    const actor = await authorize(req, reply, "read");
+    const actor = await guard(req, reply, "read");
     if (!actor) return;
     try {
       return { quote: service.getQuote(actor, (req.params as { id: string }).id) };
@@ -204,7 +236,7 @@ export async function registerDomainInfrastructureRoutes(app: FastifyInstance, s
   });
 
   app.post(`${PREFIX}/purchase-intents`, async (req, reply) => {
-    const actor = await authorize(req, reply, "write");
+    const actor = await guard(req, reply, "write");
     if (!actor) return;
     try {
       const body = intentBody.parse(req.body ?? {});
@@ -215,7 +247,7 @@ export async function registerDomainInfrastructureRoutes(app: FastifyInstance, s
   });
 
   app.get(`${PREFIX}/purchase-intents/:id`, async (req, reply) => {
-    const actor = await authorize(req, reply, "read");
+    const actor = await guard(req, reply, "read");
     if (!actor) return;
     try {
       return { intent: service.getIntent(actor, (req.params as { id: string }).id) };
@@ -225,7 +257,7 @@ export async function registerDomainInfrastructureRoutes(app: FastifyInstance, s
   });
 
   app.post(`${PREFIX}/purchase-intents/:id/confirm`, async (req, reply) => {
-    const actor = await authorize(req, reply, "strong");
+    const actor = await guard(req, reply, "strong");
     if (!actor) return;
     try {
       const body = confirmBody.parse(req.body ?? {});
@@ -236,7 +268,7 @@ export async function registerDomainInfrastructureRoutes(app: FastifyInstance, s
   });
 
   app.post(`${PREFIX}/purchase-intents/:id/reconcile`, async (req, reply) => {
-    const actor = await authorize(req, reply, "write");
+    const actor = await guard(req, reply, "write");
     if (!actor) return;
     try {
       return { intent: await service.reconcileIntent(actor, (req.params as { id: string }).id) };
@@ -246,7 +278,7 @@ export async function registerDomainInfrastructureRoutes(app: FastifyInstance, s
   });
 
   app.post(`${PREFIX}/purchase-intents/:id/cancel`, async (req, reply) => {
-    const actor = await authorize(req, reply, "write");
+    const actor = await guard(req, reply, "write");
     if (!actor) return;
     try {
       return { intent: service.cancelIntent(actor, (req.params as { id: string }).id) };
@@ -256,13 +288,13 @@ export async function registerDomainInfrastructureRoutes(app: FastifyInstance, s
   });
 
   app.get(`${PREFIX}/registrant-profiles`, async (req, reply) => {
-    const actor = await authorize(req, reply, "read");
+    const actor = await guard(req, reply, "read");
     if (!actor) return;
     return { profiles: service.listRegistrants(actor) };
   });
 
   app.get(`${PREFIX}/registrant-profiles/:id`, async (req, reply) => {
-    const actor = await authorize(req, reply, "write");
+    const actor = await guard(req, reply, "write");
     if (!actor) return;
     try {
       return { profile: service.getRegistrant(actor, (req.params as { id: string }).id) };
@@ -272,7 +304,7 @@ export async function registerDomainInfrastructureRoutes(app: FastifyInstance, s
   });
 
   app.post(`${PREFIX}/registrant-profiles`, async (req, reply) => {
-    const actor = await authorize(req, reply, "write");
+    const actor = await guard(req, reply, "write");
     if (!actor) return;
     try {
       return { profile: service.saveRegistrant(actor, registrantProfileInputSchema.parse(req.body ?? {})) };
@@ -282,7 +314,7 @@ export async function registerDomainInfrastructureRoutes(app: FastifyInstance, s
   });
 
   app.put(`${PREFIX}/registrant-profiles/:id`, async (req, reply) => {
-    const actor = await authorize(req, reply, "write");
+    const actor = await guard(req, reply, "write");
     if (!actor) return;
     try {
       return {
@@ -298,25 +330,25 @@ export async function registerDomainInfrastructureRoutes(app: FastifyInstance, s
   });
 
   app.get(`${PREFIX}/targets`, async (req, reply) => {
-    const actor = await authorize(req, reply, "read");
+    const actor = await guard(req, reply, "read");
     if (!actor) return;
     return { targets: service.listTargets(actor) };
   });
 
   app.get(`${PREFIX}/audit`, async (req, reply) => {
-    const actor = await authorize(req, reply, "read");
+    const actor = await guard(req, reply, "read");
     if (!actor) return;
     return { events: service.listAudit(actor) };
   });
 
   app.get(PREFIX, async (req, reply) => {
-    const actor = await authorize(req, reply, "read");
+    const actor = await guard(req, reply, "read");
     if (!actor) return;
     return { domains: service.listDomains(actor) };
   });
 
   app.post(`${PREFIX}/connect`, async (req, reply) => {
-    const actor = await authorize(req, reply, "write");
+    const actor = await guard(req, reply, "write");
     if (!actor) return;
     try {
       return { domain: service.connectExisting(actor, connectBody.parse(req.body ?? {}).domain) };
@@ -326,7 +358,7 @@ export async function registerDomainInfrastructureRoutes(app: FastifyInstance, s
   });
 
   app.get(`${PREFIX}/:id`, async (req, reply) => {
-    const actor = await authorize(req, reply, "read");
+    const actor = await guard(req, reply, "read");
     if (!actor) return;
     try {
       return service.domainDetail(actor, (req.params as { id: string }).id);
@@ -336,7 +368,7 @@ export async function registerDomainInfrastructureRoutes(app: FastifyInstance, s
   });
 
   app.post(`${PREFIX}/:id/refresh`, async (req, reply) => {
-    const actor = await authorize(req, reply, "write");
+    const actor = await guard(req, reply, "write");
     if (!actor) return;
     try {
       return { domain: await service.refreshDomain(actor, (req.params as { id: string }).id) };
@@ -346,7 +378,7 @@ export async function registerDomainInfrastructureRoutes(app: FastifyInstance, s
   });
 
   app.post(`${PREFIX}/:id/verify-ownership`, async (req, reply) => {
-    const actor = await authorize(req, reply, "write");
+    const actor = await guard(req, reply, "write");
     if (!actor) return;
     try {
       return { domain: await service.verifyOwnership(actor, (req.params as { id: string }).id) };
@@ -356,7 +388,7 @@ export async function registerDomainInfrastructureRoutes(app: FastifyInstance, s
   });
 
   app.post(`${PREFIX}/:id/bindings`, async (req, reply) => {
-    const actor = await authorize(req, reply, "write");
+    const actor = await guard(req, reply, "write");
     if (!actor) return;
     try {
       return { domain: service.createBinding(actor, (req.params as { id: string }).id, bindingBody.parse(req.body ?? {})) };
@@ -366,7 +398,7 @@ export async function registerDomainInfrastructureRoutes(app: FastifyInstance, s
   });
 
   app.post(`${PREFIX}/:id/bindings/:bindingId/advance`, async (req, reply) => {
-    const actor = await authorize(req, reply, "write");
+    const actor = await guard(req, reply, "write");
     if (!actor) return;
     const { id, bindingId } = req.params as { id: string; bindingId: string };
     try {
@@ -377,7 +409,7 @@ export async function registerDomainInfrastructureRoutes(app: FastifyInstance, s
   });
 
   app.delete(`${PREFIX}/:id/bindings/:bindingId`, async (req, reply) => {
-    const actor = await authorize(req, reply, "write");
+    const actor = await guard(req, reply, "write");
     if (!actor) return;
     const { id, bindingId } = req.params as { id: string; bindingId: string };
     try {
@@ -388,7 +420,7 @@ export async function registerDomainInfrastructureRoutes(app: FastifyInstance, s
   });
 
   app.get(`${PREFIX}/:id/dns`, async (req, reply) => {
-    const actor = await authorize(req, reply, "read");
+    const actor = await guard(req, reply, "read");
     if (!actor) return;
     try {
       return await service.getDns(actor, (req.params as { id: string }).id);
@@ -398,7 +430,7 @@ export async function registerDomainInfrastructureRoutes(app: FastifyInstance, s
   });
 
   app.post(`${PREFIX}/:id/dns`, async (req, reply) => {
-    const actor = await authorize(req, reply, "strong");
+    const actor = await guard(req, reply, "strong");
     if (!actor) return;
     try {
       const body = dnsBody.parse(req.body ?? {});
