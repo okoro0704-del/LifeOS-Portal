@@ -1,8 +1,8 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z, ZodError } from "zod";
-import { BUSINESS_PORTAL_ORIGIN, PLATFORM_ADMIN_ORIGIN } from "@lifeos-portal/shared";
 import { config } from "../config.js";
 import { hasRole, requireSession } from "../lib/auth.js";
+import { isFirstPartyOrigin } from "../lib/origins.js";
 import { isDevAuthEnabled } from "../lib/dev-auth.js";
 import { GUEST_ADMIN_ID, GUEST_TESTER_ID } from "../lib/guest-auth.js";
 import { HttpError } from "../lib/http.js";
@@ -15,23 +15,6 @@ import { registrantProfileInputSchema } from "../domains/registrant.js";
 const PREFIX = "/v1/infrastructure/domains";
 
 type Authority = "read" | "write" | "strong";
-
-function originHost(value: string) {
-  try {
-    return new URL(value).origin.toLowerCase();
-  } catch {
-    return "";
-  }
-}
-
-function allowedOrigins() {
-  return new Set(
-    [...config.corsOrigins, config.businessPortalUrl, config.platformAdminUrl, BUSINESS_PORTAL_ORIGIN, PLATFORM_ADMIN_ORIGIN]
-      .filter(Boolean)
-      .map(originHost)
-      .filter(Boolean),
-  );
-}
 
 function isGuestPrincipal(req: FastifyRequest) {
   const user = req.portalUser;
@@ -88,7 +71,7 @@ async function authorize(
   }
   const origin = req.headers.origin;
   if (origin) {
-    if (!allowedOrigins().has(originHost(origin))) {
+    if (!isFirstPartyOrigin(origin)) {
       reply.code(403).send({ error: "origin_not_allowed", message: "Request origin is not trusted for domain changes." });
       return null;
     }

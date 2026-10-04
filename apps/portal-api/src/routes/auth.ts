@@ -1,6 +1,7 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { config } from "../config.js";
+import { isFirstPartyOrigin } from "../lib/origins.js";
 import {
   authStatusFor,
   clearSessionCookie,
@@ -15,6 +16,35 @@ import { isLocalAuthEnabled, isTrustIdEnabled, rolesForAccount } from "../lib/lo
 import type { PortalStore, PortalUser } from "../store.js";
 import { isDevAuthEnabled } from "../lib/dev-auth.js";
 import { checkTrustIdAvailable, fetchTrustIdUserInfo, mapTrustIdError } from "../services/trustid.js";
+
+const LOGIN_FAILURE_LIMIT = 10;
+const LOGIN_FAILURE_WINDOW_MS = 15 * 60_000;
+
+/** Per-account failed-password counter. The per-IP rate limit alone is weak behind proxies. */
+function createLoginThrottle() {
+  const failures = new Map<string, { count: number; firstAt: number }>();
+  const current = (email: string) => {
+    const entry = failures.get(email);
+    if (entry && Date.now() - entry.firstAt > LOGIN_FAILURE_WINDOW_MS) {
+      failures.delete(email);
+      return undefined;
+    }
+    return entry;
+  };
+  return {
+    blocked: (email: string) => (current(email)?.count ?? 0) >= LOGIN_FAILURE_LIMIT,
+    fail: (email: string) => {
+      const entry = current(email);
+      if (entry) {
+        entry.count += 1;
+        return;
+      }
+      if (failures.size >= 10_000) failures.delete(failures.keys().next().value!);
+      failures.set(email, { count: 1, firstAt: Date.now() });
+    },
+    clear: (email: string) => failures.delete(email),
+  };
+}
 
 function issueSession(store: PortalStore, user: PortalUser, trustIdAccessToken?: string) {
   const rawToken = randomToken(32);
@@ -45,10 +75,22 @@ export async function registerAuthRoutes(app: FastifyInstance, store: PortalStor
     return { available: await checkTrustIdAvailable(), mode: config.trustIdMode, enableTrustId: config.enableTrustId };
   });
 
-  app.post("/auth/register", async (req, reply) => {
+  /** Production: credentials may only be posted from a Portal surface (blocks login CSRF). */
+  function credentialOriginAllowed(req: FastifyRequest, reply: FastifyReply) {
+    const origin = req.headers.origin;
+    if (config.nodeEnv !== "production" || !origin || isFirstPartyOrigin(origin)) return true;
+    reply.code(403).send({ error: "origin_not_allowed", message: "Sign in from the LifeOS Portal." });
+    return false;
+  }
+
+  /** Production per-IP ceiling for endpoints that take credentials or mint sessions. */
+  const credentialRoute = config.nodeEnv === "production" ? { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } } : {};
+
+  app.post("/auth/register", credentialRoute, async (req, reply) => {
     if (!isLocalAuthEnabled()) {
       return reply.code(404).send({ error: "not_found", message: "Not found" });
     }
+    if (!credentialOriginAllowed(req, reply)) return;
     const body = z
       .object({
         email: z.string().email(),
@@ -71,15 +113,27 @@ export async function registerAuthRoutes(app: FastifyInstance, store: PortalStor
     return { ok: true, sessionToken: rawToken, user: toPublicUser(user) };
   });
 
-  app.post("/auth/login", async (req, reply) => {
+  const loginThrottle = createLoginThrottle();
+
+  app.post("/auth/login", credentialRoute, async (req, reply) => {
     if (!isLocalAuthEnabled()) {
       return reply.code(404).send({ error: "not_found", message: "Not found" });
     }
-    const body = z.object({ email: z.string().email(), password: z.string().min(1) }).parse(req.body);
-    const user = store.getUserByEmail(body.email);
+    if (!credentialOriginAllowed(req, reply)) return;
+    const body = z.object({ email: z.string().email(), password: z.string().min(1).max(1024) }).parse(req.body);
+    const email = body.email.trim().toLowerCase();
+    if (loginThrottle.blocked(email)) {
+      return reply.code(429).send({
+        error: "too_many_attempts",
+        message: "Too many failed sign-in attempts for this account. Try again in 15 minutes.",
+      });
+    }
+    const user = store.getUserByEmail(email);
     if (!user?.passwordHash || !verifyPassword(body.password, user.passwordHash)) {
+      loginThrottle.fail(email);
       return reply.code(401).send({ error: "invalid_credentials", message: "Email or password is incorrect." });
     }
+    loginThrottle.clear(email);
     if (user.suspended) {
       return reply.code(403).send({ error: "suspended", message: "This account is suspended." });
     }
@@ -88,7 +142,7 @@ export async function registerAuthRoutes(app: FastifyInstance, store: PortalStor
     return { ok: true, sessionToken: rawToken, user: toPublicUser(user) };
   });
 
-  app.post("/auth/session", async (req, reply) => {
+  app.post("/auth/session", credentialRoute, async (req, reply) => {
     if (!config.enableTrustId) {
       return reply.code(503).send({
         error: "trustid_disabled",
@@ -117,44 +171,46 @@ export async function registerAuthRoutes(app: FastifyInstance, store: PortalStor
     return { ok: true, sessionToken: rawToken, user: toPublicUser(user) };
   });
 
-  /** Local/dev only — never a password. 404 unless bypass / development / mock. */
-  app.post("/auth/dev-session", async (req, reply) => {
-    if (!isDevAuthEnabled(config)) {
-      return reply.code(404).send({ error: "not_found", message: "Not found" });
-    }
-    const body = z
-      .object({
-        trustId: z.string().min(2).default("TD-PORTAL-DEV"),
-        platformAdmin: z.boolean().optional(),
-      })
-      .parse(req.body ?? {});
-    const role = body.platformAdmin ? "ADMIN" : "USER";
-    if (!isTrustIdEnabled()) {
+  /** Local/dev only — never a password. Not registered at all in production. */
+  if (config.nodeEnv !== "production") {
+    app.post("/auth/dev-session", async (req, reply) => {
+      if (!isDevAuthEnabled(config)) {
+        return reply.code(404).send({ error: "not_found", message: "Not found" });
+      }
+      const body = z
+        .object({
+          trustId: z.string().min(2).default("TD-PORTAL-DEV"),
+          platformAdmin: z.boolean().optional(),
+        })
+        .parse(req.body ?? {});
+      const role = body.platformAdmin ? "ADMIN" : "USER";
+      if (!isTrustIdEnabled()) {
+        const user = store.upsertUser({
+          trustId: body.trustId,
+          displayName: publicDisplayName(body.trustId),
+          trustTier: body.platformAdmin ? 3 : 1,
+          identityStatus: "local",
+          role,
+          roles: rolesForAccount(role),
+        });
+        const { rawToken, expiresAt } = issueSession(store, user);
+        setSessionCookie(reply, rawToken, expiresAt);
+        return { ok: true, sessionToken: rawToken, user: toPublicUser(user) };
+      }
+      const accessToken = body.platformAdmin ? `mock:admin:${body.trustId}` : `mock:${body.trustId}`;
+      const identity = await fetchTrustIdUserInfo(accessToken);
       const user = store.upsertUser({
-        trustId: body.trustId,
-        displayName: publicDisplayName(body.trustId),
-        trustTier: body.platformAdmin ? 3 : 1,
-        identityStatus: "local",
-        role,
-        roles: rolesForAccount(role),
+        trustId: identity.trustId,
+        displayName: publicDisplayName(identity.trustId),
+        trustTier: identity.trustLevel?.tier ?? null,
+        identityStatus: identity.identityStatus ?? "verified",
+        roles: identity.roles,
       });
-      const { rawToken, expiresAt } = issueSession(store, user);
+      const { rawToken, expiresAt } = issueSession(store, user, accessToken);
       setSessionCookie(reply, rawToken, expiresAt);
       return { ok: true, sessionToken: rawToken, user: toPublicUser(user) };
-    }
-    const accessToken = body.platformAdmin ? `mock:admin:${body.trustId}` : `mock:${body.trustId}`;
-    const identity = await fetchTrustIdUserInfo(accessToken);
-    const user = store.upsertUser({
-      trustId: identity.trustId,
-      displayName: publicDisplayName(identity.trustId),
-      trustTier: identity.trustLevel?.tier ?? null,
-      identityStatus: identity.identityStatus ?? "verified",
-      roles: identity.roles,
     });
-    const { rawToken, expiresAt } = issueSession(store, user, accessToken);
-    setSessionCookie(reply, rawToken, expiresAt);
-    return { ok: true, sessionToken: rawToken, user: toPublicUser(user) };
-  });
+  }
 
   app.get("/auth/me", async (req, reply) => {
     if (!requireSession(req, reply)) return;
@@ -236,7 +292,7 @@ export async function registerAuthRoutes(app: FastifyInstance, store: PortalStor
     return { code, expiresInSec: 90 };
   });
 
-  app.post("/auth/handoff/exchange", async (req, reply) => {
+  app.post("/auth/handoff/exchange", credentialRoute, async (req, reply) => {
     const body = z.object({ code: z.string().min(8).max(128) }).parse(req.body ?? {});
     const entry = handoffs.get(body.code);
     handoffs.delete(body.code);

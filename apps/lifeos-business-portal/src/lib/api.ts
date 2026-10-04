@@ -151,21 +151,6 @@ export const portalApi = {
   logout: () => api<{ ok: boolean }>("/auth/logout", { method: "POST" }),
   tenantMe: () => api<{ user: PortalUserPublic; access: TenantPortalAccess }>("/v1/tenant/me"),
   domains: () => api<{ domains: TenantDomain[] }>("/v1/tenant/domains"),
-  attachCustomDomain: (hostname: string) =>
-    api<{ domain: TenantDomain; verification: { cnameTarget: string; dnsRecords: TenantDomain["dnsRecords"] } }>(
-      "/v1/tenant/domains/custom",
-      { method: "POST", body: JSON.stringify({ hostname }) },
-    ),
-  verifyDomain: (domainId: string) =>
-    api<{ domain: TenantDomain }>("/v1/tenant/domains/verify", {
-      method: "POST",
-      body: JSON.stringify({ domainId }),
-    }),
-  purchaseDomain: (domain: string) =>
-    api<{ domain: TenantDomain }>("/v1/tenant/domains/purchase", {
-      method: "POST",
-      body: JSON.stringify({ domain }),
-    }),
   verticals: () => api<{ verticals: TenantVertical[] }>("/v1/tenant/verticals"),
   toggleFeature: (installId: string, feature: string, enabled: boolean) =>
     api<{ vertical: TenantVertical }>(`/v1/tenant/verticals/${installId}/toggle`, {

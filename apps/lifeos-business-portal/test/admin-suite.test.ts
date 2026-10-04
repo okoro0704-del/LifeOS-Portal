@@ -13,6 +13,10 @@ import {
 } from "@lifeos-portal/shared";
 
 process.env.NODE_ENV = "test";
+// Sessions come from mock TrustID tokens via /auth/session, which only exists with TrustID enabled.
+process.env.ENABLE_TRUST_ID = "true";
+process.env.BYPASS_TRUST_ID = "false";
+process.env.BYPASS_AUTH_FOR_TESTING = "false";
 process.env.TRUSTID_MODE = "mock";
 process.env.INSTALL_MODE = "local";
 process.env.COOKIE_SECRET = "portal-admin-suite-cookie";
@@ -117,7 +121,7 @@ describe("admin suite", () => {
     expect(body.access.sourceInstallId).toBe(install.id);
   });
 
-  test("attaches a custom domain CNAME via Master Distributor", async () => {
+  test("attaches a custom domain CNAME via Master Distributor; going live is Domain Infrastructure's job", async () => {
     const { token } = await session("TD-CNAME-OWNER");
     await provisionHotel(token, {
       displayName: "Harbor Inn",
@@ -149,8 +153,13 @@ describe("admin suite", () => {
       headers: { "x-portal-session": token },
       payload: { domainId: body.domain.domainId },
     });
-    expect(verified.statusCode).toBe(200);
-    expect(verified.json().domain.dnsStatus).toBe("ACTIVE");
+    expect(verified.statusCode).toBe(409);
+    expect(verified.json().error).toBe("use_domain_infrastructure");
+
+    const list = await app.inject({ method: "GET", url: "/v1/tenant/domains", headers: { "x-portal-session": token } });
+    const row = (list.json().domains as TenantDomain[]).find((d) => d.hostname === hostname)!;
+    expect(row.dnsStatus).toBe("PENDING");
+    expect(row.sslStatus).toBe("PENDING");
   });
 
   test("blocks non-admin Trust ID tokens from platform admin", async () => {

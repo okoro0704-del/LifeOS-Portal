@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { PortalStore } from "../store.js";
 import type { DistributorClient } from "../services/distributor.js";
+import { sendLegacyPurchaseGone } from "../services/legacy-domains.js";
 import { HttpError } from "../lib/http.js";
 import { findInstallByHost, updateTenantSite } from "../services/tenant-site.js";
 import {
@@ -443,19 +444,14 @@ export async function registerTenantAppRoutes(
       if (actor.role !== "owner") throw new HttpError("Only the owner can attach a domain.", 403, "forbidden");
       if (!distributor) throw new HttpError("Domain service is not ready.", 503, "unavailable");
       const body = z.object({ hostname: fqdn, purchase: z.boolean().optional() }).parse(req.body);
+      if (body.purchase) return sendLegacyPurchaseGone(reply);
       const hostname = body.hostname.toLowerCase();
       if (store.getDomainByHostname(hostname)) throw new HttpError("Domain already attached", 409, "conflict");
-      const provisioned = body.purchase
-        ? await distributor.purchaseDomain({
-            tenantId: row.distributorTenantId,
-            subdomain: row.subdomain,
-            domain: hostname,
-          })
-        : await distributor.provisionCustomDomain({
-            tenantId: row.distributorTenantId,
-            subdomain: row.subdomain,
-            customDomain: hostname,
-          });
+      const provisioned = await distributor.provisionCustomDomain({
+        tenantId: row.distributorTenantId,
+        subdomain: row.subdomain,
+        customDomain: hostname,
+      });
       const domain = store.createDomain({
         installId: row.id,
         distributorTenantId: row.distributorTenantId,
@@ -464,9 +460,9 @@ export async function registerTenantAppRoutes(
         hostname,
         cnameTarget: provisioned.cnameTarget,
         dnsRecords: provisioned.dnsRecords,
-        dnsStatus: provisioned.dnsStatus === "ACTIVE" ? "ACTIVE" : "PENDING",
-        sslStatus: provisioned.sslStatus === "ACTIVE" ? "ACTIVE" : "PENDING",
-        purchased: Boolean(body.purchase),
+        dnsStatus: "PENDING",
+        sslStatus: "PENDING",
+        purchased: false,
       });
       store.updateInstall(row.id, { customDomain: hostname, domainId: provisioned.domainId });
       return reply.code(201).send({

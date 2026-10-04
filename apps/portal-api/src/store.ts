@@ -136,6 +136,7 @@ export type Snapshot = {
   dataZoneAudit: DataZoneAuditEvent[];
   pushTokens: PortalPushToken[];
   domainInfra?: DomainInfraSnapshot;
+  meta?: Record<string, string>;
 };
 
 export type PortalPushToken = {
@@ -176,6 +177,10 @@ export type PortalStore = {
   }): PortalSession;
   getSessionByTokenHash(tokenHash: string): PortalSession | undefined;
   deleteSession(tokenHash: string): void;
+  /** Revoke every session matching the predicate. Returns how many were removed. */
+  deleteSessions(predicate: (session: PortalSession) => boolean): number;
+  getMeta(key: string): string | undefined;
+  setMeta(key: string, value: string): void;
   createInstall(input: Omit<PortalInstall, "id" | "createdAt" | "updatedAt"> & { id?: string }): PortalInstall;
   updateInstall(id: string, patch: Partial<PortalInstall>): PortalInstall | undefined;
   deleteInstall(id: string): boolean;
@@ -276,6 +281,7 @@ export function createStore(opts?: {
   const domainInfra = Object.fromEntries(DOMAIN_INFRA_KINDS.map((kind) => [kind, new Map()])) as {
     [K in DomainInfraKind]: Map<string, DomainInfraCollections[K]>;
   };
+  const meta = new Map<string, string>();
   const persistPath = opts?.persistPath;
 
   function snapshot(): Snapshot {
@@ -297,6 +303,7 @@ export function createStore(opts?: {
       domainInfra: Object.fromEntries(
         DOMAIN_INFRA_KINDS.map((kind) => [kind, [...domainInfra[kind].values()]]),
       ) as DomainInfraSnapshot,
+      meta: Object.fromEntries(meta),
     };
   }
 
@@ -343,6 +350,7 @@ export function createStore(opts?: {
         const map = domainInfra[kind] as Map<string, { id: string }>;
         for (const row of (snap.domainInfra?.[kind] ?? []) as Array<{ id: string }>) map.set(row.id, row);
       }
+      for (const [key, value] of Object.entries(snap.meta ?? {})) meta.set(key, value);
     } catch {
       /* start empty */
     }
@@ -470,6 +478,24 @@ export function createStore(opts?: {
     },
     deleteSession(tokenHash) {
       sessions.delete(tokenHash);
+      persist();
+    },
+    deleteSessions(predicate) {
+      let removed = 0;
+      for (const [hash, session] of sessions) {
+        if (predicate(session)) {
+          sessions.delete(hash);
+          removed += 1;
+        }
+      }
+      if (removed) persist();
+      return removed;
+    },
+    getMeta(key) {
+      return meta.get(key);
+    },
+    setMeta(key, value) {
+      meta.set(key, value);
       persist();
     },
     createInstall(input) {

@@ -36,6 +36,10 @@ function problem(
  * Stack traces stay in logs, never in production responses.
  */
 async function errorHandlerPlugin(app: FastifyInstance) {
+  app.setNotFoundHandler((req, reply) => {
+    return reply.code(404).type("application/problem+json").send(problem(req, 404, "not_found", "Not found"));
+  });
+
   app.setErrorHandler((err: Error & { statusCode?: number; code?: string }, req: FastifyRequest, reply: FastifyReply) => {
     if (err instanceof HttpError) {
       return reply.code(err.statusCode).type("application/problem+json").send(

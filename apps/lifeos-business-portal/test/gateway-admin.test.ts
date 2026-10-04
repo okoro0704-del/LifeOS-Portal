@@ -5,6 +5,10 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import type { FastifyInstance } from "fastify";
 
 process.env.NODE_ENV = "test";
+// Mock TrustID (test mode only): sessions via /auth/session, step-up via X-TrustID-* headers.
+process.env.ENABLE_TRUST_ID = "true";
+process.env.BYPASS_TRUST_ID = "false";
+process.env.BYPASS_AUTH_FOR_TESTING = "false";
 process.env.TRUSTID_MODE = "mock";
 process.env.INSTALL_MODE = "local";
 process.env.GATEWAY_MODE = "local";

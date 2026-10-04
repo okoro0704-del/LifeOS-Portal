@@ -5,6 +5,7 @@ import { checkMasterDeviceBinding } from "../services/trustid-stepup.js";
 import { HttpError } from "../lib/http.js";
 import type { PortalStore } from "../store.js";
 import type { DistributorClient } from "../services/distributor.js";
+import { customDomainVerificationMoved } from "../services/legacy-domains.js";
 import {
   getTenantDetail,
   issueImpersonationToken,
@@ -52,7 +53,7 @@ export async function registerPlatformAdminRoutes(
   });
 
   app.post("/v1/admin/installs/purge-failed", async (req, reply) => {
-    if (!requirePlatformAdmin(req, reply)) return;
+    if (!(await checkMasterDeviceBinding(req, reply))) return;
     const result = purgeAllFailedInstalls(store);
     return { ok: true, ...result };
   });
@@ -98,6 +99,10 @@ export async function registerPlatformAdminRoutes(
     const domain = store.getDomainByDomainId(domainId) ?? store.getDomain(domainId);
     if (!domain) {
       return reply.code(404).send({ error: "not_found", message: "Route not found" });
+    }
+    if (domain.kind === "custom") {
+      const moved = customDomainVerificationMoved();
+      return reply.code(moved.statusCode).send({ error: moved.code, message: moved.message });
     }
     const status = await distributor.renewSsl(domain.domainId, req.trustIdAccessToken);
     const updated = store.updateDomain(domain.id, {

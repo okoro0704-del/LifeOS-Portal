@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requirePlatformAdmin, toPublicUser } from "../lib/auth.js";
 import { rolesForAccount } from "../lib/local-auth.js";
+import { checkMasterDeviceBinding } from "../services/trustid-stepup.js";
 import type { PortalStore } from "../store.js";
 
 export async function registerUserAdminRoutes(app: FastifyInstance, store: PortalStore) {
@@ -11,7 +12,7 @@ export async function registerUserAdminRoutes(app: FastifyInstance, store: Porta
   });
 
   app.post("/v1/admin/users/:id/suspend", async (req, reply) => {
-    if (!requirePlatformAdmin(req, reply)) return;
+    if (!(await checkMasterDeviceBinding(req, reply))) return;
     const { id } = req.params as { id: string };
     const body = z.object({ suspended: z.boolean().default(true) }).parse(req.body ?? {});
     if (id === req.portalUser!.id) {
@@ -23,7 +24,7 @@ export async function registerUserAdminRoutes(app: FastifyInstance, store: Porta
   });
 
   app.post("/v1/admin/users/:id/role", async (req, reply) => {
-    if (!requirePlatformAdmin(req, reply)) return;
+    if (!(await checkMasterDeviceBinding(req, reply))) return;
     const { id } = req.params as { id: string };
     const body = z.object({ role: z.enum(["USER", "ADMIN"]) }).parse(req.body);
     const updated = store.updateUser(id, { role: body.role, roles: rolesForAccount(body.role) });

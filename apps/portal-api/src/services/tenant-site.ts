@@ -131,10 +131,8 @@ export function findInstallByHost(store: PortalStore, hostHeader: string) {
     const bound = store.getInstall(boundInstallId);
     if (bound) return bound;
   }
-  const matches = store.listAllInstalls().filter((row) => {
-    if (row.customDomain?.toLowerCase() === host) return true;
-    return `${row.subdomain.toLowerCase()}.getlifeos.app` === host;
-  });
+  // Custom hosts resolve only through verified Domain Infrastructure bindings (above).
+  const matches = store.listAllInstalls().filter((row) => `${row.subdomain.toLowerCase()}.getlifeos.app` === host);
   return matches.find((row) => row.status === "ready") ?? matches[0];
 }
 

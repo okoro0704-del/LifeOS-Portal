@@ -143,6 +143,11 @@ export const portalApi = {
       body: JSON.stringify({ trustId: trustId ?? "TD-PLATFORM", platformAdmin }),
     });
   },
+  login: (email: string, password: string) =>
+    api<{ sessionToken: string; user: PortalUserPublic }>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }),
   me: () => api<{ user: PortalUserPublic }>("/auth/me"),
   logout: () => api<{ ok: boolean }>("/auth/logout", { method: "POST" }),
   tenants: (q?: string) =>

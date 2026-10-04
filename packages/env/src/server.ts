@@ -162,6 +162,35 @@ export function parsePortalServerEnv(source: NodeJS.ProcessEnv = process.env) {
           message: "PostgreSQL DATABASE_URL is required in production",
         });
       }
+      if (bypassTrustId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["BYPASS_TRUST_ID"],
+          message: "BYPASS_TRUST_ID must be false in production",
+        });
+      }
+      if (bypassAuthForTesting) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["BYPASS_AUTH_FOR_TESTING"],
+          message: "BYPASS_AUTH_FOR_TESTING must be false in production",
+        });
+      }
+      const adminEmail = source.LOCAL_ADMIN_EMAIL?.trim() ?? "";
+      const adminPassword = source.LOCAL_ADMIN_PASSWORD ?? "";
+      if (Boolean(adminEmail) !== Boolean(adminPassword)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["LOCAL_ADMIN_PASSWORD"],
+          message: "LOCAL_ADMIN_EMAIL and LOCAL_ADMIN_PASSWORD must be set together",
+        });
+      } else if (adminPassword && (adminPassword.length < 16 || adminPassword.toLowerCase().includes(adminEmail.toLowerCase()))) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["LOCAL_ADMIN_PASSWORD"],
+          message: "LOCAL_ADMIN_PASSWORD must be at least 16 characters and must not contain the email",
+        });
+      }
     });
 
   const parsed = schema.safeParse(raw);

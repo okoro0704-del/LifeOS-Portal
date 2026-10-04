@@ -66,8 +66,8 @@ export function activateBusinessPortal(opts: {
           ttl: 300,
         },
       ],
-      dnsStatus: "ACTIVE",
-      sslStatus: "ACTIVE",
+      dnsStatus: "PENDING",
+      sslStatus: "PENDING",
       purchased: false,
     });
   }

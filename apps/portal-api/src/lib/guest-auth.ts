@@ -33,8 +33,9 @@ export function isPlatformAdminOrigin(origin?: string | string[]) {
   return adminHosts.has(host);
 }
 
+/** Shared tester accounts for local/test builds. Never in production. */
 export function isGuestAuthEnabled() {
-  return config.bypassAuthForTesting && !config.enableTrustId;
+  return config.nodeEnv !== "production" && config.bypassAuthForTesting && !config.enableTrustId;
 }
 
 export function guestRoleForOrigin(origin?: string | string[]): PortalAccountRole {

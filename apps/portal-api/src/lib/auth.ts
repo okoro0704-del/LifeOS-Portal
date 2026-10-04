@@ -5,6 +5,7 @@ import { config } from "../config.js";
 import { hashSecret } from "./crypto.js";
 import { accountRoleFromRoles } from "./local-auth.js";
 import { ensureGuestUser, isGuestAuthEnabled } from "./guest-auth.js";
+import { isFirstPartyOrigin } from "./origins.js";
 import type { PortalStore, PortalUser } from "../store.js";
 
 declare module "fastify" {
@@ -60,11 +61,23 @@ export function clearSessionCookie(reply: FastifyReply) {
 export function extractSessionToken(req: FastifyRequest): string | null {
   const header = req.headers[config.sessionHeaderName];
   if (typeof header === "string" && header.trim()) return header.trim();
-  const cookie = req.cookies?.[config.sessionCookieName];
-  if (cookie) return cookie;
   const auth = req.headers.authorization;
   if (auth?.startsWith("Portal ")) return auth.slice(7).trim();
+  const cookie = req.cookies?.[config.sessionCookieName];
+  if (cookie && cookieSessionAllowed(req)) return cookie;
   return null;
+}
+
+/**
+ * The session cookie is SameSite=None in production, so any site can make the browser attach it.
+ * Only honour it when the request comes from a Portal surface (or carries no Origin at all,
+ * which browsers omit only for same-origin GETs and top-level navigations).
+ */
+function cookieSessionAllowed(req: FastifyRequest) {
+  if (config.nodeEnv !== "production") return true;
+  const origin = req.headers.origin;
+  if (typeof origin === "string" && origin) return isFirstPartyOrigin(origin);
+  return true;
 }
 
 export async function attachSession(req: FastifyRequest, store: PortalStore) {

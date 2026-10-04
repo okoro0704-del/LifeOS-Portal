@@ -7,6 +7,7 @@ import type { PortalInstall, PortalStore } from "../store.js";
 import { installDomainOs } from "../services/install.js";
 import { deliverablesForMyBrandInstall, installMyBrandOs } from "../services/install-mybrandos.js";
 import type { DistributorClient } from "../services/distributor.js";
+import { sendLegacyPurchaseGone } from "../services/legacy-domains.js";
 import type { HosClient } from "../services/hospitalityos.js";
 import type { EcoClient } from "../services/ecommerceos.js";
 import type { TosClient } from "../services/transportationos.js";
@@ -314,22 +315,17 @@ export async function registerInstallRoutes(
       return reply.code(409).send({ error: "not_ready", message: "Finish install before attaching a domain." });
     }
     const body = z.object({ hostname: z.string().min(3), purchase: z.boolean().optional() }).parse(req.body);
+    if (body.purchase) return sendLegacyPurchaseGone(reply);
     const hostname = body.hostname.toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
     if (store.getDomainByHostname(hostname)) {
       return reply.code(409).send({ error: "conflict", message: "Domain already attached" });
     }
     try {
-      const provisioned = body.purchase
-        ? await distributor.purchaseDomain({
-            tenantId: row.distributorTenantId,
-            subdomain: row.subdomain,
-            domain: hostname,
-          })
-        : await distributor.provisionCustomDomain({
-            tenantId: row.distributorTenantId,
-            subdomain: row.subdomain,
-            customDomain: hostname,
-          });
+      const provisioned = await distributor.provisionCustomDomain({
+        tenantId: row.distributorTenantId,
+        subdomain: row.subdomain,
+        customDomain: hostname,
+      });
       const domain = store.createDomain({
         installId: row.id,
         distributorTenantId: row.distributorTenantId,
@@ -338,9 +334,9 @@ export async function registerInstallRoutes(
         hostname,
         cnameTarget: provisioned.cnameTarget,
         dnsRecords: provisioned.dnsRecords,
-        dnsStatus: provisioned.dnsStatus === "ACTIVE" ? "ACTIVE" : "PENDING",
-        sslStatus: provisioned.sslStatus === "ACTIVE" ? "ACTIVE" : "PENDING",
-        purchased: Boolean(body.purchase),
+        dnsStatus: "PENDING",
+        sslStatus: "PENDING",
+        purchased: false,
       });
       store.updateInstall(row.id, {
         customDomain: hostname,

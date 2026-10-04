@@ -43,12 +43,6 @@ export type DistributorClient = {
     accessToken?: string;
   }): Promise<CustomDomainProvisionResult>;
   verifyDomain(domainId: string, accessToken?: string): Promise<DomainStatusResult>;
-  purchaseDomain(input: {
-    tenantId: string;
-    subdomain: string;
-    domain: string;
-    accessToken?: string;
-  }): Promise<CustomDomainProvisionResult>;
   renewSsl(domainId: string, accessToken?: string): Promise<DomainStatusResult>;
 };
 
@@ -87,11 +81,27 @@ function localCustomDomain(input: {
   };
 }
 
+/** `dom_<dns-label>` is a platform subdomain under the LifeOS wildcard; custom-domain ids carry the tenant id. */
+function isPlatformSubdomainId(domainId: string) {
+  return /^dom_[a-z0-9-]+$/.test(domainId);
+}
+
+/**
+ * Local mode cannot see DNS, TLS or a registrar. Platform subdomains ride the wildcard and are
+ * live; custom domains stay PENDING here and only go live through Domain Infrastructure.
+ */
+function localDomainStatus(domainId: string): DomainStatusResult {
+  if (isPlatformSubdomainId(domainId)) {
+    return { domainId, dnsStatus: "ACTIVE", sslStatus: "ACTIVE", dnsVerified: true, sslReady: true };
+  }
+  return { domainId, dnsStatus: "PENDING", sslStatus: "PENDING", dnsVerified: false, sslReady: false };
+}
+
 export function createLocalDistributor(): DistributorClient {
   return {
     async bootstrap(input) {
       const compiledAt = new Date().toISOString();
-      const domainId = input.customDomain ? `dom_${input.tenantId}` : `dom_${input.subdomain}`;
+      const domainId = `dom_${input.subdomain}`;
       return {
         tenantId: input.tenantId,
         domainId,
@@ -113,38 +123,16 @@ export function createLocalDistributor(): DistributorClient {
       };
     },
     async getDomainStatus(domainId) {
-      return {
-        domainId,
-        dnsStatus: "ACTIVE",
-        sslStatus: "ACTIVE",
-        dnsVerified: true,
-        sslReady: true,
-      };
+      return localDomainStatus(domainId);
     },
     async provisionCustomDomain(input) {
       return localCustomDomain({ tenantId: input.tenantId, customDomain: input.customDomain });
     },
     async verifyDomain(domainId) {
-      return {
-        domainId,
-        dnsStatus: "ACTIVE",
-        sslStatus: "ACTIVE",
-        dnsVerified: true,
-        sslReady: true,
-      };
-    },
-    async purchaseDomain(input) {
-      const provisioned = localCustomDomain({ tenantId: input.tenantId, customDomain: input.domain });
-      return { ...provisioned, dnsStatus: "ACTIVE", sslStatus: "ISSUING" };
+      return localDomainStatus(domainId);
     },
     async renewSsl(domainId) {
-      return {
-        domainId,
-        dnsStatus: "ACTIVE",
-        sslStatus: "ACTIVE",
-        dnsVerified: true,
-        sslReady: true,
-      };
+      return localDomainStatus(domainId);
     },
   };
 }
@@ -236,35 +224,6 @@ export function createRemoteDistributor(): DistributorClient {
           headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
         },
       );
-    },
-    async purchaseDomain(input) {
-      if (useLocalFallback(input.accessToken)) {
-        return local.purchaseDomain(input);
-      }
-      if (!input.accessToken) {
-        throw new HttpError(
-          "TrustID access token required for domain purchase.",
-          401,
-          "unauthorized",
-        );
-      }
-      const raw = await httpJson<CustomDomainProvisionResult>(base, "/v1/distributor/domains/provision", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${input.accessToken}` },
-        body: JSON.stringify({
-          tenantId: input.tenantId,
-          subdomain: input.subdomain,
-          customDomain: input.domain,
-        }),
-      });
-      return {
-        domainId: raw.domainId,
-        customDomain: raw.customDomain ?? input.domain,
-        cnameTarget: raw.cnameTarget,
-        dnsRecords: raw.dnsRecords ?? cnameRecords(input.domain, raw.domainId),
-        dnsStatus: raw.dnsStatus,
-        sslStatus: raw.sslStatus,
-      };
     },
     async renewSsl(domainId, accessToken) {
       if (useLocalFallback(accessToken)) return local.renewSsl(domainId);

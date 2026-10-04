@@ -117,18 +117,67 @@ test("production accepts TrustID disabled without a live Trust ID URL", () => {
   assert.equal(env.bypassAuthForTesting, false);
 });
 
-test("production can open guest testing with an explicit bypass flag", () => {
+const PROD_TRUSTID_OFF = {
+  NODE_ENV: "production",
+  GATEWAY_MODE: "production",
+  ENABLE_TRUST_ID: "false",
+  DATAZONE_API_URL: "https://datazone.getlifeos.app",
+  FINPROVE_API_URL: "https://finprove.getlifeos.app",
+  PORTAL_SECRET_KEY: "prod-portal-secret-key-32-chars-min",
+  PORTAL_DOMAIN: "https://portal.getlifeos.app",
+  INTERNAL_PROVISION_TOKEN: "prod-provision-token-not-default",
+  DATABASE_URL: "postgres://portal:portal@db.internal:5432/lifeos",
+};
+
+function issuePaths(fn: () => unknown): string[] {
+  try {
+    fn();
+  } catch (err) {
+    assert.ok(err instanceof EnvValidationError);
+    return err.issues.map((issue) => issue.path.join("."));
+  }
+  return [];
+}
+
+test("production refuses to boot with guest testing or the TrustID bypass switched on", () => {
+  assert.deepEqual(
+    issuePaths(() => parsePortalServerEnv({ ...PROD_TRUSTID_OFF, BYPASS_AUTH_FOR_TESTING: "true" })),
+    ["BYPASS_AUTH_FOR_TESTING"],
+  );
+  assert.deepEqual(
+    issuePaths(() => parsePortalServerEnv({ ...PROD_TRUSTID_OFF, BYPASS_TRUST_ID: "true" })),
+    ["BYPASS_TRUST_ID"],
+  );
+  const env = parsePortalServerEnv({ ...PROD_TRUSTID_OFF, BYPASS_TRUST_ID: "false", BYPASS_AUTH_FOR_TESTING: "false" });
+  assert.equal(env.bypassTrustId, false);
+  assert.equal(env.bypassAuthForTesting, false);
+});
+
+test("production owner bootstrap needs both settings and a strong password", () => {
+  assert.deepEqual(
+    issuePaths(() => parsePortalServerEnv({ ...PROD_TRUSTID_OFF, LOCAL_ADMIN_EMAIL: "owner@example.test" })),
+    ["LOCAL_ADMIN_PASSWORD"],
+  );
+  assert.deepEqual(
+    issuePaths(() =>
+      parsePortalServerEnv({ ...PROD_TRUSTID_OFF, LOCAL_ADMIN_EMAIL: "owner@example.test", LOCAL_ADMIN_PASSWORD: "short-pass" }),
+    ),
+    ["LOCAL_ADMIN_PASSWORD"],
+  );
+  assert.deepEqual(
+    issuePaths(() =>
+      parsePortalServerEnv({
+        ...PROD_TRUSTID_OFF,
+        LOCAL_ADMIN_EMAIL: "owner@example.test",
+        LOCAL_ADMIN_PASSWORD: "owner@example.test-2026!",
+      }),
+    ),
+    ["LOCAL_ADMIN_PASSWORD"],
+  );
   const env = parsePortalServerEnv({
-    NODE_ENV: "production",
-    GATEWAY_MODE: "production",
-    ENABLE_TRUST_ID: "false",
-    BYPASS_AUTH_FOR_TESTING: "true",
-    DATAZONE_API_URL: "https://datazone.getlifeos.app",
-    FINPROVE_API_URL: "https://finprove.getlifeos.app",
-    PORTAL_SECRET_KEY: "prod-portal-secret-key-32-chars-min",
-    PORTAL_DOMAIN: "https://portal.getlifeos.app",
-    INTERNAL_PROVISION_TOKEN: "prod-provision-token-not-default",
-    DATABASE_URL: "postgres://portal:portal@db.internal:5432/lifeos",
+    ...PROD_TRUSTID_OFF,
+    LOCAL_ADMIN_EMAIL: "owner@example.test",
+    LOCAL_ADMIN_PASSWORD: "correct-horse-battery-staple-91",
   });
-  assert.equal(env.bypassAuthForTesting, true);
+  assert.equal(env.localAdminEmail, "owner@example.test");
 });

@@ -1,13 +1,11 @@
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import type { TenantDomain } from "@lifeos-portal/shared";
 import { ApiError, portalApi } from "../lib/api";
 
 export function DomainsPage() {
   const [domains, setDomains] = useState<TenantDomain[]>([]);
-  const [hostname, setHostname] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
   async function load() {
     try {
@@ -29,30 +27,12 @@ export function DomainsPage() {
     void load();
   }, []);
 
-  async function attach(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      await portalApi.attachCustomDomain(hostname.trim().toLowerCase());
-      setHostname("");
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Attach failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <div className="page marketplace">
       <header className="page-head">
         <p className="eyebrow">Master Distributor</p>
         <h1>App hostnames</h1>
-        <p className="lead">
-          LifeOS subdomains are live after provision. Attach a custom hostname and we generate the CNAME
-          records to verify.
-        </p>
+        <p className="lead">LifeOS subdomains are live after provision.</p>
       </header>
       {error ? <p className="banner-error">{error}</p> : null}
       <table className="data-table">
@@ -76,13 +56,9 @@ export function DomainsPage() {
               </td>
               <td>
                 {domain.kind === "custom" && domain.dnsStatus !== "ACTIVE" ? (
-                  <button
-                    className="btn btn-ghost"
-                    type="button"
-                    onClick={() => void portalApi.verifyDomain(domain.domainId).then(load)}
-                  >
-                    Verify DNS
-                  </button>
+                  <Link className="btn btn-ghost" to="/infrastructure/domains">
+                    Connect in Infrastructure
+                  </Link>
                 ) : null}
               </td>
             </tr>
@@ -90,27 +66,11 @@ export function DomainsPage() {
         </tbody>
       </table>
 
-      <form className="form" onSubmit={(e) => void attach(e)}>
-        <h2 className="section-title">Attach a custom domain</h2>
-        <label>
-          Hostname
-          <input
-            value={hostname}
-            onChange={(e) => setHostname(e.target.value)}
-            placeholder="rentals.apex.com"
-            required
-          />
-          <span className="hint">Master Distributor issues CNAME + TXT verification records.</span>
-        </label>
-        <button className="btn btn-primary" disabled={busy}>
-          Generate CNAME
-        </button>
-      </form>
-
-      <h2 className="section-title">Buy a domain</h2>
+      <h2 className="section-title">Custom domains</h2>
       <p className="muted">
-        Domain search, registration and DNS live in{" "}
-        <Link to="/infrastructure/domains">Infrastructure → Domains</Link>.
+        Buy a domain, or connect one you already own, in{" "}
+        <Link to="/infrastructure/domains">Infrastructure → Domains</Link>. A domain goes live once its DNS is
+        verified and it answers over HTTPS.
       </p>
     </div>
   );

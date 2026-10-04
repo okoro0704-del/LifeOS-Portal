@@ -23,6 +23,23 @@ function headerFlag(req: FastifyRequest, name: string) {
   return (value ?? "").toLowerCase();
 }
 
+/** Production with TrustID off has no step-up ceremony at all; knowing a password must not stand in for one. */
+function productionWithoutStepUp() {
+  return config.nodeEnv === "production" && !isTrustIdEnabled();
+}
+
+function stepUpUnavailable(reply: FastifyReply) {
+  reply.code(403).send({
+    error: "step_up_unavailable",
+    message: "This action needs a TrustID step-up. TrustID is not connected on this gateway, so it is refused.",
+  });
+  return false;
+}
+
+function isSafeMethod(req: FastifyRequest) {
+  return req.method === "GET" || req.method === "HEAD";
+}
+
 /**
  * Trust ID 1:N biometric gate for administrative reads.
  * Mock: X-TrustID-Biometric: verified
@@ -33,6 +50,17 @@ export async function validateBiometricIdentity(
   reply: FastifyReply,
 ): Promise<boolean> {
   if (!requirePlatformAdmin(req, reply)) return false;
+
+  if (productionWithoutStepUp()) {
+    if (!isSafeMethod(req)) return stepUpUnavailable(reply);
+    req.biometricAuth = {
+      trustId: identitySubject(req.portalUser!),
+      accessLevel: "standard",
+      isMasterDevice: false,
+      verifiedAt: new Date().toISOString(),
+    };
+    return true;
+  }
 
   if (!isTrustIdEnabled()) {
     req.biometricAuth = {
@@ -80,6 +108,14 @@ export async function validateBiometricIdentity(
       });
       return false;
     }
+    const signedIn = req.portalUser!.trustId;
+    if (signedIn && result.trustId && result.trustId !== signedIn) {
+      reply.code(403).send({
+        error: "biometric_identity_mismatch",
+        message: "The biometric belongs to a different Trust ID than the signed-in account.",
+      });
+      return false;
+    }
     req.biometricAuth = {
       trustId: result.trustId ?? identitySubject(req.portalUser!),
       accessLevel: result.accessLevel === "master" ? "master" : "standard",
@@ -108,6 +144,10 @@ export async function checkMasterDeviceBinding(
     });
     return false;
   }
+  if (productionWithoutStepUp()) {
+    if (!requirePlatformAdmin(req, reply)) return false;
+    return stepUpUnavailable(reply);
+  }
   if (!(await validateBiometricIdentity(req, reply))) return false;
   if (!isTrustIdEnabled()) return true;
 
@@ -134,7 +174,7 @@ export async function checkMasterDeviceBinding(
         body: JSON.stringify({ deviceProof: body.deviceProof }),
       },
     );
-    if (!result.ok && !result.bound) {
+    if (result.bound === false || (!result.ok && !result.bound)) {
       reply.code(403).send({
         error: "master_device_required",
         message: "Operation requires the bound Master Device.",

@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { BUSINESS_PORTAL_ORIGIN } from "@lifeos-portal/shared";
 import { AdminSiteShell, type AdminNavId } from "../components/AdminSiteShell";
 import { portalApiBase } from "../lib/api";
 import { readImageDataUrl } from "../lib/images";
@@ -631,7 +632,7 @@ function OwnerDesk({
             body: JSON.stringify({ hostname: domain, purchase: false }),
           })
             .then(readJson)
-            .then(() => setNotice("Domain attached. Point a CNAME at getlifeos.app."))
+            .then(() => setNotice("Domain saved. It goes live after you connect it in Business Portal → Infrastructure → Domains."))
             .catch((err) => setNotice(err.message));
         }}
       >
@@ -644,22 +645,9 @@ function OwnerDesk({
           <button className="btn btn-primary" type="submit">
             Add domain
           </button>
-          <button
-            className="btn btn-ghost"
-            type="button"
-            onClick={() =>
-              void fetch(`${portalApiBase}/public/tenants/${encodeURIComponent(subdomain)}/domain`, {
-                method: "POST",
-                headers,
-                body: JSON.stringify({ hostname: domain, purchase: true }),
-              })
-                .then(readJson)
-                .then(() => setNotice("Domain purchase started."))
-                .catch((err) => setNotice(err.message))
-            }
-          >
-            Buy domain
-          </button>
+          <a className="btn btn-ghost" href={`${BUSINESS_PORTAL_ORIGIN}/infrastructure/domains`}>
+            Buy a domain
+          </a>
         </div>
       </form>
       ) : null}

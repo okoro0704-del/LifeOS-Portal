@@ -5,7 +5,7 @@
 
 [build.environment]
   VITE_ENABLE_TRUST_ID = "false"
-  VITE_BYPASS_AUTH_FOR_TESTING = "true"
+  VITE_BYPASS_AUTH_FOR_TESTING = "false"
   VITE_DEFAULT_USER_ROLE = "ADMIN"
   VITE_PORTAL_API = "https://gateway-production-c3f9.up.railway.app"
   VITE_TRUSTID_MODE = "mock"

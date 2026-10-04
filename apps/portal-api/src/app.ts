@@ -16,6 +16,7 @@ import { createEcommerceOsClient, type EcoClient } from "./services/ecommerceos.
 import { createTransportationOsClient, type TosClient } from "./services/transportationos.js";
 import { createServiceOsClient, type SosClient } from "./services/serviceos.js";
 import { purgeAllFailedInstalls } from "./services/subdomain-claim.js";
+import { resetUnprovenLegacyCustomDomains } from "./services/legacy-domains.js";
 import { reconcileMybrandOsCanonicalUrls } from "./services/reconcile-mybrandos-urls.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerCatalogRoutes } from "./routes/catalog.js";
@@ -34,7 +35,7 @@ import type { LifeOsExperienceReader } from "./services/lifeos-experience.js";
 import { registerEcommerceOsInternalRoutes } from "./routes/ecommerceos-internal.js";
 import { registerUserAdminRoutes } from "./routes/users.js";
 import { registerPushRoutes } from "./routes/push.js";
-import { seedLocalAdmin } from "./lib/seed-admin.js";
+import { enforceProductionAuthority, seedLocalAdmin } from "./lib/seed-admin.js";
 import { registerDomainInfrastructureRoutes } from "./routes/domain-infrastructure.js";
 import { createDomainInfrastructure, type DomainInfraOptions } from "./domains/index.js";
 
@@ -49,6 +50,8 @@ export type BuildAppOptions = {
   lifeOsExperienceReader?: LifeOsExperienceReader;
   /** Test boundary for registrar/hosting/DNS/HTTPS transports. */
   domainInfra?: DomainInfraOptions;
+  /** Test boundary: observe every registered route (security audits). */
+  onRoute?: (route: { method: string | string[]; url: string }) => void;
 };
 
 const defaultPersist = path.resolve(
@@ -70,6 +73,14 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
           databaseUrl: env.databaseUrl || undefined,
         }));
   seedLocalAdmin(store);
+  const authority = enforceProductionAuthority(store);
+  if (authority.demoted || authority.sessionsRevoked) {
+    console.info(
+      `[portal] production authority reset: ${authority.demoted} admin grant(s) removed, ${authority.sessionsRevoked} session(s) revoked`,
+    );
+  }
+  const legacyReset = resetUnprovenLegacyCustomDomains(store);
+  if (legacyReset) console.info(`[portal] ${legacyReset} unproven legacy custom domain(s) set back to PENDING`);
   if (env.nodeEnv !== "test") {
     const purged = purgeAllFailedInstalls(store);
     if (purged.count) {
@@ -113,6 +124,10 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     await store.close();
   });
 
+  if (opts.onRoute) {
+    const observe = opts.onRoute;
+    app.addHook("onRoute", (route) => observe({ method: route.method, url: route.url }));
+  }
   await app.register(securityPlugin);
   await app.register(corsPlugin);
   await app.register(errorHandlerPlugin);

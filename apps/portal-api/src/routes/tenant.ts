@@ -5,6 +5,7 @@ import { requireSession, toPublicUser } from "../lib/auth.js";
 import { HttpError } from "../lib/http.js";
 import type { PortalStore } from "../store.js";
 import type { DistributorClient } from "../services/distributor.js";
+import { customDomainVerificationMoved, sendLegacyPurchaseGone } from "../services/legacy-domains.js";
 import {
   assertNotSuspended,
   listOwnerVerticals,
@@ -74,8 +75,8 @@ export async function registerTenantRoutes(
         hostname,
         cnameTarget: provisioned.cnameTarget,
         dnsRecords: provisioned.dnsRecords,
-        dnsStatus: provisioned.dnsStatus === "ACTIVE" ? "ACTIVE" : "PENDING",
-        sslStatus: provisioned.sslStatus === "ACTIVE" ? "ACTIVE" : "PENDING",
+        dnsStatus: "PENDING",
+        sslStatus: "PENDING",
         purchased: false,
       });
       store.updateInstall(install.id, { customDomain: hostname, domainId: provisioned.domainId });
@@ -103,6 +104,7 @@ export async function registerTenantRoutes(
       if (!install || install.ownerUserId !== req.portalUser!.id) {
         throw new HttpError("Domain not found", 404, "not_found");
       }
+      if (domain.kind === "custom") throw customDomainVerificationMoved();
       const status = await distributor.verifyDomain(domain.domainId, req.trustIdAccessToken);
       const updated = store.updateDomain(domain.id, {
         dnsStatus: status.dnsVerified || status.dnsStatus === "ACTIVE" ? "ACTIVE" : "VERIFYING",
@@ -114,46 +116,7 @@ export async function registerTenantRoutes(
     }
   });
 
-  app.post("/v1/tenant/domains/purchase", async (req, reply) => {
-    if (!requireSession(req, reply)) return;
-    const body = z
-      .object({
-        domain: fqdn,
-        installId: z.string().optional(),
-      })
-      .parse(req.body);
-    try {
-      requireBusinessPortalAccess(store, req.portalUser!);
-      const install = primaryInstallForUser(store, req.portalUser!, body.installId);
-      assertNotSuspended(install);
-      const hostname = body.domain.toLowerCase();
-      if (store.getDomainByHostname(hostname)) {
-        throw new HttpError("Domain already attached", 409, "conflict");
-      }
-      const purchased = await distributor.purchaseDomain({
-        tenantId: install.distributorTenantId,
-        subdomain: install.subdomain,
-        domain: hostname,
-        accessToken: req.trustIdAccessToken,
-      });
-      const domain = store.createDomain({
-        installId: install.id,
-        distributorTenantId: install.distributorTenantId,
-        domainId: purchased.domainId,
-        kind: "custom",
-        hostname,
-        cnameTarget: purchased.cnameTarget,
-        dnsRecords: purchased.dnsRecords,
-        dnsStatus: purchased.dnsStatus === "ACTIVE" ? "ACTIVE" : "PENDING",
-        sslStatus: purchased.sslStatus === "ACTIVE" ? "ACTIVE" : "ISSUING",
-        purchased: true,
-      });
-      store.updateInstall(install.id, { customDomain: hostname, domainId: purchased.domainId });
-      return reply.code(201).send({ domain, purchased: true });
-    } catch (err) {
-      return sendHttp(reply, err);
-    }
-  });
+  app.post("/v1/tenant/domains/purchase", async (_req, reply) => sendLegacyPurchaseGone(reply));
 
   app.get("/v1/tenant/verticals", async (req, reply) => {
     if (!requireSession(req, reply)) return;
