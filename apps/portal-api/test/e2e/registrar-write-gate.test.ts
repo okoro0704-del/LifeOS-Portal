@@ -279,6 +279,9 @@ describe("sandbox", () => {
     assert.equal(status.productionWriteReady, false);
     assert.equal(status.egressPolicy.status, "UNKNOWN");
     assert.equal(status.egressPolicy.reason, "EXPECTED_EGRESS_NOT_CONFIGURED");
+    assert.equal(status.egressPolicy.clientIpExpected, null, "no expected list → membership is not applicable");
+    await service.observeEgress();
+    assert.equal(service.status(OWNER).egressPolicy.observedInExpected, null);
   });
 
   test("sandbox purchase with owner step-up passes the gate (stubbed write)", async () => {

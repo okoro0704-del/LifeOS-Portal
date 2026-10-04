@@ -47,7 +47,7 @@ function configured(cfg: DomainProviderConfig): EgressEvaluation | null {
   const base = {
     expectedIps: [...cfg.expectedEgressIps],
     clientIp,
-    clientIpExpected: clientIp ? cfg.expectedEgressIps.includes(clientIp) : null,
+    clientIpExpected: clientIp && cfg.expectedEgressIps.length ? cfg.expectedEgressIps.includes(clientIp) : null,
     observedIp: null,
     observedInExpected: null,
     observedAt: null,
@@ -66,7 +66,8 @@ export function evaluateEgress(cfg: DomainProviderConfig, observation: EgressObs
   const fixed = configured(cfg);
   const clientIp = cfg.credentials()?.clientIp ?? null;
   const observedIp = observation?.ip ?? null;
-  const observedInExpected = observation ? (observedIp ? cfg.expectedEgressIps.includes(observedIp) : false) : null;
+  const observedInExpected =
+    observation && cfg.expectedEgressIps.length ? (observedIp ? cfg.expectedEgressIps.includes(observedIp) : false) : null;
   const seen = { observedIp, observedInExpected, observedAt: observation?.at ?? null };
   if (fixed) return { ...fixed, ...seen };
   const base = { expectedIps: [...cfg.expectedEgressIps], clientIp, clientIpExpected: true, ...seen };
