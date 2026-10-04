@@ -26,7 +26,14 @@ export type DomainProviderConfig = {
   missing: string[];
   /** Explicit second switch: production registrations stay off until set. */
   purchasesEnabled: boolean;
+  /** Operator attestation that the host allocates static egress (DOMAIN_PROVIDER_EGRESS_IP_STATUS). */
   egressIp: DomainEgressIpStatus;
+  /** DOMAIN_PROVIDER_EGRESS_IPS: every IPv4 the host may use for outbound registrar traffic. */
+  expectedEgressIps: string[];
+  /** True when DOMAIN_PROVIDER_EGRESS_IPS holds anything that is not an IPv4 address. */
+  expectedEgressInvalid: boolean;
+  /** NAMECHEAP_CLIENT_IP shape only; the value itself lives behind credentials(). */
+  clientIpStatus: "VALID" | "MISSING" | "INVALID";
   timeoutMs: number;
   registerTimeoutMs: number;
   hosting: {
@@ -39,10 +46,20 @@ export type DomainProviderConfig = {
 
 const IPV4 = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
 
+export function isIpv4(value: string | null | undefined): value is string {
+  return typeof value === "string" && IPV4.test(value);
+}
+
 function egressStatus(raw: string | undefined): DomainEgressIpStatus {
   const value = (raw ?? "").trim().toUpperCase();
   if (value === "STATIC" || value === "NOT_STATIC") return value;
   return "UNKNOWN";
+}
+
+function expectedEgress(raw: string | undefined) {
+  const entries = (raw ?? "").split(",").map((part) => part.trim()).filter(Boolean);
+  const ips = [...new Set(entries.filter((entry) => isIpv4(entry)))];
+  return { ips, invalid: entries.some((entry) => !isIpv4(entry)) };
 }
 
 /**
@@ -98,6 +115,7 @@ export function resolveDomainProviderConfig(source: NodeJS.ProcessEnv = process.
 
   const ready = capability === "READY";
   const creds: NamecheapCredentials | null = ready ? { apiUser, userName, apiKey, clientIp } : null;
+  const egress = expectedEgress(source.DOMAIN_PROVIDER_EGRESS_IPS);
 
   const config = {
     provider,
@@ -108,6 +126,9 @@ export function resolveDomainProviderConfig(source: NodeJS.ProcessEnv = process.
     purchasesEnabled:
       environment === "SANDBOX" ? ready : ready && (source.DOMAIN_PURCHASES_ENABLED ?? "").trim() === "true",
     egressIp: egressStatus(source.DOMAIN_PROVIDER_EGRESS_IP_STATUS),
+    expectedEgressIps: egress.ips,
+    expectedEgressInvalid: egress.invalid,
+    clientIpStatus: !clientIp ? "MISSING" : isIpv4(clientIp) ? "VALID" : "INVALID",
     timeoutMs: Number(source.NAMECHEAP_TIMEOUT_MS ?? 30_000),
     registerTimeoutMs: Number(source.NAMECHEAP_REGISTER_TIMEOUT_MS ?? 90_000),
     hosting: {
@@ -125,5 +146,6 @@ export function resolveDomainProviderConfig(source: NodeJS.ProcessEnv = process.
 export function describeDomainConfig(cfg: DomainProviderConfig) {
   return `[domains] provider=${cfg.provider} env=${cfg.environment} capability=${cfg.capability}` +
     (cfg.missing.length ? ` missing=${cfg.missing.join(",")}` : "") +
-    ` purchases=${cfg.purchasesEnabled ? "enabled" : "disabled"} egress=${cfg.egressIp}`;
+    ` purchases=${cfg.purchasesEnabled ? "enabled" : "disabled"} egress=${cfg.egressIp}` +
+    ` expectedEgress=${cfg.expectedEgressIps.length}${cfg.expectedEgressInvalid ? "+invalid" : ""}`;
 }

@@ -150,7 +150,7 @@ test("production purchases are refused until DOMAIN_PURCHASES_ENABLED=true", asy
       registrantProfileId: profile.id,
       requestPrivacy: true,
     }),
-    (err: unknown) => (err as { code?: string }).code === "PURCHASES_DISABLED",
+    (err: unknown) => (err as { code?: string }).code === "PRODUCTION_PURCHASES_DISABLED",
   );
   assert.equal(calls.register, 0);
 });

@@ -14,6 +14,9 @@ import { NamecheapProvider } from "../../src/domains/namecheap/provider.js";
 import { parseNamecheapXml } from "../../src/domains/namecheap/xml.js";
 import { assertBindingPlanPreserves, planDnsMutation, verifyDnsReadBack } from "../../src/domains/dns-plan.js";
 import { addMoney, normalizeMoneyAmount } from "../../src/domains/names.js";
+import { EgressMonitor } from "../../src/domains/egress.js";
+import { RegistrarWriteGate } from "../../src/domains/write-gate.js";
+import { randomUUID } from "node:crypto";
 import { FakeNamecheap } from "../fixtures/fake-namecheap.js";
 
 const SECRET_KEY = "nc-test-api-key-9f8e7d6c5b4a";
@@ -28,7 +31,30 @@ const ENV = {
 };
 
 function provider(fake = new FakeNamecheap()) {
-  return { fake, provider: new NamecheapProvider(resolveDomainProviderConfig(ENV), fake.fetch) };
+  return { fake, provider: new NamecheapProvider(resolveDomainProviderConfig(ENV), fake.fetch, { logger: () => undefined }) };
+}
+
+const sandboxCfg = resolveDomainProviderConfig(ENV);
+const sandboxGate = new RegistrarWriteGate(sandboxCfg, new EgressMonitor(sandboxCfg, async () => null), { logger: () => undefined });
+
+/** A real sandbox grant: owner with step-up, explicit fresh confirmation. */
+function grantFor(operation: "REGISTER" | "DNS_SET", domain: string) {
+  return sandboxGate.grant({
+    operation,
+    environment: "SANDBOX",
+    domain,
+    actor: { userId: "u_owner", isAdmin: true, authority: "strong" },
+    confirmation: {
+      kind: operation === "REGISTER" ? "PURCHASE_INTENT" : "DNS_REQUEST",
+      reference: randomUUID(),
+      domain,
+      at: new Date().toISOString(),
+    },
+  });
+}
+
+async function register(p: NamecheapProvider, domain: string) {
+  return p.register(registerInput(domain), await grantFor("REGISTER", domain));
 }
 
 async function rejectsCode(promise: Promise<unknown>, code: string) {
@@ -215,14 +241,14 @@ describe("Namecheap provider", () => {
     fake.failNext("namecheap.domains.check", "timeout");
     await rejectsCode(p.checkAvailability(["a1.com"]), "PROVIDER_UNAVAILABLE");
     fake.failNext("namecheap.domains.create", "timeout");
-    await rejectsCode(p.register(registerInput("a2.com")), "REGISTRATION_UNCERTAIN");
+    await rejectsCode(register(p, "a2.com"), "REGISTRATION_UNCERTAIN");
     fake.failNext("namecheap.domains.create", "http500");
-    await rejectsCode(p.register(registerInput("a3.com")), "REGISTRATION_UNCERTAIN");
+    await rejectsCode(register(p, "a3.com"), "REGISTRATION_UNCERTAIN");
   });
 
   test("registration success maps provider references", async () => {
     const { fake, provider: p } = provider();
-    const reg = await p.register(registerInput("fresh-name.com"));
+    const reg = await register(p, "fresh-name.com");
     assert.equal(reg.registered, true);
     assert.ok(reg.orderId && reg.transactionId && reg.providerDomainId);
     assert.equal(reg.privacy, "ENABLED");
@@ -235,21 +261,21 @@ describe("Namecheap provider", () => {
 
   test("registration rejection codes", async () => {
     const { fake, provider: p } = provider();
-    await rejectsCode(p.register(registerInput("google.com")), "DOMAIN_UNAVAILABLE");
+    await rejectsCode(register(p, "google.com"), "DOMAIN_UNAVAILABLE");
     fake.failNext("namecheap.domains.create", { number: "2015182", message: "Contact phone is invalid" });
-    await rejectsCode(p.register(registerInput("x1.com")), "INVALID_REGISTRANT");
+    await rejectsCode(register(p, "x1.com"), "INVALID_REGISTRANT");
     fake.failNext("namecheap.domains.create", { number: "2528166", message: "Order creation failed. Insufficient funds" });
-    await rejectsCode(p.register(registerInput("x2.com")), "INSUFFICIENT_PROVIDER_BALANCE");
+    await rejectsCode(register(p, "x2.com"), "INSUFFICIENT_PROVIDER_BALANCE");
     fake.failNext("namecheap.domains.create", { number: "2030280", message: "TLD is not supported in API" });
-    await rejectsCode(p.register(registerInput("x3.com")), "REGISTRATION_REJECTED");
+    await rejectsCode(register(p, "x3.com"), "REGISTRATION_REJECTED");
     fake.failNext("namecheap.domains.create", { number: "5050900", message: "Unknown error while adding a domain to your account" });
-    await rejectsCode(p.register(registerInput("x4.com")), "REGISTRATION_UNCERTAIN");
+    await rejectsCode(register(p, "x4.com"), "REGISTRATION_UNCERTAIN");
   });
 
   test("reconciliation reads the account listing", async () => {
     const { fake, provider: p } = provider();
     fake.createCommitsThenTimesOut = true;
-    await rejectsCode(p.register(registerInput("lost-reply.com")), "REGISTRATION_UNCERTAIN");
+    await rejectsCode(register(p, "lost-reply.com"), "REGISTRATION_UNCERTAIN");
     const owned = await p.getDomain("lost-reply.com");
     assert.ok(owned);
     assert.equal(owned.expiresAt, "2027-10-04");
@@ -279,7 +305,12 @@ describe("Namecheap provider", () => {
     );
     const state = await p.getDnsRecords("brand.com");
     assert.equal(state.emailType, "MX");
-    await p.setDnsRecords("brand.com", [...state.records, { name: "@", type: "A", address: "75.2.60.5", ttl: 1800 }], state.emailType);
+    await p.setDnsRecords(
+      "brand.com",
+      [...state.records, { name: "@", type: "A", address: "75.2.60.5", ttl: 1800 }],
+      state.emailType,
+      await grantFor("DNS_SET", "brand.com"),
+    );
     const after = await p.getDnsRecords("brand.com");
     assert.equal(after.records.filter((r) => r.type === "MX").length, 1);
   });

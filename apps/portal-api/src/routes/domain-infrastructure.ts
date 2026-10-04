@@ -52,7 +52,7 @@ async function authorize(
   insecureAuth = false,
 ): Promise<DomainActor | null> {
   if (!requireSession(req, reply)) return null;
-  if (level === "read") return actorOf(req);
+  if (level === "read") return { ...actorOf(req), authority: "read" };
 
   if (isGuestPrincipal(req)) {
     reply.code(403).send({
@@ -90,7 +90,7 @@ async function authorize(
     }
     if (!(await checkMasterDeviceBinding(req, reply))) return null;
   }
-  return actorOf(req);
+  return { ...actorOf(req), authority: level };
 }
 
 function sendError(req: FastifyRequest, reply: FastifyReply, err: unknown) {
@@ -166,24 +166,23 @@ export async function registerDomainInfrastructureRoutes(
   app.get(`${PREFIX}/status`, async (req, reply) => {
     if (!requireSession(req, reply)) return;
     const status = service.status(actorOf(req));
-    return { status: insecureAuth() ? { ...status, purchasesEnabled: false, insecureAuth: true } : status };
+    return {
+      status: insecureAuth() ? { ...status, purchasesEnabled: false, productionWriteReady: false, insecureAuth: true } : status,
+    };
   });
 
   app.get(`${PREFIX}/status/egress`, async (req, reply) => {
     const actor = await guard(req, reply, "read");
     if (!actor) return;
     if (!actor.isAdmin) return reply.code(403).send({ error: "FORBIDDEN", message: "Administrator access required." });
-    if (process.env.NODE_ENV === "test") return { observedIp: null, note: "network disabled in tests" };
-    try {
-      const res = await fetch("https://api.ipify.org?format=json", { signal: AbortSignal.timeout(8000) });
-      const body = (await res.json()) as { ip?: string };
-      return {
-        observedIp: body.ip ?? null,
-        note: "A single observation does not prove a static IP. Whitelist only a provider-guaranteed static egress IPv4.",
-      };
-    } catch {
-      return { observedIp: null, note: "Could not observe egress IP." };
-    }
+    const policy = await service.observeEgress();
+    return {
+      observedIp: policy.observedIp ?? null,
+      policy,
+      note:
+        "The observation uses a separate connection from registrar traffic. It shows which configured egress IP this gateway " +
+        "used just now, not which one the next registrar request will use.",
+    };
   });
 
   app.post(`${PREFIX}/search`, async (req, reply) => {

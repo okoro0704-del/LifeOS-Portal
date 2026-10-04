@@ -2,9 +2,19 @@ import type { DomainMoney } from "@lifeos-portal/shared";
 import { DomainInfraError } from "./errors.js";
 
 const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+const IDN_UNSUPPORTED = "Internationalized domain names are not supported.";
+
+/**
+ * Must run on the raw input: Unicode case folding can turn non-ASCII into ASCII
+ * (e.g. KELVIN SIGN → "k"), which would let a visually different name pass.
+ */
+export function rejectNonAscii(raw: string): string {
+  if (/[^\x00-\x7f]/.test(raw)) throw new DomainInfraError("DOMAIN_INVALID", IDN_UNSUPPORTED);
+  return raw;
+}
 
 export function normalizeLabel(raw: string): string {
-  const label = raw.trim().toLowerCase();
+  const label = rejectNonAscii(raw.trim()).toLowerCase();
   if (!LABEL.test(label) || label.startsWith("xn--")) {
     throw new DomainInfraError("DOMAIN_INVALID", "Use letters, numbers and hyphens (1–63 characters).");
   }
@@ -13,12 +23,13 @@ export function normalizeLabel(raw: string): string {
 
 /** Normalize a registrable or full hostname. IDNs are not supported in V1. */
 export function normalizeDomain(raw: string): string {
-  const value = raw.trim().toLowerCase().replace(/\.$/, "");
+  const value = rejectNonAscii(raw.trim()).toLowerCase().replace(/\.$/, "");
   if (!value || value.length > 253) throw new DomainInfraError("DOMAIN_INVALID", "Enter a valid domain name.");
   const labels = value.split(".");
   if (labels.length < 2) throw new DomainInfraError("DOMAIN_INVALID", "Enter a full domain, e.g. example.com.");
   for (const label of labels) {
     if (!LABEL.test(label)) throw new DomainInfraError("DOMAIN_INVALID", "Enter a valid domain name.");
+    if (/^xn--/.test(label)) throw new DomainInfraError("DOMAIN_INVALID", IDN_UNSUPPORTED);
   }
   if (!/^[a-z]{2,24}$/.test(labels[labels.length - 1]!)) {
     throw new DomainInfraError("DOMAIN_INVALID", "Enter a valid top-level domain.");

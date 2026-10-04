@@ -60,5 +60,7 @@ export function mapNamecheapErrors(
   } else {
     code = "PROVIDER_ERROR";
   }
-  return new DomainInfraError(code, undefined, diagnostic);
+  const error = new DomainInfraError(code, undefined, diagnostic);
+  error.registrarErrors = numbers.filter((n) => /^\d{1,10}$/.test(n));
+  return error;
 }

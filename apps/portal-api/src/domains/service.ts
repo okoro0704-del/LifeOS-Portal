@@ -25,7 +25,7 @@ import {
 } from "./dns-plan.js";
 import { DomainInfraError, domainErrorMessage } from "./errors.js";
 import type { HostingProvider } from "./hosting.js";
-import { addMoney, normalizeDomain, normalizeLabel, sameMoney, splitDomain } from "./names.js";
+import { addMoney, normalizeDomain, normalizeLabel, rejectNonAscii, sameMoney, splitDomain } from "./names.js";
 import type { DomainProvider, ProviderAvailability, ProviderQuote } from "./provider.js";
 import { contactsFor, profileComplete, summarizeProfile, type RegistrantProfileInput } from "./registrant.js";
 import type {
@@ -37,11 +37,15 @@ import type {
   RegistrantProfileRecord,
 } from "./types.js";
 import { publicDnsMatches, type DnsResolverLike, type HttpsProbe } from "./verification.js";
+import { EgressMonitor } from "./egress.js";
+import { RegistrarWriteGate, type RegistrarConfirmation, type RegistrarWriteOperation } from "./write-gate.js";
 
 export type DomainActor = {
   userId: string;
   subject: string;
   isAdmin: boolean;
+  /** Route-level authority actually proven for this request (strong = owner + TrustID step-up). */
+  authority?: "read" | "write" | "strong";
 };
 
 export type DomainServiceDeps = {
@@ -52,6 +56,8 @@ export type DomainServiceDeps = {
   resolver: DnsResolverLike;
   httpsProbe: HttpsProbe;
   now?: () => Date;
+  egress?: EgressMonitor;
+  writeGate?: RegistrarWriteGate;
 };
 
 const QUOTE_TTL_MS = 10 * 60 * 1000;
@@ -67,6 +73,8 @@ export class DomainInfrastructureService {
   private readonly httpsProbe: HttpsProbe;
   private readonly now: () => Date;
   private readonly inflight = new Set<string>();
+  private readonly egress: EgressMonitor;
+  private readonly gate: RegistrarWriteGate;
 
   constructor(deps: DomainServiceDeps) {
     this.store = deps.store;
@@ -76,6 +84,8 @@ export class DomainInfrastructureService {
     this.resolver = deps.resolver;
     this.httpsProbe = deps.httpsProbe;
     this.now = deps.now ?? (() => new Date());
+    this.egress = deps.egress ?? new EgressMonitor(this.cfg, async () => null, this.now);
+    this.gate = deps.writeGate ?? new RegistrarWriteGate(this.cfg, this.egress, { now: this.now });
   }
 
   private iso() {
@@ -98,9 +108,18 @@ export class DomainInfrastructureService {
       ...(actor?.isAdmin ? { missing: [...this.cfg.missing] } : {}),
       purchasesEnabled: this.cfg.purchasesEnabled,
       egressIp: this.cfg.egressIp,
+      egressPolicy: this.egress.publicStatus(Boolean(actor?.isAdmin)),
+      sandboxReady: this.cfg.environment === "SANDBOX" && this.cfg.capability === "READY",
+      productionWriteReady: this.gate.productionWriteConfigured() && this.egress.current().status === "VERIFIED",
       supportedTlds: DOMAIN_SEARCH_TLDS,
       purchaseMode: "OWNER_ADMIN_TEST",
     };
+  }
+
+  /** Admin diagnostic: take one egress observation and evaluate it against the configured contract. */
+  async observeEgress() {
+    await this.egress.observe();
+    return this.egress.publicStatus(true);
   }
 
   /** Server restart safety: never leave an intent looking resumable when its outcome is unknown. */
@@ -123,7 +142,7 @@ export class DomainInfrastructureService {
 
   async search(actor: DomainActor, query: string, tlds?: string[]): Promise<DomainSearchResult[]> {
     const provider = this.requireProvider();
-    const raw = query.trim().toLowerCase();
+    const raw = rejectNonAscii(query.trim()).toLowerCase();
     let sld: string;
     let wanted: string[];
     if (raw.includes(".")) {
@@ -341,7 +360,6 @@ export class DomainInfrastructureService {
     if (quote.providerEnvironment !== provider.environment || intent.providerEnvironment !== provider.environment) {
       throw new DomainInfraError("QUOTE_EXPIRED", "Provider environment changed since this quote; get a new quote.");
     }
-    if (provider.environment === "PRODUCTION" && !this.cfg.purchasesEnabled) throw new DomainInfraError("PURCHASES_DISABLED");
     const block = this.quoteBlock(quote);
     if (block === "QUOTE_EXPIRED") {
       this.putIntent({ ...intent, status: "QUOTE_EXPIRED", failureCode: "QUOTE_EXPIRED" });
@@ -355,6 +373,14 @@ export class DomainInfrastructureService {
     if (!profile || profile.ownerId !== actor.userId || !profileComplete(profile)) {
       throw new DomainInfraError("INVALID_REGISTRANT");
     }
+    const writeRequest = (confirmedAt: string) => ({
+      operation: "REGISTER" as const,
+      environment: provider.environment,
+      domain: intent.domain,
+      actor,
+      confirmation: { kind: "PURCHASE_INTENT" as const, reference: intent.id, domain: input.confirmDomain, at: confirmedAt },
+    });
+    this.gate.preflight(writeRequest(this.iso()));
     const contacts = contactsFor(profile);
     const competing = this.store
       .domainInfraList("intents")
@@ -413,17 +439,30 @@ export class DomainInfrastructureService {
         this.putIntent({ ...current, status: "AWAITING_CONFIRMATION", submittedAt: null, confirmedAt: null, confirmedTotal: null });
         throw new DomainInfraError("PROVIDER_UNAVAILABLE", "Could not durably record the purchase before submitting; nothing was sent.");
       }
+      let grant;
+      try {
+        grant = await this.gate.grant(writeRequest(current.confirmedAt!));
+      } catch (err) {
+        this.putIntent({ ...current, status: "AWAITING_CONFIRMATION", submittedAt: null, confirmedAt: null, confirmedTotal: null });
+        await this.store.flush().catch(() => undefined);
+        const code = err instanceof DomainInfraError ? err.code : null;
+        this.audit(actor, { ...auditBase, action: "domain.purchase.confirm", result: "FAILURE", failureCode: code, detail: "Refused by registrar write gate; nothing was sent." });
+        throw err;
+      }
       this.audit(actor, { ...auditBase, action: "domain.purchase.submit", result: "PENDING" });
 
       let registration;
       try {
-        registration = await provider.register({
-          domain: intent.domain,
-          years: quote.years,
-          contacts,
-          requestPrivacy: input.requestPrivacy,
-          premium: { isPremium: quote.premium, premiumPrice: quote.premium ? quote.registrationPrice?.amount ?? null : null },
-        });
+        registration = await provider.register(
+          {
+            domain: intent.domain,
+            years: quote.years,
+            contacts,
+            requestPrivacy: input.requestPrivacy,
+            premium: { isPremium: quote.premium, premiumPrice: quote.premium ? quote.registrationPrice?.amount ?? null : null },
+          },
+          grant,
+        );
       } catch (err) {
         const mapped = err instanceof DomainInfraError ? err : new DomainInfraError("REGISTRATION_UNCERTAIN", undefined, "unexpected adapter failure");
         const status: DomainPurchaseIntentRecord["status"] =
@@ -888,9 +927,10 @@ export class DomainInfrastructureService {
       if (domain.source === "PURCHASED" && domain.dnsManagement !== "EXTERNAL") {
         save({ status: "DNS_CONFIGURING", failureCode: null });
         try {
-          await this.applyDnsPlan(actor, domain, (current) => routes.map((r) => ({ op: "route" as const, name: r.name, records: r.records })), {
+          await this.applyDnsPlan(actor, domain, () => routes.map((r) => ({ op: "route" as const, name: r.name, records: r.records })), {
             action: "domain.dns.bind",
             routedHosts: routes.map((r) => r.name),
+            confirmation: { kind: "DOMAIN_BINDING", reference: `${bindingId}:${newId("adv")}`, domain: domain.fqdn, at: this.iso() },
           });
         } catch (err) {
           const e = err instanceof DomainInfraError ? err : new DomainInfraError("DNS_WRITE_FAILED");
@@ -1004,7 +1044,11 @@ export class DomainInfrastructureService {
   async changeDns(actor: DomainActor, domainId: string, changes: DnsChange[]) {
     const domain = this.ownedDomain(actor, domainId, "write");
     if (domain.source !== "PURCHASED") throw new DomainInfraError("DNS_NOT_PROVIDER_MANAGED");
-    const plan = await this.applyDnsPlan(actor, domain, () => changes, { action: "domain.dns.write", routedHosts: null });
+    const plan = await this.applyDnsPlan(actor, domain, () => changes, {
+      action: "domain.dns.write",
+      routedHosts: null,
+      confirmation: { kind: "DNS_REQUEST", reference: newId("dnsreq"), domain: domain.fqdn, at: this.iso() },
+    });
     return { records: plan.after };
   }
 
@@ -1021,7 +1065,7 @@ export class DomainInfrastructureService {
     actor: DomainActor,
     domain: InfraDomainRecord,
     build: (current: InfraDnsRecord[]) => DnsChange[],
-    opts: { action: string; routedHosts: string[] | null },
+    opts: { action: string; routedHosts: string[] | null; confirmation: RegistrarConfirmation },
   ): Promise<DnsPlan> {
     const provider = this.providerFor(domain);
     const auditBase = {
@@ -1035,8 +1079,15 @@ export class DomainInfrastructureService {
     const plan = planDnsMutation(before.records, build(before.records));
     if (opts.routedHosts) assertBindingPlanPreserves(plan, opts.routedHosts);
     if (!plan.changed) return plan;
+    const grant = await this.gate.grant({
+      operation: "DNS_SET" satisfies RegistrarWriteOperation,
+      environment: domain.providerEnvironment,
+      domain: domain.fqdn,
+      actor,
+      confirmation: opts.confirmation,
+    });
     try {
-      await provider.setDnsRecords(domain.fqdn, plan.after, before.emailType);
+      await provider.setDnsRecords(domain.fqdn, plan.after, before.emailType, grant);
     } catch (err) {
       const e = err instanceof DomainInfraError ? err : new DomainInfraError("DNS_WRITE_FAILED");
       this.audit(actor, { ...auditBase, action: opts.action, result: "FAILURE", failureCode: e.code, dnsBeforeHash: hashDnsRecords(plan.before), dnsDiff: { added: plan.added, removed: plan.removed } });

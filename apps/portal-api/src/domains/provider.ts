@@ -6,6 +6,7 @@ import type {
   InfraDnsRecord,
   RegistrantContact,
 } from "@lifeos-portal/shared";
+import type { RegistrarWriteGrant } from "./write-gate.js";
 
 export type ProviderAvailability = {
   domain: string;
@@ -85,7 +86,8 @@ export type ProviderDnsState = {
 
 /**
  * Registrar contract. DomainService depends on this, never on a vendor API.
- * register() is the only method that spends money.
+ * register() and renew() spend money. Every state-changing method requires a
+ * RegistrarWriteGrant issued by RegistrarWriteGate; the adapter verifies it before sending.
  */
 export interface DomainProvider {
   readonly kind: DomainProviderKind;
@@ -95,12 +97,12 @@ export interface DomainProvider {
   search(sld: string, tlds: readonly string[], years: number): Promise<ProviderQuote[]>;
   checkAvailability(domains: readonly string[]): Promise<ProviderAvailability[]>;
   quote(domain: string, years: number): Promise<ProviderQuote>;
-  register(input: ProviderRegisterInput): Promise<ProviderRegistration>;
+  register(input: ProviderRegisterInput, grant: RegistrarWriteGrant): Promise<ProviderRegistration>;
   listOwnedDomains(search?: string): Promise<ProviderOwnedDomain[]>;
   getDomain(domain: string): Promise<ProviderOwnedDomain | null>;
-  renew(domain: string, years: number): Promise<{ chargedAmount: DomainMoney | null; orderId: string | null }>;
+  renew(domain: string, years: number, grant: RegistrarWriteGrant): Promise<{ chargedAmount: DomainMoney | null; orderId: string | null }>;
   getDnsRecords(domain: string): Promise<ProviderDnsState>;
-  setDnsRecords(domain: string, records: InfraDnsRecord[], emailType: string | null): Promise<void>;
+  setDnsRecords(domain: string, records: InfraDnsRecord[], emailType: string | null, grant: RegistrarWriteGrant): Promise<void>;
   /** Point the domain back at the provider's own DNS so records can be managed. */
-  configureDns(domain: string): Promise<void>;
+  configureDns(domain: string, grant: RegistrarWriteGrant): Promise<void>;
 }

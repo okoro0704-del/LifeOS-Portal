@@ -1,7 +1,50 @@
+import { randomUUID } from "node:crypto";
 import { NAMECHEAP_ENDPOINTS, type DomainProviderConfig } from "../config.js";
+import type { EgressEvaluation } from "../egress.js";
 import { DomainInfraError } from "../errors.js";
+import {
+  consumeWriteGrant,
+  defaultRegistrarLogger,
+  type RegistrarLogger,
+  type RegistrarWriteGrant,
+  type RegistrarWriteOperation,
+} from "../write-gate.js";
 import { mapNamecheapErrors, type NamecheapCommandContext } from "./errors.js";
 import { NamecheapXmlError, parseNamecheapXml, type NamecheapEnvelope } from "./xml.js";
+
+/** Commands that never change registrar state or spend money. Everything else is a write. */
+const READ_COMMANDS = new Set([
+  "namecheap.domains.check",
+  "namecheap.users.getPricing",
+  "namecheap.users.getBalances",
+  "namecheap.domains.getList",
+  "namecheap.domains.getInfo",
+  "namecheap.domains.dns.getHosts",
+  "namecheap.domains.dns.getList",
+]);
+
+const WRITE_OPERATION: Record<string, RegistrarWriteOperation> = {
+  "namecheap.domains.create": "REGISTER",
+  "namecheap.domains.renew": "RENEW",
+  "namecheap.domains.dns.setHosts": "DNS_SET",
+  "namecheap.domains.dns.setDefault": "DNS_DEFAULT",
+};
+
+export function registrarCommandClass(command: string): "READ" | "WRITE" {
+  return READ_COMMANDS.has(command) ? "READ" : "WRITE";
+}
+
+function commandDomain(params: Record<string, string>): string | null {
+  if (params.DomainName) return params.DomainName;
+  if (params.SLD && params.TLD) return `${params.SLD}.${params.TLD}`;
+  return null;
+}
+
+export type NamecheapClientOptions = {
+  logger?: RegistrarLogger;
+  /** Current egress evaluation for diagnostics; never triggers network access. */
+  egress?: () => EgressEvaluation;
+};
 
 export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
@@ -10,11 +53,23 @@ export class NamecheapTransportError extends Error {
   constructor(
     readonly kind: "timeout" | "network" | "http" | "parse",
     readonly diagnostic: string,
+    readonly httpStatus?: number,
   ) {
     super(`namecheap_${kind}`);
     this.name = "NamecheapTransportError";
   }
 }
+
+type CallEvent = {
+  command: string;
+  commandClass: "READ" | "WRITE";
+  correlationId: string;
+  startedAt: number;
+  outcome: string;
+  httpStatus?: number | null;
+  errorCode?: string | null;
+  registrarErrors?: string[];
+};
 
 const ALLOWED_ENDPOINTS = new Set(Object.values(NAMECHEAP_ENDPOINTS));
 
@@ -24,11 +79,16 @@ function networkDisabledInTests(): Promise<Response> {
 
 export class NamecheapClient {
   private readonly fetchImpl: FetchLike;
+  private readonly log: RegistrarLogger;
+  private readonly egress: (() => EgressEvaluation) | null;
 
   constructor(
     private readonly cfg: DomainProviderConfig,
     fetchImpl?: FetchLike,
+    options: NamecheapClientOptions = {},
   ) {
+    this.log = options.logger ?? defaultRegistrarLogger;
+    this.egress = options.egress ?? null;
     if (!ALLOWED_ENDPOINTS.has(cfg.endpoint)) {
       throw new DomainInfraError("PROVIDER_NOT_CONFIGURED", "Provider endpoint is not an approved registrar endpoint.");
     }
@@ -55,18 +115,81 @@ export class NamecheapClient {
         if (secret && secret.length >= 3) out = out.split(secret).join("[redacted]");
       }
     }
-    return out.replace(/ApiKey=[^&\s]+/gi, "ApiKey=[redacted]");
+    return out
+      .replace(/(ApiKey|ApiUser|UserName|Password|ClientIp)=[^&\s]+/gi, "$1=[redacted]")
+      .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email]");
   };
 
   async call(
     command: string,
     params: Record<string, string>,
     context: NamecheapCommandContext,
-    opts?: { timeoutMs?: number },
+    opts?: { timeoutMs?: number; grant?: RegistrarWriteGrant },
   ): Promise<NamecheapEnvelope> {
     const creds = this.cfg.credentials();
     if (!creds) throw new DomainInfraError("PROVIDER_NOT_CONFIGURED");
 
+    const commandClass = registrarCommandClass(command);
+    if (commandClass === "WRITE") {
+      try {
+        consumeWriteGrant(opts?.grant, {
+          operation: WRITE_OPERATION[command] ?? "OTHER",
+          environment: this.cfg.environment,
+          domain: commandDomain(params),
+        });
+      } catch (err) {
+        this.emit({ command, commandClass, correlationId: randomUUID(), startedAt: Date.now(), outcome: "REFUSED_NO_GRANT" });
+        throw err;
+      }
+    }
+    const started = Date.now();
+    const correlationId = randomUUID();
+    const done = (fields: Pick<CallEvent, "outcome"> & Partial<CallEvent>) =>
+      this.emit({ command, commandClass, correlationId, startedAt: started, ...fields });
+
+    try {
+      const envelope = await this.send(command, params, context, opts, creds);
+      done({ outcome: "OK", httpStatus: 200 });
+      return envelope;
+    } catch (err) {
+      if (err instanceof NamecheapTransportError) {
+        done({ outcome: `TRANSPORT_${err.kind.toUpperCase()}`, httpStatus: err.httpStatus ?? null });
+      } else if (err instanceof DomainInfraError) {
+        done({ outcome: "REGISTRAR_ERROR", httpStatus: 200, errorCode: err.code, registrarErrors: err.registrarErrors ?? [] });
+      } else {
+        done({ outcome: "UNEXPECTED" });
+      }
+      throw err;
+    }
+  }
+
+  private emit(e: CallEvent) {
+    const egress = this.egress?.() ?? null;
+    this.log({
+      event: "registrar.call",
+      correlationId: e.correlationId,
+      provider: "namecheap",
+      environment: this.cfg.environment,
+      command: e.command,
+      class: e.commandClass,
+      outcome: e.outcome,
+      httpStatus: e.httpStatus ?? null,
+      errorCode: e.errorCode ?? null,
+      registrarErrors: e.registrarErrors ?? [],
+      latencyMs: Date.now() - e.startedAt,
+      egressStatus: egress?.status ?? "UNKNOWN",
+      observedEgressIp: egress?.observedIp ?? null,
+      observedEgressInExpected: egress?.observedInExpected ?? null,
+    });
+  }
+
+  private async send(
+    command: string,
+    params: Record<string, string>,
+    context: NamecheapCommandContext,
+    opts: { timeoutMs?: number } | undefined,
+    creds: NonNullable<ReturnType<DomainProviderConfig["credentials"]>>,
+  ): Promise<NamecheapEnvelope> {
     const body = new URLSearchParams({
       ApiUser: creds.apiUser,
       ApiKey: creds.apiKey,
@@ -101,7 +224,7 @@ export class NamecheapClient {
         "response body interrupted",
       );
     }
-    if (!res.ok) throw new NamecheapTransportError("http", `HTTP ${res.status}`);
+    if (!res.ok) throw new NamecheapTransportError("http", `HTTP ${res.status}`, res.status);
 
     let envelope: NamecheapEnvelope;
     try {

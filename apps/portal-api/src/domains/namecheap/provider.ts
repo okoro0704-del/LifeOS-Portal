@@ -12,7 +12,14 @@ import type {
   ProviderRegistration,
   ProviderTldPrice,
 } from "../provider.js";
-import { NamecheapClient, NamecheapTransportError, transportToDomainError, type FetchLike } from "./client.js";
+import type { RegistrarWriteGrant } from "../write-gate.js";
+import {
+  NamecheapClient,
+  NamecheapTransportError,
+  transportToDomainError,
+  type FetchLike,
+  type NamecheapClientOptions,
+} from "./client.js";
 import type { NamecheapCommandContext } from "./errors.js";
 import { attr, boolAttr, child, children, type NamecheapEnvelope } from "./xml.js";
 
@@ -69,19 +76,19 @@ export class NamecheapProvider implements DomainProvider {
   private readonly client: NamecheapClient;
   private readonly priceCache = new Map<string, { at: number; value: ProviderTldPrice | null }>();
 
-  constructor(cfg: DomainProviderConfig, fetchImpl?: FetchLike) {
+  constructor(cfg: DomainProviderConfig, fetchImpl?: FetchLike, options?: NamecheapClientOptions) {
     this.environment = cfg.environment;
-    this.client = new NamecheapClient(cfg, fetchImpl);
+    this.client = new NamecheapClient(cfg, fetchImpl, options);
   }
 
   private async call(
     command: string,
     params: Record<string, string>,
     context: NamecheapCommandContext,
-    timeoutMs?: number,
+    grant?: RegistrarWriteGrant,
   ): Promise<NamecheapEnvelope> {
     try {
-      return await this.client.call(command, params, context, { timeoutMs });
+      return await this.client.call(command, params, context, { grant });
     } catch (err) {
       if (err instanceof NamecheapTransportError) throw transportToDomainError(err, context);
       throw err;
@@ -202,7 +209,7 @@ export class NamecheapProvider implements DomainProvider {
     };
   }
 
-  async register(input: ProviderRegisterInput): Promise<ProviderRegistration> {
+  async register(input: ProviderRegisterInput, grant: RegistrarWriteGrant): Promise<ProviderRegistration> {
     const params: Record<string, string> = {
       DomainName: input.domain,
       Years: String(input.years),
@@ -218,7 +225,7 @@ export class NamecheapProvider implements DomainProvider {
       params.IsPremiumDomain = "true";
       params.PremiumPrice = input.premium.premiumPrice;
     }
-    const env = await this.call("namecheap.domains.create", params, "create", undefined);
+    const env = await this.call("namecheap.domains.create", params, "create", grant);
     const row = child(env.commandResponse, "DomainCreateResult");
     if (!row) throw new DomainInfraError("REGISTRATION_UNCERTAIN", undefined, "missing DomainCreateResult");
     const registered = boolAttr(row, "Registered");
@@ -263,8 +270,8 @@ export class NamecheapProvider implements DomainProvider {
     return rows.find((row) => row.domain === domain.toLowerCase()) ?? null;
   }
 
-  async renew(domain: string, years: number) {
-    const env = await this.call("namecheap.domains.renew", { DomainName: domain, Years: String(years) }, "renew");
+  async renew(domain: string, years: number, grant: RegistrarWriteGrant) {
+    const env = await this.call("namecheap.domains.renew", { DomainName: domain, Years: String(years) }, "renew", grant);
     const row = child(env.commandResponse, "DomainRenewResult");
     return { chargedAmount: money(attr(row, "ChargedAmount"), "USD"), orderId: attr(row, "OrderID") };
   }
@@ -299,7 +306,12 @@ export class NamecheapProvider implements DomainProvider {
     };
   }
 
-  async setDnsRecords(domain: string, records: InfraDnsRecord[], emailType: string | null): Promise<void> {
+  async setDnsRecords(
+    domain: string,
+    records: InfraDnsRecord[],
+    emailType: string | null,
+    grant: RegistrarWriteGrant,
+  ): Promise<void> {
     const { sld, tld } = splitDomain(domain);
     const params: Record<string, string> = { SLD: sld, TLD: tld };
     records.forEach((record, index) => {
@@ -318,14 +330,14 @@ export class NamecheapProvider implements DomainProvider {
           ? "MXE"
           : null;
     if (effectiveEmail) params.EmailType = effectiveEmail;
-    const env = await this.call("namecheap.domains.dns.setHosts", params, "dns.set");
+    const env = await this.call("namecheap.domains.dns.setHosts", params, "dns.set", grant);
     const result = child(env.commandResponse, "DomainDNSSetHostsResult");
     if (boolAttr(result, "IsSuccess") !== true) throw new DomainInfraError("DNS_WRITE_FAILED", undefined, "IsSuccess was not true");
   }
 
-  async configureDns(domain: string): Promise<void> {
+  async configureDns(domain: string, grant: RegistrarWriteGrant): Promise<void> {
     const { sld, tld } = splitDomain(domain);
-    const env = await this.call("namecheap.domains.dns.setDefault", { SLD: sld, TLD: tld }, "dns.default");
+    const env = await this.call("namecheap.domains.dns.setDefault", { SLD: sld, TLD: tld }, "dns.default", grant);
     const result = child(env.commandResponse, "DomainDNSSetDefaultResult");
     if (boolAttr(result, "Updated") !== true) throw new DomainInfraError("DNS_WRITE_FAILED", undefined, "setDefault not updated");
   }

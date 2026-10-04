@@ -10,7 +10,38 @@ export type DomainProviderEnvironment = "SANDBOX" | "PRODUCTION";
 export type DomainProviderKind = "namecheap" | "external";
 
 export type DomainProviderCapabilityStatus = "READY" | "NOT_CONFIGURED" | "MISCONFIGURED";
+/** Operator attestation (DOMAIN_PROVIDER_EGRESS_IP_STATUS) that the host allocates static egress. */
 export type DomainEgressIpStatus = "STATIC" | "NOT_STATIC" | "UNKNOWN";
+
+/** Whether registrar traffic is known to leave from the ClientIp Namecheap expects. */
+export type DomainEgressContractStatus = "UNKNOWN" | "VERIFIED" | "MISMATCH" | "UNAVAILABLE";
+
+export type DomainEgressContractReason =
+  | "EXPECTED_EGRESS_NOT_CONFIGURED"
+  | "EXPECTED_EGRESS_INVALID"
+  | "EGRESS_NOT_ATTESTED_STATIC"
+  | "MULTIPLE_EGRESS_IPS_UNRESOLVED"
+  | "CLIENT_IP_INVALID"
+  | "CLIENT_IP_NOT_EXPECTED"
+  | "NOT_OBSERVED"
+  | "OBSERVATION_FAILED"
+  | "OBSERVED_EGRESS_UNEXPECTED"
+  | "OBSERVED_EGRESS_NOT_CLIENT_IP"
+  | "OK";
+
+export type DomainEgressPolicyStatus = {
+  status: DomainEgressContractStatus;
+  reason: DomainEgressContractReason;
+  attestation: DomainEgressIpStatus;
+  expectedIpCount: number;
+  clientIpExpected: boolean | null;
+  observedInExpected: boolean | null;
+  observedAt: string | null;
+  /** Admin only. */
+  expectedIps?: string[];
+  clientIp?: string | null;
+  observedIp?: string | null;
+};
 
 export type DomainInfrastructureStatus = {
   provider: DomainProviderKind;
@@ -21,6 +52,11 @@ export type DomainInfrastructureStatus = {
   missing?: string[];
   purchasesEnabled: boolean;
   egressIp: DomainEgressIpStatus;
+  egressPolicy: DomainEgressPolicyStatus;
+  /** Sandbox registrar usable for safe testing. Never implies production write readiness. */
+  sandboxReady: boolean;
+  /** Static production prerequisites met as of the last egress observation; each write re-checks live. */
+  productionWriteReady: boolean;
   supportedTlds: readonly string[];
   purchaseMode: "OWNER_ADMIN_TEST";
   /** True when the gateway still allows development sign-in, so PRODUCTION domain changes are refused. */
@@ -83,8 +119,19 @@ export type DomainErrorCode =
   | "INSUFFICIENT_PROVIDER_BALANCE"
   | "REGISTRATION_REJECTED"
   | "REGISTRATION_UNCERTAIN"
-  | "PURCHASES_DISABLED"
   | "PURCHASE_IN_PROGRESS"
+  // Registrar write gate (production writes fail closed on each of these).
+  | "MISSING_CREDENTIALS"
+  | "WRONG_ENVIRONMENT"
+  | "PRODUCTION_PURCHASES_DISABLED"
+  | "CLIENT_IP_INVALID"
+  | "EGRESS_UNKNOWN"
+  | "EGRESS_MISMATCH"
+  | "EGRESS_UNAVAILABLE"
+  | "MISSING_AUTHORITY"
+  | "MISSING_CONFIRMATION"
+  | "CONFIRMATION_REPLAYED"
+  | "REGISTRAR_WRITE_NOT_AUTHORIZED"
   | "CONFIRMATION_MISMATCH"
   | "DNS_NOT_PROVIDER_MANAGED"
   | "DNS_READ_FAILED"
