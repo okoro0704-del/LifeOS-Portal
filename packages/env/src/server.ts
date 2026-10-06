@@ -119,6 +119,13 @@ export function parsePortalServerEnv(source: NodeJS.ProcessEnv = process.env) {
           message: "refuses the development default secret",
         });
       }
+      if (enableTrustId && !source.TRUSTID_TOKEN_KEYS?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["TRUSTID_TOKEN_KEYS"],
+          message: "TRUSTID_TOKEN_KEYS is required in production when TrustID is enabled (seals stored TrustID bearers)",
+        });
+      }
       if (enableTrustId && value.TRUSTID_MODE === "mock") {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -213,6 +220,16 @@ export function parsePortalServerEnv(source: NodeJS.ProcessEnv = process.env) {
     nodeEnv,
     cookieSecret: parsed.data.PORTAL_SECRET_KEY,
     sessionTtlHours: Number(source.SESSION_TTL_HOURS ?? 24),
+    /** Housekeeping sweep for expired session rows. Expiry itself is enforced on every read. */
+    sessionSweepMs: Number(source.SESSION_SWEEP_MINUTES ?? 15) * 60_000,
+    /** `kid:base64(32 bytes)` list; first entry seals. Empty → per-process key (dev/test only). */
+    trustIdTokenKeys: source.TRUSTID_TOKEN_KEYS ?? "",
+    /**
+     * Browser surfaces whose Portal session is cookie-only (HttpOnly). Requests from these origins never
+     * receive a session token in a response body and may not authenticate with a header token.
+     * Unset → production defaults to the platform admin and business portal origins.
+     */
+    cookieSessionOrigins: source.COOKIE_SESSION_ORIGINS ?? "",
     corsOrigins: csv(
       parsed.data.CORS_ORIGINS || parsed.data.PORTAL_DOMAIN,
       "http://localhost:5176,http://localhost:5177,http://localhost:5178",

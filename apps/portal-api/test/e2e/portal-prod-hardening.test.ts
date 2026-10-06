@@ -16,6 +16,7 @@ process.env.PORTAL_DOMAIN = "https://portal.getlifeos.app";
 process.env.INTERNAL_PROVISION_TOKEN = "prod-provision-token-not-default";
 process.env.DATABASE_URL = "postgres://portal:portal@127.0.0.1:54322/lifeos";
 process.env.CORS_ORIGINS = "https://portal.getlifeos.app";
+process.env.TRUSTID_TOKEN_KEYS = `k1:${Buffer.alloc(32, 7).toString("base64")}`;
 
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";

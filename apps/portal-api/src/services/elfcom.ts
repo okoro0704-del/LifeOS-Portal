@@ -1,4 +1,5 @@
 import { config } from "../config.js";
+import { UPSTREAM_TIMEOUTS_MS, fetchWithTimeout } from "../lib/http.js";
 
 const ELFCOM_APP_ID = "life_os";
 
@@ -23,7 +24,9 @@ export async function notifyElfCom(userId: string, pushToken: string): Promise<{
   if (!config.elfcomApiUrl || !config.elfcomBaasApiKey) {
     return { forwarded: false };
   }
-  const res = await fetch(`${config.elfcomApiUrl.replace(/\/$/, "")}/v1/devices`, {
+  const res = await fetchWithTimeout(`${config.elfcomApiUrl.replace(/\/$/, "")}/v1/devices`, {
+    timeoutMs: UPSTREAM_TIMEOUTS_MS.push,
+    dependency: "ElfCom",
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -34,7 +37,6 @@ export async function notifyElfCom(userId: string, pushToken: string): Promise<{
       pushToken,
       appId: ELFCOM_APP_ID,
     }),
-    signal: AbortSignal.timeout(4000),
   });
   if (!res.ok) {
     throw new Error(`ElfCom register failed: HTTP ${res.status}`);

@@ -70,21 +70,14 @@ export class ApiError extends Error {
   }
 }
 
-export function getStoredSessionToken(): string | null {
-  try {
-    return localStorage.getItem(SESSION_KEY);
-  } catch {
-    return null;
-  }
-}
-
-export function storeSessionToken(token: string | null) {
-  try {
-    if (token) localStorage.setItem(SESSION_KEY, token);
-    else localStorage.removeItem(SESSION_KEY);
-  } catch {
-    /* ignore */
-  }
+/**
+ * The Portal session is the HttpOnly `portal_session` cookie the Portal API sets; this app's
+ * JavaScript never holds the token. Clear any token an older build left in localStorage.
+ */
+try {
+  localStorage.removeItem(SESSION_KEY);
+} catch {
+  /* ignore */
 }
 
 export function cacheUser(user: PortalUserPublic | null) {
@@ -112,8 +105,6 @@ export function money(amountMinor: number, currency = "USD") {
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   if (!headers.has("Content-Type") && init?.body) headers.set("Content-Type", "application/json");
-  const token = getStoredSessionToken();
-  if (token) headers.set("X-Portal-Session", token);
   let res: Response;
   try {
     res = await fetch(`${portalApiBase}${path}`, { ...init, headers, credentials: "include" });
@@ -129,12 +120,12 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const portalApi = {
   createSession: (accessToken: string) =>
-    api<{ sessionToken: string; user: PortalUserPublic }>("/auth/session", {
+    api<{ sessionToken?: string; user: PortalUserPublic }>("/auth/session", {
       method: "POST",
       body: JSON.stringify({ accessToken }),
     }),
   exchangeHandoff: (code: string) =>
-    api<{ ok: boolean; sessionToken: string; user: PortalUserPublic }>("/auth/handoff/exchange", {
+    api<{ ok: boolean; sessionToken?: string; user: PortalUserPublic }>("/auth/handoff/exchange", {
       method: "POST",
       body: JSON.stringify({ code }),
     }),
@@ -142,7 +133,7 @@ export const portalApi = {
     if (trustIdMode !== "mock" && !bypassAuthForTesting) {
       return Promise.reject(new ApiError("Not found", 404, "not_found"));
     }
-    return api<{ sessionToken: string; user: PortalUserPublic }>("/auth/dev-session", {
+    return api<{ sessionToken?: string; user: PortalUserPublic }>("/auth/dev-session", {
       method: "POST",
       body: JSON.stringify({ trustId: trustId ?? "TD-PORTAL-DEV" }),
     });

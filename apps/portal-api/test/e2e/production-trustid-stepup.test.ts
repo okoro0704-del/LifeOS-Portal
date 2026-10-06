@@ -20,6 +20,7 @@ process.env.PORTAL_DOMAIN = "https://getlifeos.app";
 process.env.CORS_ORIGINS = "https://getlifeos.app,https://admin.getlifeos.app";
 process.env.PLATFORM_ADMIN_URL = "https://admin.getlifeos.app";
 process.env.DATABASE_URL = "postgres://portal:portal@db.example.invalid:5432/lifeos";
+process.env.TRUSTID_TOKEN_KEYS = `k2:${Buffer.alloc(32, 2).toString("base64")}`;
 delete process.env.LOCAL_ADMIN_EMAIL;
 delete process.env.LOCAL_ADMIN_PASSWORD;
 
@@ -56,6 +57,9 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
     if (!identity) return json(401, { error: "invalid_token" });
     return json(200, { sub: identity.trustId, trustId: identity.trustId, roles: identity.roles, identityStatus: "verified", trustLevel: { tier: 3 } });
   }
+  // Step-up calls must carry the signed-in user's own TrustID bearer (opened from the sealed session copy).
+  const caller = IDENTITIES[(headers.get("authorization") ?? "").replace(/^Bearer /, "")];
+  if (url.includes("/v1/trust-id/") && !caller) return json(401, { error: "missing_bearer" });
   if (url.endsWith("/v1/trust-id/verify-biometric")) {
     const trustId = FACES[String(body.biometric ?? "")];
     return json(200, trustId ? { matched: true, trustId, accessLevel: "master", isMasterDevice: true } : { matched: false });
@@ -71,10 +75,18 @@ function call(opts: InjectOptions) {
   return app.inject({ remoteAddress: `192.0.2.${(ip % 250) + 1}`, ...opts });
 }
 
+/** Admin is a cookie-only surface: the session comes back as the HttpOnly cookie, never in the body. */
 async function session(accessToken: string) {
   const res = await call({ method: "POST", url: "/auth/session", headers: { origin: ADMIN_ORIGIN }, payload: { accessToken } });
   assert.equal(res.statusCode, 200, res.body);
-  return res.json().sessionToken as string;
+  assert.equal(res.json().sessionToken, undefined);
+  assert.ok(!res.body.includes(accessToken), "the TrustID bearer is never echoed");
+  const cookie = String(res.headers["set-cookie"] ?? "");
+  return cookie.split(";")[0]!.split("=").slice(1).join("=");
+}
+
+function asAdmin(token: string, extra: Record<string, string> = {}) {
+  return { headers: { origin: ADMIN_ORIGIN, ...extra }, cookies: { portal_session: token } };
 }
 
 before(async () => {
@@ -118,36 +130,35 @@ test("no dev-session, no local password, no mock tokens", async () => {
 
 test("platform admin without a step-up is refused; mock headers do nothing", async () => {
   const token = await session("tok-owner");
-  const headers = { "x-portal-session": token, origin: ADMIN_ORIGIN };
-  const bare = await call({ method: "POST", url: suspendUrl, headers, payload: {} });
+  const bare = await call({ method: "POST", url: suspendUrl, ...asAdmin(token), payload: {} });
   assert.equal(bare.statusCode, 401);
   assert.equal(bare.json().error, "biometric_no_match");
-  const mockHeaders = await call({ method: "POST", url: suspendUrl, headers: { ...headers, "x-trustid-biometric": "verified", "x-trustid-master-device": "bound" }, payload: {} });
+  const mockHeaders = await call({ method: "POST", url: suspendUrl, ...asAdmin(token, { "x-trustid-biometric": "verified", "x-trustid-master-device": "bound" }), payload: {} });
   assert.equal(mockHeaders.statusCode, 401);
-  const noDevice = await call({ method: "POST", url: suspendUrl, headers, payload: { biometric: "owner-face" } });
+  const noDevice = await call({ method: "POST", url: suspendUrl, ...asAdmin(token), payload: { biometric: "owner-face" } });
   assert.equal(noDevice.statusCode, 403);
   assert.equal(noDevice.json().error, "master_device_required");
-  const wrongDevice = await call({ method: "POST", url: suspendUrl, headers, payload: { biometric: "owner-face", deviceProof: "stolen-device" } });
+  const wrongDevice = await call({ method: "POST", url: suspendUrl, ...asAdmin(token), payload: { biometric: "owner-face", deviceProof: "stolen-device" } });
   assert.equal(wrongDevice.statusCode, 403);
 });
 
 test("someone else's biometric does not satisfy the signed-in admin's step-up", async () => {
   const token = await session("tok-owner");
-  const res = await call({ method: "POST", url: suspendUrl, headers: { "x-portal-session": token, origin: ADMIN_ORIGIN }, payload: { biometric: "other-face", deviceProof: "owner-device" } });
+  const res = await call({ method: "POST", url: suspendUrl, ...asAdmin(token), payload: { biometric: "other-face", deviceProof: "owner-device" } });
   assert.equal(res.statusCode, 403);
   assert.equal(res.json().error, "biometric_identity_mismatch");
 });
 
 test("a non-admin with valid-looking proofs is still refused", async () => {
   const token = await session("tok-user");
-  const res = await call({ method: "POST", url: suspendUrl, headers: { "x-portal-session": token, origin: ADMIN_ORIGIN }, payload: { biometric: "owner-face", deviceProof: "owner-device" } });
+  const res = await call({ method: "POST", url: suspendUrl, ...asAdmin(token), payload: { biometric: "owner-face", deviceProof: "owner-device" } });
   assert.equal(res.statusCode, 403);
   assert.equal(res.json().error, "forbidden");
 });
 
 test("valid admin + matching biometric + bound Master Device is allowed", async () => {
   const token = await session("tok-owner");
-  const res = await call({ method: "POST", url: suspendUrl, headers: { "x-portal-session": token, origin: ADMIN_ORIGIN }, payload: { suspended: true, biometric: "owner-face", deviceProof: "owner-device" } });
+  const res = await call({ method: "POST", url: suspendUrl, ...asAdmin(token), payload: { suspended: true, biometric: "owner-face", deviceProof: "owner-device" } });
   assert.equal(res.statusCode, 200, res.body);
   assert.equal(res.json().suspended, true);
 });

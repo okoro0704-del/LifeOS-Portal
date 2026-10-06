@@ -10,12 +10,9 @@ import {
 import type { PortalUserPublic } from "@lifeos-portal/shared";
 import {
   ApiError,
-  bypassAuthForTesting,
   cacheUser,
   getCachedUser,
-  getStoredSessionToken,
   portalApi,
-  storeSessionToken,
 } from "../lib/api";
 
 type AuthState = {
@@ -23,31 +20,23 @@ type AuthState = {
   loading: boolean;
   refresh: () => Promise<void>;
   logout: () => Promise<void>;
-  setSession: (sessionToken: string, user: PortalUserPublic) => void;
+  setSession: (user: PortalUserPublic) => void;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<PortalUserPublic | null>(() =>
-    getStoredSessionToken() ? getCachedUser() : null,
-  );
+  // The cookie is invisible to JavaScript; /auth/me (below) is the only source of truth.
+  const [user, setUser] = useState<PortalUserPublic | null>(() => getCachedUser());
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
-    if (!getStoredSessionToken() && !bypassAuthForTesting) {
-      cacheUser(null);
-      setUser(null);
-      setLoading(false);
-      return;
-    }
     try {
       const data = await portalApi.me();
       cacheUser(data.user);
       setUser(data.user);
     } catch (err) {
       if (err instanceof ApiError && (err.status === 401 || err.code === "unauthorized")) {
-        storeSessionToken(null);
         cacheUser(null);
         setUser(null);
       }
@@ -62,13 +51,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     await portalApi.logout().catch(() => undefined);
-    storeSessionToken(null);
     cacheUser(null);
     setUser(null);
   }, []);
 
-  const setSession = useCallback((sessionToken: string, next: PortalUserPublic) => {
-    storeSessionToken(sessionToken);
+  const setSession = useCallback((next: PortalUserPublic) => {
     cacheUser(next);
     setUser(next);
   }, []);

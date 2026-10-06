@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { authClient, portalApi, storeSessionToken } from "../lib/api";
+import { authClient, portalApi } from "../lib/api";
 import { useAuth } from "../hooks/useAuth";
 
 export function CallbackPage() {
@@ -27,8 +27,7 @@ export function CallbackPage() {
       try {
         const tokens = await authClient.exchangeCode(code, state);
         const data = await portalApi.createSession(tokens.access_token);
-        storeSessionToken(data.sessionToken);
-        setSession(data.sessionToken, data.user);
+        setSession(data.user);
         navigate("/admin/tenants", { replace: true });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Could not connect.");

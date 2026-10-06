@@ -13,7 +13,7 @@ const AUTHORITY_RESET_VERSION = "2026-10-domain-security-gate";
  * an existing row with that email (even one somebody registered first) gets the env password
  * and ADMIN role, and its old sessions are revoked when the password changes.
  */
-export function seedLocalAdmin(store: PortalStore) {
+export async function seedLocalAdmin(store: PortalStore) {
   if (isGuestAuthEnabled()) seedGuestUsers(store);
   const email = config.localAdminEmail.trim().toLowerCase();
   const password = config.localAdminPassword;
@@ -26,7 +26,7 @@ export function seedLocalAdmin(store: PortalStore) {
   const passwordCurrent = Boolean(existing.passwordHash && verifyPassword(password, existing.passwordHash));
   if (!passwordCurrent) {
     store.updateUser(existing.id, { passwordHash: hashPassword(password) });
-    store.deleteSessions((session) => session.userId === existing.id);
+    await store.revokeUserSessions(existing.id);
   }
   if (existing.role !== "ADMIN" || existing.suspended) {
     store.updateUser(existing.id, { role: "ADMIN", roles: rolesForAccount("ADMIN"), suspended: false });
@@ -44,9 +44,9 @@ function isUnauthenticatedGrant(user: PortalUser) {
   return !user.passwordHash && user.identityStatus === "local";
 }
 
-function demote(store: PortalStore, user: PortalUser) {
+async function demote(store: PortalStore, user: PortalUser) {
   store.updateUser(user.id, { role: "USER", roles: rolesForAccount("USER") });
-  store.deleteSessions((session) => session.userId === user.id);
+  await store.revokeUserSessions(user.id);
 }
 
 /**
@@ -54,7 +54,7 @@ function demote(store: PortalStore, user: PortalUser) {
  * for anyone, so once per AUTHORITY_RESET_VERSION every session is revoked and every ADMIN except
  * the env-configured owner is demoted. On every boot, dev-session/guest accounts are kept non-admin.
  */
-export function enforceProductionAuthority(store: PortalStore) {
+export async function enforceProductionAuthority(store: PortalStore) {
   if (config.nodeEnv !== "production") return { demoted: 0, sessionsRevoked: 0 };
   let demoted = 0;
   let sessionsRevoked = 0;
@@ -63,12 +63,12 @@ export function enforceProductionAuthority(store: PortalStore) {
     if (user.role !== "ADMIN" && !user.roles?.includes("platform_admin")) continue;
     if (isOwnerAccount(user)) continue;
     if (resetDue || isUnauthenticatedGrant(user)) {
-      demote(store, user);
+      await demote(store, user);
       demoted += 1;
     }
   }
   if (resetDue) {
-    sessionsRevoked = store.deleteSessions(() => true);
+    sessionsRevoked = await store.revokeAllSessions();
     store.setMeta(AUTHORITY_RESET_KEY, AUTHORITY_RESET_VERSION);
   }
   return { demoted, sessionsRevoked };

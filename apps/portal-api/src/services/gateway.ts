@@ -116,7 +116,7 @@ export async function probeUpstream(upstream: GatewayUpstream): Promise<GatewayU
       ...upstream,
       ok: false,
       latencyMs: Date.now() - started,
-      message: err instanceof Error ? err.message : "unreachable",
+      message: (err as { name?: string } | null)?.name === "TimeoutError" ? "timed out" : "unreachable",
     };
   }
 }
@@ -153,6 +153,7 @@ export async function proxyToUpstream(opts: {
 
   const url = `${upstream.baseUrl.replace(/\/$/, "")}${opts.path}${opts.query ?? ""}`;
   let res: Response;
+  let text: string;
   try {
     res = await fetch(url, {
       method: opts.method,
@@ -163,11 +164,12 @@ export async function proxyToUpstream(opts: {
       body: opts.method === "GET" || opts.method === "HEAD" ? undefined : JSON.stringify(opts.body ?? {}),
       signal: AbortSignal.timeout(config.proxyTimeoutMs),
     });
+    // Inside the try: the deadline also covers a body that stalls mid-stream.
+    text = await res.text();
   } catch {
     const unbound = unboundFor(opts.engine);
     throw new HttpError(unbound.message, 503, unbound.error);
   }
-  const text = await res.text();
   let body: unknown = {};
   if (text) {
     try {

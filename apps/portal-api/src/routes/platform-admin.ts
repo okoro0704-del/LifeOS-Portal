@@ -79,7 +79,7 @@ export async function registerPlatformAdminRoutes(
     if (!(await checkMasterDeviceBinding(req, reply))) return;
     const { tenantId } = req.params as { tenantId: string };
     try {
-      return issueImpersonationToken(store, tenantId);
+      return await issueImpersonationToken(store, tenantId);
     } catch (err) {
       if (err instanceof HttpError) {
         return reply.code(err.statusCode).send({ error: err.code, message: err.message });

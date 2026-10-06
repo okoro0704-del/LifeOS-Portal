@@ -64,6 +64,30 @@ test("production boot accepts typed public URLs and a 32+ secret", () => {
   assert.equal(env.databaseUrl, "postgres://portal:portal@db.internal:5432/lifeos");
 });
 
+test("production with TrustID enabled requires dedicated TRUSTID_TOKEN_KEYS", () => {
+  const base = {
+    NODE_ENV: "production",
+    ENABLE_TRUST_ID: "true",
+    BYPASS_TRUST_ID: "false",
+    GATEWAY_MODE: "production",
+    DATAZONE_API_URL: "https://datazone.getlifeos.app",
+    TRUST_ID_API_URL: "https://trust.getlifeos.app",
+    FINPROVE_API_URL: "https://finprove.getlifeos.app",
+    PORTAL_SECRET_KEY: "prod-portal-secret-key-32-chars-min",
+    TRUSTID_MODE: "remote",
+    PORTAL_DOMAIN: "https://portal.getlifeos.app",
+    INTERNAL_PROVISION_TOKEN: "prod-provision-token-not-default",
+    DATABASE_URL: "postgres://portal:portal@db.internal:5432/lifeos",
+  };
+  assert.throws(() => parsePortalServerEnv(base), (err: unknown) => {
+    assert.ok(err instanceof EnvValidationError);
+    assert.ok(err.issues.some((issue) => issue.path.includes("TRUSTID_TOKEN_KEYS")));
+    return true;
+  });
+  const env = parsePortalServerEnv({ ...base, TRUSTID_TOKEN_KEYS: `k1:${Buffer.alloc(32, 1).toString("base64")}` });
+  assert.match(env.trustIdTokenKeys, /^k1:/);
+});
+
 test("Railway production defaults Finprove private DNS and injected PORT", () => {
   const env = parsePortalServerEnv({
     NODE_ENV: "production",

@@ -51,6 +51,18 @@ async function login(email: string, password: string, origin = ADMIN_ORIGIN) {
   return call({ method: "POST", url: "/auth/login", headers: { origin }, payload: { email, password } });
 }
 
+/** Admin and business surfaces are cookie-only: the session is the HttpOnly cookie, never a body token. */
+function sessionCookie(res: { headers: Record<string, unknown> }) {
+  const raw = String(res.headers["set-cookie"] ?? "");
+  const value = raw.split(";")[0]!.split("=").slice(1).join("=");
+  assert.ok(value, "login set the session cookie");
+  return value;
+}
+
+function cookieAuth(token: string, origin = ADMIN_ORIGIN) {
+  return { headers: { origin }, cookies: { portal_session: token } };
+}
+
 before(async () => {
   const { createStore } = await import("../../src/store.js");
   const { hashSecret } = await import("../../src/lib/crypto.js");
@@ -64,7 +76,7 @@ before(async () => {
   const member = store.createLocalUser({ email: "member@lifeos.test", passwordHash: hashPassword("member-password-1"), displayName: "Member", role: "USER" });
   for (const [label, user] of Object.entries({ guestAdmin, devAdmin, promoted, member })) {
     const raw = `legacy-${label}-session-token-value`;
-    store.createSession({ tokenHash: hashSecret(raw), userId: user.id, expiresAt: new Date(Date.now() + 3600_000) });
+    await store.createSession({ tokenHash: hashSecret(raw), userId: user.id, expiresAt: new Date(Date.now() + 3600_000) });
     legacyTokens[label] = raw;
   }
   const install = store.createInstall({
@@ -178,11 +190,11 @@ describe("boot hardening", () => {
 
   test("the one-time reset does not repeat on the next boot", async () => {
     const res = await login(OWNER.email, OWNER.password);
-    const token = res.json().sessionToken as string;
+    const token = sessionCookie(res);
     const { buildApp } = await import("../../src/app.js");
     const second = await buildApp({ store });
     try {
-      const me = await second.inject({ method: "GET", url: "/auth/me", headers: { "x-portal-session": token } });
+      const me = await second.inject({ method: "GET", url: "/auth/me", ...cookieAuth(token) });
       assert.equal(me.statusCode, 200, "owner session survives a restart");
     } finally {
       await second.close();
@@ -273,7 +285,8 @@ describe("normal signed-in user", () => {
       const res = await call({
         method: route.method as InjectOptions["method"],
         url: concrete(route.url),
-        headers: { "x-portal-session": token, origin: ADMIN_ORIGIN, ...MOCK_STEP_UP },
+        headers: { origin: ADMIN_ORIGIN, ...MOCK_STEP_UP },
+        cookies: { portal_session: token },
         payload: route.method === "GET" || route.method === "DELETE" ? undefined : { platformAdmin: true },
       });
       if (res.statusCode !== 403) offenders.push(`${route.method} ${route.url} → ${res.statusCode}`);
@@ -288,12 +301,13 @@ describe("owner admin (local password, no TrustID step-up available)", () => {
   before(async () => {
     const res = await login(OWNER.email, OWNER.password);
     assert.equal(res.statusCode, 200, res.body);
-    token = res.json().sessionToken as string;
+    assert.equal(res.json().sessionToken, undefined, "admin surface never receives the raw token");
+    token = sessionCookie(res);
   });
 
   test("can read admin dashboards", async () => {
     for (const url of ["/v1/admin/tenants", "/v1/admin/users", "/v1/admin/billings", "/v1/admin/routing", "/v1/admin/installs/health"]) {
-      const res = await call({ method: "GET", url, headers: { "x-portal-session": token, origin: ADMIN_ORIGIN } });
+      const res = await call({ method: "GET", url, ...cookieAuth(token) });
       assert.equal(res.statusCode, 200, `${url}: ${res.body}`);
     }
   });
@@ -307,7 +321,8 @@ describe("owner admin (local password, no TrustID step-up available)", () => {
       const res = await call({
         method: route.method as InjectOptions["method"],
         url: concrete(route.url),
-        headers: { "x-portal-session": token, origin: ADMIN_ORIGIN, ...MOCK_STEP_UP },
+        headers: { origin: ADMIN_ORIGIN, ...MOCK_STEP_UP },
+        cookies: { portal_session: token },
         payload: { biometric: "forged", deviceProof: "forged", role: "ADMIN", suspended: true },
       });
       if (res.statusCode !== 403 || res.json().error !== "step_up_unavailable") {
@@ -324,7 +339,7 @@ describe("owner admin (local password, no TrustID step-up available)", () => {
       "/v1/infrastructure/domains/purchase-intents/probe-id/confirm",
       "/v1/infrastructure/domains/probe-id/dns",
     ]) {
-      const res = await call({ method: "POST", url, headers: { "x-portal-session": token, origin: ADMIN_ORIGIN, ...MOCK_STEP_UP }, payload: { records: [] } });
+      const res = await call({ method: "POST", url, headers: { origin: ADMIN_ORIGIN, ...MOCK_STEP_UP }, cookies: { portal_session: token }, payload: { records: [] } });
       assert.equal(res.json().error, "step_up_unavailable", url);
       assert.equal(res.statusCode, 403, `${url}: ${res.body}`);
     }
@@ -335,7 +350,8 @@ describe("owner admin (local password, no TrustID step-up available)", () => {
     const cookie = String(res.headers["set-cookie"]).split(";")[0]!;
     const [name, value] = cookie.split("=");
     const evil = await call({ method: "GET", url: "/v1/admin/users", headers: { origin: "https://evil.example" }, cookies: { [name!]: value! } });
-    assert.equal(evil.statusCode, 401);
+    assert.equal(evil.statusCode, 403, "an unregistered origin is refused before authentication");
+    assert.equal(evil.json().error, "origin_not_allowed");
     const tenantHost = await call({ method: "GET", url: "/v1/admin/users", headers: { origin: "https://legacybrand.getlifeos.app" }, cookies: { [name!]: value! } });
     assert.equal(tenantHost.statusCode, 401, "tenant subdomains are not Portal surfaces");
     const ok = await call({ method: "GET", url: "/v1/admin/users", headers: { origin: ADMIN_ORIGIN }, cookies: { [name!]: value! } });
@@ -373,8 +389,8 @@ describe("credential endpoints", () => {
 describe("legacy domain paths and the ACTIVE invariant", () => {
   test("legacy purchase endpoint is gone", async () => {
     const member = await login("promoted@lifeos.test", "promoted-password-1");
-    const token = member.json().sessionToken as string;
-    const res = await call({ method: "POST", url: "/v1/tenant/domains/purchase", headers: { "x-portal-session": token, origin: "https://business.getlifeos.app" }, payload: { domain: "buy-me.example" } });
+    const token = sessionCookie(member);
+    const res = await call({ method: "POST", url: "/v1/tenant/domains/purchase", ...cookieAuth(token, "https://business.getlifeos.app"), payload: { domain: "buy-me.example" } });
     assert.equal(res.statusCode, 410);
     assert.equal(res.json().error, "legacy_domain_purchase_removed");
     assert.equal(store.getDomainByHostname("buy-me.example"), undefined);
@@ -392,7 +408,7 @@ describe("legacy domain paths and the ACTIVE invariant", () => {
 
   test("Domain Infrastructure stays fail-closed: purchases disabled, no Namecheap configured", async () => {
     const owner = await login(OWNER.email, OWNER.password);
-    const res = await call({ method: "GET", url: "/v1/infrastructure/domains/status", headers: { "x-portal-session": owner.json().sessionToken, origin: "https://business.getlifeos.app" } });
+    const res = await call({ method: "GET", url: "/v1/infrastructure/domains/status", ...cookieAuth(sessionCookie(owner), "https://business.getlifeos.app") });
     assert.equal(res.statusCode, 200, res.body);
     const status = res.json().status as { purchasesEnabled: boolean; environment: string };
     assert.equal(status.purchasesEnabled, false);

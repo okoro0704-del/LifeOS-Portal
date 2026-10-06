@@ -8,16 +8,15 @@ COPY apps/finprove/package.json apps/finprove/
 COPY apps/portal-web/package.json apps/portal-web/
 COPY apps/lifeos-business-portal/package.json apps/lifeos-business-portal/
 COPY apps/lifeos-platform-admin/package.json apps/lifeos-platform-admin/
+COPY apps/offline-kernel/package.json apps/offline-kernel/
 COPY packages/shared/package.json packages/shared/
 COPY packages/env/package.json packages/env/
 COPY packages/finprove/package.json packages/finprove/
+COPY packages/offline-kernel/package.json packages/offline-kernel/
 RUN npm ci
 
 COPY . .
-RUN npm run build -w @lifeos-portal/shared \
-  && npm run build -w @lifeos-portal/env \
-  && npm run build -w @lifeos-portal/finprove \
-  && npm run build -w @lifeos-portal/api \
+RUN npm run build:gateway \
   && npm prune --omit=dev
 
 FROM node:22-alpine AS production
@@ -38,6 +37,8 @@ COPY --from=build /app/packages/env/package.json ./packages/env/
 COPY --from=build /app/packages/env/dist ./packages/env/dist
 COPY --from=build /app/packages/finprove/package.json ./packages/finprove/
 COPY --from=build /app/packages/finprove/dist ./packages/finprove/dist
+COPY --from=build /app/packages/offline-kernel/package.json ./packages/offline-kernel/
+COPY --from=build /app/packages/offline-kernel/dist ./packages/offline-kernel/dist
 
 WORKDIR /app/apps/portal-api
 EXPOSE 8792

@@ -6,7 +6,6 @@ import {
   bypassAuthForTesting,
   enableTrustId,
   portalApi,
-  storeSessionToken,
   trustIdMode,
   trustIdWeb,
 } from "../lib/api";
@@ -38,8 +37,7 @@ export function LoginPage() {
         return;
       }
       const data = await portalApi.devSession("TD-PORTAL-DEV");
-      storeSessionToken(data.sessionToken);
-      setSession(data.sessionToken, data.user);
+      setSession(data.user);
       navigate("/dashboard/domains", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start a session.");

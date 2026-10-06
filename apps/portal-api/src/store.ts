@@ -50,7 +50,24 @@ export type PortalSession = {
   userId: string;
   expiresAt: string;
   createdAt: string;
-  trustIdAccessToken?: string;
+  /** Sealed upstream TrustID bearer (lib/token-vault). The store never sees the plaintext. */
+  trustIdAccessTokenEnc?: string;
+};
+
+export type ResolvedSession = { session: PortalSession; user: PortalUser };
+
+/**
+ * Where sessions live. Session state is never served from a per-instance cache in production:
+ * every authentication reads the backend, so a revocation on one API instance is enforced on all.
+ */
+export type SessionBackend = {
+  create(session: PortalSession): Promise<void>;
+  /** Unexpired session plus its user, or undefined. Expiry is enforced here, not by cleanup. */
+  resolve(tokenHash: string): Promise<ResolvedSession | undefined>;
+  revoke(tokenHash: string): Promise<boolean>;
+  revokeForUser(userId: string): Promise<number>;
+  revokeAll(): Promise<number>;
+  deleteExpired(): Promise<number>;
 };
 
 export type PortalInstall = {
@@ -173,12 +190,15 @@ export type PortalStore = {
     tokenHash: string;
     userId: string;
     expiresAt: Date;
-    trustIdAccessToken?: string;
-  }): PortalSession;
-  getSessionByTokenHash(tokenHash: string): PortalSession | undefined;
-  deleteSession(tokenHash: string): void;
-  /** Revoke every session matching the predicate. Returns how many were removed. */
-  deleteSessions(predicate: (session: PortalSession) => boolean): number;
+    trustIdAccessTokenEnc?: string;
+  }): Promise<PortalSession>;
+  resolveSession(tokenHash: string): Promise<ResolvedSession | undefined>;
+  revokeSession(tokenHash: string): Promise<boolean>;
+  /** Returns how many sessions were revoked. */
+  revokeUserSessions(userId: string): Promise<number>;
+  revokeAllSessions(): Promise<number>;
+  /** Housekeeping only: expired sessions are already refused by resolveSession. */
+  deleteExpiredSessions(): Promise<number>;
   getMeta(key: string): string | undefined;
   setMeta(key: string, value: string): void;
   createInstall(input: Omit<PortalInstall, "id" | "createdAt" | "updatedAt"> & { id?: string }): PortalInstall;
@@ -234,37 +254,85 @@ export type PortalStore = {
   domainInfraPut<K extends DomainInfraKind>(kind: K, row: DomainInfraCollections[K]): DomainInfraCollections[K];
   domainInfraGet<K extends DomainInfraKind>(kind: K, id: string): DomainInfraCollections[K] | undefined;
   domainInfraList<K extends DomainInfraKind>(kind: K): DomainInfraCollections[K][];
+  /** Resolves once every write issued so far is durable; rejects if any of them failed. */
   flush(): Promise<void>;
   close(): Promise<void>;
 };
 
+/** One persisted collection. `domainInfra.<kind>` rows are keyed by their own id. */
+export type StoreKind =
+  | "users"
+  | "installs"
+  | "billings"
+  | "portalAccess"
+  | "domains"
+  | "finances"
+  | "escrowHolds"
+  | "dataZoneKeys"
+  | "dataZoneWebhooks"
+  | "dataZoneProvenance"
+  | "dataZoneTombstones"
+  | "dataZoneAudit"
+  | "pushTokens"
+  | "meta"
+  | `domainInfra.${DomainInfraKind}`;
+
+/** A single-row mutation. `row: null` is a delete. Meta rows are `{ key, value }`. */
+export type StoreChange = { kind: StoreKind; id: string; row: unknown | null };
+
+/** Cache-backed store plus the hooks storage adapters use. Not part of the route-facing contract. */
+export type CacheStore = PortalStore & {
+  snapshot(): Snapshot;
+  /** Apply a row written by another API instance. Never re-emits a change. */
+  applyExternal(change: StoreChange): void;
+};
+
+export function normalizeUser(u: PortalUser): PortalUser {
+  const role: PortalAccountRole =
+    u.role ?? (u.roles?.includes("platform_admin") ? "ADMIN" : "USER");
+  return {
+    ...u,
+    trustId: u.trustId || null,
+    email: u.email ?? null,
+    passwordHash: u.passwordHash ?? null,
+    role,
+    roles: u.roles?.length ? u.roles : role === "ADMIN" ? ["tenant", "platform_admin"] : ["tenant"],
+    suspended: Boolean(u.suspended),
+  };
+}
+
 export function createStore(opts?: {
   persistPath?: string;
-  persistWrite?: (snap: Snapshot) => void;
   initial?: Snapshot;
-}): PortalStore {
+  /** Row-level write hook (Postgres). Called synchronously after each cache mutation. */
+  onChange?: (change: StoreChange) => void;
+  /** Durable session storage. Defaults to an in-process map (memory/file adapters). */
+  sessions?: SessionBackend;
+  flush?: () => Promise<void>;
+  close?: () => Promise<void>;
+}): CacheStore {
   const users = new Map<string, PortalUser>();
   const usersByTrust = new Map<string, string>();
   const usersByEmail = new Map<string, string>();
+
+  function unindexUser(user: PortalUser) {
+    if (user.trustId && usersByTrust.get(user.trustId) === user.id) usersByTrust.delete(user.trustId);
+    const email = user.email?.toLowerCase();
+    if (email && usersByEmail.get(email) === user.id) usersByEmail.delete(email);
+  }
 
   function indexUser(user: PortalUser) {
     if (user.trustId) usersByTrust.set(user.trustId, user.id);
     if (user.email) usersByEmail.set(user.email.toLowerCase(), user.id);
   }
 
-  function normalizeUser(u: PortalUser): PortalUser {
-    const role: PortalAccountRole =
-      u.role ?? (u.roles?.includes("platform_admin") ? "ADMIN" : "USER");
-    return {
-      ...u,
-      trustId: u.trustId || null,
-      email: u.email ?? null,
-      passwordHash: u.passwordHash ?? null,
-      role,
-      roles: u.roles?.length ? u.roles : role === "ADMIN" ? ["tenant", "platform_admin"] : ["tenant"],
-      suspended: Boolean(u.suspended),
-    };
+  function putUser(user: PortalUser) {
+    const prev = users.get(user.id);
+    if (prev) unindexUser(prev);
+    users.set(user.id, user);
+    indexUser(user);
   }
+
   const sessions = new Map<string, PortalSession>();
   const installs = new Map<string, PortalInstall>();
   const billings = new Map<string, PortalBilling>();
@@ -283,6 +351,23 @@ export function createStore(opts?: {
   };
   const meta = new Map<string, string>();
   const persistPath = opts?.persistPath;
+
+  /** Maps for the collections addressed by StoreKind (users and meta are handled separately). */
+  const collections: Record<string, Map<string, unknown>> = {
+    installs,
+    billings,
+    portalAccess,
+    domains,
+    finances,
+    escrowHolds,
+    dataZoneKeys,
+    dataZoneWebhooks,
+    dataZoneProvenance,
+    dataZoneTombstones,
+    dataZoneAudit,
+    pushTokens,
+    ...Object.fromEntries(DOMAIN_INFRA_KINDS.map((kind) => [`domainInfra.${kind}`, domainInfra[kind]])),
+  };
 
   function snapshot(): Snapshot {
     return {
@@ -307,14 +392,21 @@ export function createStore(opts?: {
     };
   }
 
-  function persist() {
-    const snap = snapshot();
-    if (persistPath) {
-      const dir = path.dirname(persistPath);
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(persistPath, JSON.stringify(snap, null, 2));
-    }
-    opts?.persistWrite?.(snap);
+  /** Local development adapter: the whole state as one JSON file. Never used with Postgres. */
+  function writeFileSnapshot() {
+    if (!persistPath) return;
+    const dir = path.dirname(persistPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(persistPath, JSON.stringify(snapshot(), null, 2));
+  }
+
+  function changed(kind: StoreKind, id: string, row: unknown | null) {
+    writeFileSnapshot();
+    opts?.onChange?.({ kind, id, row });
+  }
+
+  function sessionChanged() {
+    writeFileSnapshot();
   }
 
   let bootSnap = opts?.initial ?? null;
@@ -328,12 +420,12 @@ export function createStore(opts?: {
   if (bootSnap) {
     try {
       const snap = bootSnap;
-      for (const u of snap.users ?? []) {
-        const next = normalizeUser(u);
-        users.set(next.id, next);
-        indexUser(next);
+      for (const u of snap.users ?? []) putUser(normalizeUser(u));
+      for (const s of snap.sessions ?? []) {
+        // Pre-vault sessions held the TrustID bearer in plaintext. Drop them rather than carry it forward.
+        if ("trustIdAccessToken" in s) continue;
+        sessions.set(s.tokenHash, s);
       }
-      for (const s of snap.sessions ?? []) sessions.set(s.tokenHash, s);
       for (const i of snap.installs ?? []) installs.set(i.id, i);
       for (const b of snap.billings ?? []) billings.set(b.id, b);
       for (const a of snap.portalAccess ?? []) portalAccess.set(a.userId, a);
@@ -356,7 +448,76 @@ export function createStore(opts?: {
     }
   }
 
+  function isLive(session: PortalSession) {
+    return new Date(session.expiresAt).getTime() > Date.now();
+  }
+
+  const sessionBackend: SessionBackend = opts?.sessions ?? {
+    async create(session) {
+      sessions.set(session.tokenHash, session);
+      sessionChanged();
+    },
+    async resolve(tokenHash) {
+      const session = sessions.get(tokenHash);
+      if (!session || !isLive(session)) return undefined;
+      const user = users.get(session.userId);
+      return user ? { session, user } : undefined;
+    },
+    async revoke(tokenHash) {
+      const removed = sessions.delete(tokenHash);
+      if (removed) sessionChanged();
+      return removed;
+    },
+    async revokeForUser(userId) {
+      let removed = 0;
+      for (const [hash, session] of sessions) {
+        if (session.userId !== userId) continue;
+        sessions.delete(hash);
+        removed += 1;
+      }
+      if (removed) sessionChanged();
+      return removed;
+    },
+    async revokeAll() {
+      const removed = sessions.size;
+      sessions.clear();
+      if (removed) sessionChanged();
+      return removed;
+    },
+    async deleteExpired() {
+      let removed = 0;
+      for (const [hash, session] of sessions) {
+        if (isLive(session)) continue;
+        sessions.delete(hash);
+        removed += 1;
+      }
+      if (removed) sessionChanged();
+      return removed;
+    },
+  };
+
   return {
+    snapshot,
+    applyExternal({ kind, id, row }) {
+      if (kind === "users") {
+        if (row) putUser(normalizeUser(row as PortalUser));
+        else {
+          const prev = users.get(id);
+          if (prev) unindexUser(prev);
+          users.delete(id);
+        }
+        return;
+      }
+      if (kind === "meta") {
+        if (row) meta.set(id, (row as { value: string }).value);
+        else meta.delete(id);
+        return;
+      }
+      const map = collections[kind];
+      if (!map) return;
+      if (row) map.set(id, row);
+      else map.delete(id);
+    },
     upsertUser(input) {
       const email = input.email?.trim().toLowerCase() || null;
       const existingId =
@@ -381,9 +542,8 @@ export function createStore(opts?: {
           roles,
           lastLoginAt: now,
         };
-        users.set(existingId, next);
-        indexUser(next);
-        persist();
+        putUser(next);
+        changed("users", next.id, next);
         return next;
       }
       const user: PortalUser = {
@@ -399,9 +559,8 @@ export function createStore(opts?: {
         createdAt: now,
         lastLoginAt: now,
       };
-      users.set(user.id, user);
-      indexUser(user);
-      persist();
+      putUser(user);
+      changed("users", user.id, user);
       return user;
     },
     createLocalUser(input) {
@@ -425,18 +584,16 @@ export function createStore(opts?: {
         createdAt: now,
         lastLoginAt: now,
       };
-      users.set(user.id, user);
-      indexUser(user);
-      persist();
+      putUser(user);
+      changed("users", user.id, user);
       return user;
     },
     updateUser(id, patch) {
       const prev = users.get(id);
       if (!prev) return undefined;
       const next = normalizeUser({ ...prev, ...patch, id: prev.id });
-      users.set(id, next);
-      indexUser(next);
-      persist();
+      putUser(next);
+      changed("users", id, next);
       return next;
     },
     getUser(id) {
@@ -453,50 +610,39 @@ export function createStore(opts?: {
     listUsers() {
       return [...users.values()];
     },
-    createSession(input) {
+    async createSession(input) {
       const session: PortalSession = {
         id: newId("ses"),
         tokenHash: input.tokenHash,
         userId: input.userId,
         expiresAt: input.expiresAt.toISOString(),
         createdAt: new Date().toISOString(),
-        trustIdAccessToken: input.trustIdAccessToken,
+        ...(input.trustIdAccessTokenEnc ? { trustIdAccessTokenEnc: input.trustIdAccessTokenEnc } : {}),
       };
-      sessions.set(session.tokenHash, session);
-      persist();
+      await sessionBackend.create(session);
       return session;
     },
-    getSessionByTokenHash(tokenHash) {
-      const s = sessions.get(tokenHash);
-      if (!s) return undefined;
-      if (new Date(s.expiresAt).getTime() < Date.now()) {
-        sessions.delete(tokenHash);
-        persist();
-        return undefined;
-      }
-      return s;
+    resolveSession(tokenHash) {
+      return sessionBackend.resolve(tokenHash);
     },
-    deleteSession(tokenHash) {
-      sessions.delete(tokenHash);
-      persist();
+    revokeSession(tokenHash) {
+      return sessionBackend.revoke(tokenHash);
     },
-    deleteSessions(predicate) {
-      let removed = 0;
-      for (const [hash, session] of sessions) {
-        if (predicate(session)) {
-          sessions.delete(hash);
-          removed += 1;
-        }
-      }
-      if (removed) persist();
-      return removed;
+    revokeUserSessions(userId) {
+      return sessionBackend.revokeForUser(userId);
+    },
+    revokeAllSessions() {
+      return sessionBackend.revokeAll();
+    },
+    deleteExpiredSessions() {
+      return sessionBackend.deleteExpired();
     },
     getMeta(key) {
       return meta.get(key);
     },
     setMeta(key, value) {
       meta.set(key, value);
-      persist();
+      changed("meta", key, { key, value });
     },
     createInstall(input) {
       const now = new Date().toISOString();
@@ -507,7 +653,7 @@ export function createStore(opts?: {
         updatedAt: now,
       };
       installs.set(row.id, row);
-      persist();
+      changed("installs", row.id, row);
       return row;
     },
     updateInstall(id, patch) {
@@ -515,13 +661,13 @@ export function createStore(opts?: {
       if (!prev) return undefined;
       const next = { ...prev, ...patch, id: prev.id, updatedAt: new Date().toISOString() };
       installs.set(id, next);
-      persist();
+      changed("installs", id, next);
       return next;
     },
     deleteInstall(id) {
       if (!installs.has(id)) return false;
       installs.delete(id);
-      persist();
+      changed("installs", id, null);
       return true;
     },
     getInstall(id) {
@@ -548,8 +694,8 @@ export function createStore(opts?: {
         if (slug && row.subdomain !== slug) continue;
         installs.delete(row.id);
         removed.push(row.id);
+        changed("installs", row.id, null);
       }
-      if (removed.length) persist();
       return removed;
     },
     getInstallByTenantId(tenantId) {
@@ -572,7 +718,7 @@ export function createStore(opts?: {
         createdAt: new Date().toISOString(),
       };
       billings.set(row.id, row);
-      persist();
+      changed("billings", row.id, row);
       return row;
     },
     listBillings() {
@@ -586,7 +732,7 @@ export function createStore(opts?: {
       if (!prev) return undefined;
       const next = { ...prev, ...patch, id: prev.id };
       billings.set(id, next);
-      persist();
+      changed("billings", id, next);
       return next;
     },
     grantTenantPortalAccess(input) {
@@ -594,7 +740,7 @@ export function createStore(opts?: {
       if (existing) return existing;
       const row: TenantPortalAccess = { ...input, granted: true };
       portalAccess.set(input.userId, row);
-      persist();
+      changed("portalAccess", input.userId, row);
       return row;
     },
     getTenantPortalAccess(userId) {
@@ -609,7 +755,7 @@ export function createStore(opts?: {
         updatedAt: now,
       };
       domains.set(row.id, row);
-      persist();
+      changed("domains", row.id, row);
       return row;
     },
     updateDomain(id, patch) {
@@ -617,7 +763,7 @@ export function createStore(opts?: {
       if (!prev) return undefined;
       const next = { ...prev, ...patch, id: prev.id, updatedAt: new Date().toISOString() };
       domains.set(id, next);
-      persist();
+      changed("domains", id, next);
       return next;
     },
     getDomain(id) {
@@ -639,7 +785,7 @@ export function createStore(opts?: {
     },
     upsertFinance(row) {
       finances.set(row.tenantId, row);
-      persist();
+      changed("finances", row.tenantId, row);
       return row;
     },
     getFinance(tenantId) {
@@ -655,7 +801,7 @@ export function createStore(opts?: {
         createdAt: new Date().toISOString(),
       };
       escrowHolds.set(row.id, row);
-      persist();
+      changed("escrowHolds", row.id, row);
       return row;
     },
     getEscrowHold(id) {
@@ -666,7 +812,7 @@ export function createStore(opts?: {
       if (!prev) return undefined;
       const next = { ...prev, ...patch, id: prev.id };
       escrowHolds.set(id, next);
-      persist();
+      changed("escrowHolds", id, next);
       return next;
     },
     listEscrowHolds() {
@@ -679,7 +825,7 @@ export function createStore(opts?: {
         createdAt: new Date().toISOString(),
       };
       dataZoneKeys.set(row.id, row);
-      persist();
+      changed("dataZoneKeys", row.id, row);
       return row;
     },
     updateDataZoneKey(id, patch) {
@@ -687,7 +833,7 @@ export function createStore(opts?: {
       if (!prev) return undefined;
       const next = { ...prev, ...patch, id: prev.id };
       dataZoneKeys.set(id, next);
-      persist();
+      changed("dataZoneKeys", id, next);
       return next;
     },
     getDataZoneKey(id) {
@@ -703,7 +849,7 @@ export function createStore(opts?: {
         createdAt: new Date().toISOString(),
       };
       dataZoneWebhooks.set(row.id, row);
-      persist();
+      changed("dataZoneWebhooks", row.id, row);
       return row;
     },
     listDataZoneWebhooks() {
@@ -716,7 +862,7 @@ export function createStore(opts?: {
         createdAt: new Date().toISOString(),
       };
       dataZoneProvenance.set(row.id, row);
-      persist();
+      changed("dataZoneProvenance", row.id, row);
       return row;
     },
     updateDataZoneProvenance(id, patch) {
@@ -724,7 +870,7 @@ export function createStore(opts?: {
       if (!prev) return undefined;
       const next = { ...prev, ...patch, id: prev.id };
       dataZoneProvenance.set(id, next);
-      persist();
+      changed("dataZoneProvenance", id, next);
       return next;
     },
     getDataZoneProvenanceByAsset(assetId) {
@@ -740,7 +886,7 @@ export function createStore(opts?: {
         createdAt: new Date().toISOString(),
       };
       dataZoneTombstones.set(row.id, row);
-      persist();
+      changed("dataZoneTombstones", row.id, row);
       return row;
     },
     listDataZoneTombstones() {
@@ -753,7 +899,7 @@ export function createStore(opts?: {
         createdAt: new Date().toISOString(),
       };
       dataZoneAudit.set(row.id, row);
-      persist();
+      changed("dataZoneAudit", row.id, row);
       return row;
     },
     listDataZoneAudit() {
@@ -766,7 +912,7 @@ export function createStore(opts?: {
         updatedAt: input.updatedAt || new Date().toISOString(),
       };
       pushTokens.set(row.userId, row);
-      persist();
+      changed("pushTokens", row.userId, row);
       return row;
     },
     getPushToken(userId) {
@@ -775,7 +921,7 @@ export function createStore(opts?: {
     domainInfraPut(kind, row) {
       const copy = structuredClone(row);
       (domainInfra[kind] as Map<string, typeof row>).set(row.id, copy);
-      persist();
+      changed(`domainInfra.${kind}`, row.id, copy);
       return structuredClone(copy);
     },
     domainInfraGet(kind, id) {
@@ -786,10 +932,10 @@ export function createStore(opts?: {
       return [...domainInfra[kind].values()].map((row) => structuredClone(row));
     },
     async flush() {
-      persist();
+      await opts?.flush?.();
     },
     async close() {
-      persist();
+      await opts?.close?.();
     },
   };
 }

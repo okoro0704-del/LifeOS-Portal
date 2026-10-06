@@ -1,5 +1,5 @@
 import { MYBRANDOS_PRODUCTION_URL, mybrandOsDeliverables, tenantLaunchUrls } from "@lifeos-portal/shared";
-import { HttpError } from "../lib/http.js";
+import { HttpError, UPSTREAM_TIMEOUTS_MS, fetchWithTimeout } from "../lib/http.js";
 import { identitySubject } from "../lib/local-auth.js";
 import { newId } from "../lib/crypto.js";
 import type { PortalInstall, PortalStore, PortalUser } from "../store.js";
@@ -105,7 +105,9 @@ export async function installMyBrandOs(opts: {
       );
     }
 
-    const provisionRes = await fetch(`${base}/api/internal/white-label/provision`, {
+    const provisionRes = await fetchWithTimeout(`${base}/api/internal/white-label/provision`, {
+      timeoutMs: UPSTREAM_TIMEOUTS_MS.provisioning,
+      dependency: "mybrandOS",
       method: "POST",
       headers: {
         Authorization: `Bearer ${secret}`,

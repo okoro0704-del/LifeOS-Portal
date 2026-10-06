@@ -27,6 +27,20 @@
   path = "/*"
 
 # Host-specific proxies must come before the SPA fallback.
+# Cookie-only dashboards call the gateway same-origin at /api so their HttpOnly, SameSite=Strict
+# Portal session cookie is first-party (no JS-readable token). These must precede the host catch-alls.
+[[redirects]]
+  from = "https://admin.getlifeos.app/api/*"
+  to = "https://gateway-production-c3f9.up.railway.app/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "https://business.getlifeos.app/api/*"
+  to = "https://gateway-production-c3f9.up.railway.app/:splat"
+  status = 200
+  force = true
+
 [[redirects]]
   from = "https://admin.getlifeos.app/*"
   to = "https://platform-admin-production-26aa.up.railway.app/:splat"

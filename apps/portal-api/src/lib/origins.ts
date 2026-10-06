@@ -31,3 +31,26 @@ export function firstPartyOrigins() {
 export function isFirstPartyOrigin(value: string | undefined) {
   return Boolean(value) && firstPartyOrigins().has(originOf(value!));
 }
+
+/**
+ * Surfaces whose session lives only in the HttpOnly cookie (privileged dashboards). Production default:
+ * platform admin + business portal. Development keeps none so local header-token tooling still works.
+ */
+export function cookieOnlyOrigins() {
+  const configured = config.cookieSessionOrigins
+    .split(",")
+    .map((part) => originOf(part.trim()))
+    .filter(Boolean);
+  if (configured.length) return new Set(configured);
+  if (config.nodeEnv !== "production") return new Set<string>();
+  return new Set(
+    [PLATFORM_ADMIN_ORIGIN, config.platformAdminUrl, BUSINESS_PORTAL_ORIGIN, config.businessPortalUrl]
+      .filter(Boolean)
+      .map(originOf)
+      .filter(Boolean),
+  );
+}
+
+export function isCookieOnlyOrigin(value: string | undefined) {
+  return Boolean(value) && cookieOnlyOrigins().has(originOf(value!));
+}

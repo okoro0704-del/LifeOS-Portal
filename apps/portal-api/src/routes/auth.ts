@@ -5,7 +5,9 @@ import { isFirstPartyOrigin } from "../lib/origins.js";
 import {
   authStatusFor,
   clearSessionCookie,
+  issuePortalSession,
   requireSession,
+  sessionResponse,
   setSessionCookie,
   toPublicUser,
 } from "../lib/auth.js";
@@ -46,17 +48,10 @@ function createLoginThrottle() {
   };
 }
 
-function issueSession(store: PortalStore, user: PortalUser, trustIdAccessToken?: string) {
-  const rawToken = randomToken(32);
-  const expiresAt = new Date(Date.now() + config.sessionTtlHours * 3600_000);
-  store.createSession({
-    tokenHash: hashSecret(rawToken),
-    userId: user.id,
-    expiresAt,
-    trustIdAccessToken,
-  });
+async function issueSession(store: PortalStore, user: PortalUser, trustIdAccessToken?: string) {
+  const issued = await issuePortalSession(store, user, { trustIdAccessToken });
   store.updateUser(user.id, { lastLoginAt: new Date().toISOString() });
-  return { rawToken, expiresAt };
+  return issued;
 }
 
 export async function registerAuthRoutes(app: FastifyInstance, store: PortalStore) {
@@ -108,9 +103,9 @@ export async function registerAuthRoutes(app: FastifyInstance, store: PortalStor
       displayName: body.displayName?.trim() || email.split("@")[0] || "Member",
       role: "USER",
     });
-    const { rawToken, expiresAt } = issueSession(store, user);
+    const { rawToken, expiresAt } = await issueSession(store, user);
     setSessionCookie(reply, rawToken, expiresAt);
-    return { ok: true, sessionToken: rawToken, user: toPublicUser(user) };
+    return sessionResponse(req, rawToken, user);
   });
 
   const loginThrottle = createLoginThrottle();
@@ -137,9 +132,9 @@ export async function registerAuthRoutes(app: FastifyInstance, store: PortalStor
     if (user.suspended) {
       return reply.code(403).send({ error: "suspended", message: "This account is suspended." });
     }
-    const { rawToken, expiresAt } = issueSession(store, user);
+    const { rawToken, expiresAt } = await issueSession(store, user);
     setSessionCookie(reply, rawToken, expiresAt);
-    return { ok: true, sessionToken: rawToken, user: toPublicUser(user) };
+    return sessionResponse(req, rawToken, user);
   });
 
   app.post("/auth/session", credentialRoute, async (req, reply) => {
@@ -166,9 +161,9 @@ export async function registerAuthRoutes(app: FastifyInstance, store: PortalStor
       roles: identity.roles,
     });
 
-    const { rawToken, expiresAt } = issueSession(store, user, body.accessToken);
+    const { rawToken, expiresAt } = await issueSession(store, user, body.accessToken);
     setSessionCookie(reply, rawToken, expiresAt);
-    return { ok: true, sessionToken: rawToken, user: toPublicUser(user) };
+    return sessionResponse(req, rawToken, user);
   });
 
   /** Local/dev only — never a password. Not registered at all in production. */
@@ -193,9 +188,9 @@ export async function registerAuthRoutes(app: FastifyInstance, store: PortalStor
           role,
           roles: rolesForAccount(role),
         });
-        const { rawToken, expiresAt } = issueSession(store, user);
+        const { rawToken, expiresAt } = await issueSession(store, user);
         setSessionCookie(reply, rawToken, expiresAt);
-        return { ok: true, sessionToken: rawToken, user: toPublicUser(user) };
+        return sessionResponse(req, rawToken, user);
       }
       const accessToken = body.platformAdmin ? `mock:admin:${body.trustId}` : `mock:${body.trustId}`;
       const identity = await fetchTrustIdUserInfo(accessToken);
@@ -206,9 +201,9 @@ export async function registerAuthRoutes(app: FastifyInstance, store: PortalStor
         identityStatus: identity.identityStatus ?? "verified",
         roles: identity.roles,
       });
-      const { rawToken, expiresAt } = issueSession(store, user, accessToken);
+      const { rawToken, expiresAt } = await issueSession(store, user, accessToken);
       setSessionCookie(reply, rawToken, expiresAt);
-      return { ok: true, sessionToken: rawToken, user: toPublicUser(user) };
+      return sessionResponse(req, rawToken, user);
     });
   }
 
@@ -271,7 +266,7 @@ export async function registerAuthRoutes(app: FastifyInstance, store: PortalStor
 
   app.post("/auth/logout", async (req, reply) => {
     const token = req.portalSessionToken;
-    if (token) store.deleteSession(hashSecret(token));
+    if (token) await store.revokeSession(hashSecret(token));
     clearSessionCookie(reply);
     return { ok: true };
   });
@@ -283,7 +278,7 @@ export async function registerAuthRoutes(app: FastifyInstance, store: PortalStor
     if (!requireSession(req, reply)) return;
     let raw = req.portalSessionToken;
     if (!raw) {
-      const issued = issueSession(store, req.portalUser!);
+      const issued = await issueSession(store, req.portalUser!);
       raw = issued.rawToken;
       setSessionCookie(reply, issued.rawToken, issued.expiresAt);
     }
@@ -302,12 +297,11 @@ export async function registerAuthRoutes(app: FastifyInstance, store: PortalStor
         message: "Handoff expired. Open Dashboard from the LifeOS Portal again.",
       });
     }
-    const session = store.getSessionByTokenHash(hashSecret(entry.rawToken));
-    const user = session ? store.getUser(session.userId) : undefined;
-    if (!user || user.suspended) {
+    const resolved = await store.resolveSession(hashSecret(entry.rawToken));
+    if (!resolved || resolved.user.suspended) {
       return reply.code(401).send({ error: "unauthorized", message: "Portal session is no longer valid." });
     }
-    setSessionCookie(reply, entry.rawToken, new Date(session!.expiresAt));
-    return { ok: true, sessionToken: entry.rawToken, user: toPublicUser(user) };
+    setSessionCookie(reply, entry.rawToken, new Date(resolved.session.expiresAt));
+    return sessionResponse(req, entry.rawToken, resolved.user);
   });
 }

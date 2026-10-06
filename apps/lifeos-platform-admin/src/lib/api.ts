@@ -50,21 +50,14 @@ export class ApiError extends Error {
   }
 }
 
-export function getStoredSessionToken(): string | null {
-  try {
-    return localStorage.getItem(SESSION_KEY);
-  } catch {
-    return null;
-  }
-}
-
-export function storeSessionToken(token: string | null) {
-  try {
-    if (token) localStorage.setItem(SESSION_KEY, token);
-    else localStorage.removeItem(SESSION_KEY);
-  } catch {
-    /* ignore */
-  }
+/**
+ * The Portal session is the HttpOnly `portal_session` cookie the Portal API sets; this app's
+ * JavaScript never holds the token. Clear any token an older build left in localStorage.
+ */
+try {
+  localStorage.removeItem(SESSION_KEY);
+} catch {
+  /* ignore */
 }
 
 export function cacheUser(user: PortalUserPublic | null) {
@@ -111,8 +104,6 @@ export function stepUpEnabled(kind: "biometric" | "master") {
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   if (!headers.has("Content-Type") && init?.body) headers.set("Content-Type", "application/json");
-  const token = getStoredSessionToken();
-  if (token) headers.set("X-Portal-Session", token);
   if (stepUpEnabled("biometric")) headers.set("X-TrustID-Biometric", "verified");
   if (stepUpEnabled("master")) headers.set("X-TrustID-Master-Device", "bound");
   let res: Response;
@@ -130,7 +121,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const portalApi = {
   createSession: (accessToken: string) =>
-    api<{ sessionToken: string; user: PortalUserPublic }>("/auth/session", {
+    api<{ sessionToken?: string; user: PortalUserPublic }>("/auth/session", {
       method: "POST",
       body: JSON.stringify({ accessToken }),
     }),
@@ -138,13 +129,13 @@ export const portalApi = {
     if (trustIdMode !== "mock") {
       return Promise.reject(new ApiError("Not found", 404, "not_found"));
     }
-    return api<{ sessionToken: string; user: PortalUserPublic }>("/auth/dev-session", {
+    return api<{ sessionToken?: string; user: PortalUserPublic }>("/auth/dev-session", {
       method: "POST",
       body: JSON.stringify({ trustId: trustId ?? "TD-PLATFORM", platformAdmin }),
     });
   },
   login: (email: string, password: string) =>
-    api<{ sessionToken: string; user: PortalUserPublic }>("/auth/login", {
+    api<{ sessionToken?: string; user: PortalUserPublic }>("/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     }),

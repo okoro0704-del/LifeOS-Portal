@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { authClient, bypassAuthForTesting, portalApi, storeSessionToken, trustIdMode, trustIdWeb } from "../lib/api";
+import { authClient, bypassAuthForTesting, portalApi, trustIdMode, trustIdWeb } from "../lib/api";
 import { useAuth } from "../hooks/useAuth";
 
 export function LoginPage() {
@@ -20,8 +20,7 @@ export function LoginPage() {
     setError(null);
     try {
       const data = await portalApi.devSession("TD-PLATFORM", true);
-      storeSessionToken(data.sessionToken);
-      setSession(data.sessionToken, data.user);
+      setSession(data.user);
       navigate("/admin/tenants", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start a session.");
@@ -36,14 +35,12 @@ export function LoginPage() {
     try {
       const data = await portalApi.login(email, password);
       if (!data.user.roles?.includes("platform_admin")) {
-        storeSessionToken(data.sessionToken);
         await portalApi.logout().catch(() => undefined);
-        storeSessionToken(null);
         setError("This account is not a platform operator.");
         setBusy(false);
         return;
       }
-      setSession(data.sessionToken, data.user);
+      setSession(data.user);
       navigate("/admin/tenants", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-in failed.");

@@ -1,4 +1,5 @@
 import { createOfflineKernelClient, type Station } from "@lifeos-portal/offline-kernel";
+import { UPSTREAM_TIMEOUTS_MS, boundedFetch } from "../lib/http.js";
 
 export function offlineKernelBaseUrl(): string {
   return (process.env.OFFLINE_KERNEL_API_URL || process.env.OFFLINE_KERNEL_URL || "").replace(/\/$/, "");
@@ -23,6 +24,7 @@ export function createPortalOfflineKernelClient() {
   return createOfflineKernelClient({
     baseUrl,
     serviceToken: offlineKernelToken() || undefined,
+    fetchImpl: boundedFetch("Offline Kernel", UPSTREAM_TIMEOUTS_MS.offlineKernel),
   });
 }
 

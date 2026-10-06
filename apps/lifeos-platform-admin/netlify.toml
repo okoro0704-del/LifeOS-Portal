@@ -7,8 +7,15 @@
   VITE_ENABLE_TRUST_ID = "false"
   VITE_BYPASS_AUTH_FOR_TESTING = "false"
   VITE_DEFAULT_USER_ROLE = "ADMIN"
-  VITE_PORTAL_API = "https://gateway-production-c3f9.up.railway.app"
+  # Same-origin API (proxied below) so the HttpOnly session cookie is first-party.
+  VITE_PORTAL_API = "/api"
   VITE_TRUSTID_MODE = "mock"
+
+[[redirects]]
+  from = "/api/*"
+  to = "https://gateway-production-c3f9.up.railway.app/:splat"
+  status = 200
+  force = true
 
 [[redirects]]
   from = "/*"

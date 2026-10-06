@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { GUEST_PORTAL_ORIGIN } from "@lifeos-portal/shared";
-import { portalApi, storeSessionToken } from "../lib/api";
+import { portalApi } from "../lib/api";
 import { useAuth } from "../hooks/useAuth";
 
 /**
@@ -25,8 +25,7 @@ export function AcceptHandoffPage() {
       .exchangeHandoff(code)
       .then((data) => {
         if (cancelled) return;
-        storeSessionToken(data.sessionToken);
-        setSession(data.sessionToken, data.user);
+        setSession(data.user);
         navigate(next.startsWith("/") ? next : "/dashboard/domains", { replace: true });
       })
       .catch((err) => {

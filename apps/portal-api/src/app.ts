@@ -7,9 +7,10 @@ import securityPlugin from "./plugins/security.js";
 import corsPlugin from "./plugins/cors.js";
 import errorHandlerPlugin from "./plugins/error-handler.js";
 import { registerHealthModule } from "./modules/health/health.route.js";
-import { attachSession } from "./lib/auth.js";
+import { attachSession, enforceCookieCsrf, trustIdTokenVault } from "./lib/auth.js";
 import { createStore, type PortalStore } from "./store.js";
 import { openStore } from "./store/open.js";
+import { runInWriteScope, settleScopeWrites } from "./store/write-scope.js";
 import { createDistributorClient, type DistributorClient } from "./services/distributor.js";
 import { createHospitalityOsClient, type HosClient } from "./services/hospitalityos.js";
 import { createEcommerceOsClient, type EcoClient } from "./services/ecommerceos.js";
@@ -72,8 +73,10 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
           persistPath,
           databaseUrl: env.databaseUrl || undefined,
         }));
-  seedLocalAdmin(store);
-  const authority = enforceProductionAuthority(store);
+  // Fail boot on a malformed TRUSTID_TOKEN_KEYS rather than on the first TrustID sign-in.
+  trustIdTokenVault();
+  await seedLocalAdmin(store);
+  const authority = await enforceProductionAuthority(store);
   if (authority.demoted || authority.sessionsRevoked) {
     console.info(
       `[portal] production authority reset: ${authority.demoted} admin grant(s) removed, ${authority.sessionsRevoked} session(s) revoked`,
@@ -94,6 +97,8 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
       );
     }
   }
+  // Boot repairs above are row writes: refuse to serve until they are durable.
+  await store.flush();
   const distributor = opts.distributor ?? createDistributorClient();
   const hos = opts.hos ?? createHospitalityOsClient();
   const eco = opts.eco ?? createEcommerceOsClient();
@@ -119,9 +124,36 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
           },
   });
 
+  // Housekeeping only: expired sessions are already refused on every read.
+  const sessionSweep =
+    env.sessionSweepMs > 0
+      ? setInterval(() => {
+          store.deleteExpiredSessions().catch((err) => app.log.warn({ err: (err as Error).message }, "session_sweep_failed"));
+        }, env.sessionSweepMs)
+      : undefined;
+  sessionSweep?.unref();
+
   app.addHook("onClose", async () => {
+    if (sessionSweep) clearInterval(sessionSweep);
     await store.flush();
     await store.close();
+  });
+
+  // Every row write a handler causes must be durable before the payload it returns is sent; a failed
+  // write becomes that request's error instead of a silently diverged cache. This wraps handlers rather
+  // than using an async onSend hook: routes here reply with `reply.send(); return;`, which an async
+  // onSend would turn into a double send. Writes made before a handler calls reply.send() itself are
+  // still awaited (and failures logged and re-read) but cannot change that already-sent response.
+  app.addHook("onRequest", (_req, _reply, done) => {
+    runInWriteScope(done);
+  });
+  app.addHook("onRoute", (route) => {
+    const handler = route.handler;
+    route.handler = async function durableHandler(this: FastifyInstance, req, reply) {
+      const result = await handler.call(this, req, reply);
+      await settleScopeWrites();
+      return result;
+    };
   });
 
   if (opts.onRoute) {
@@ -129,12 +161,13 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     app.addHook("onRoute", (route) => observe({ method: route.method, url: route.url }));
   }
   await app.register(securityPlugin);
-  await app.register(corsPlugin);
+  await app.register(corsPlugin, { store });
   await app.register(errorHandlerPlugin);
   await app.register(cookie, { secret: env.cookieSecret });
 
-  app.addHook("preHandler", async (req) => {
+  app.addHook("preHandler", async (req, reply) => {
     await attachSession(req, store);
+    if (!enforceCookieCsrf(req, reply)) return reply;
   });
 
   await registerHealthModule(app);

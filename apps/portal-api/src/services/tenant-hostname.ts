@@ -1,5 +1,6 @@
 import { TENANT_APP_ROOT_DOMAIN, tenantAppHostname, tenantLabelFromHost } from "@lifeos-portal/shared";
 import { config } from "../config.js";
+import { UPSTREAM_TIMEOUTS_MS, fetchWithTimeout } from "../lib/http.js";
 
 const NETLIFY_API = "https://api.netlify.com/api/v1";
 
@@ -14,7 +15,9 @@ function reservedLabel(subdomain: string) {
 async function netlifyJson(path: string, init?: RequestInit) {
   const token = config.netlifyAuthToken;
   if (!token) return undefined;
-  const res = await fetch(`${NETLIFY_API}${path}`, {
+  const res = await fetchWithTimeout(`${NETLIFY_API}${path}`, {
+    timeoutMs: UPSTREAM_TIMEOUTS_MS.netlify,
+    dependency: "Netlify",
     ...init,
     headers: {
       Authorization: `Bearer ${token}`,

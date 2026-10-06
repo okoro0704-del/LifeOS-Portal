@@ -8,7 +8,7 @@ import {
   type PlatformVerticalRow,
   type RoutingEntry,
 } from "@lifeos-portal/shared";
-import { hashSecret, randomToken } from "../lib/crypto.js";
+import { issuePortalSession } from "../lib/auth.js";
 import { identitySubject } from "../lib/local-auth.js";
 import { HttpError } from "../lib/http.js";
 import { config } from "../config.js";
@@ -217,18 +217,12 @@ export function routingTable(store: PortalStore): RoutingEntry[] {
   });
 }
 
-export function issueImpersonationToken(store: PortalStore, tenantId: string) {
+export async function issueImpersonationToken(store: PortalStore, tenantId: string) {
   const install = store.getInstallByTenantId(tenantId);
   if (!install) throw new HttpError("Tenant not found", 404, "not_found");
   const owner = store.getUser(install.ownerUserId);
   if (!owner) throw new HttpError("Tenant owner not found", 404, "not_found");
-  const rawToken = randomToken(32);
-  const expiresAt = new Date(Date.now() + 30 * 60_000);
-  store.createSession({
-    tokenHash: hashSecret(rawToken),
-    userId: owner.id,
-    expiresAt,
-  });
+  const { rawToken, expiresAt } = await issuePortalSession(store, owner, { ttlMs: 30 * 60_000 });
   return {
     impersonationToken: rawToken,
     tenantId: install.distributorTenantId,
