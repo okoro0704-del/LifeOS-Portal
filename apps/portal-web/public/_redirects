@@ -1,3 +1,6 @@
+# Cookie-only dashboards reach the gateway same-origin (must precede the host catch-alls; _redirects wins over netlify.toml).
+https://admin.getlifeos.app/api/*  https://gateway-production-c3f9.up.railway.app/:splat  200!
+https://business.getlifeos.app/api/*  https://gateway-production-c3f9.up.railway.app/:splat  200!
 https://admin.getlifeos.app/*  https://platform-admin-production-26aa.up.railway.app/:splat  200!
 https://admin.getlifeos.app    https://platform-admin-production-26aa.up.railway.app/  200!
 https://business.getlifeos.app/*  https://business-portal-production-c734.up.railway.app/:splat  200!
