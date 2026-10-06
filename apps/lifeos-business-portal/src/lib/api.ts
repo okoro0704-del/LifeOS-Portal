@@ -103,6 +103,9 @@ export function money(amountMinor: number, currency = "USD") {
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method ?? "GET").toUpperCase();
+  // The same-origin /api proxy can hand a bodiless write to the gateway as a body without a type (415).
+  if (method !== "GET" && method !== "HEAD" && init?.body == null) init = { ...init, body: "{}" };
   const headers = new Headers(init?.headers);
   if (!headers.has("Content-Type") && init?.body) headers.set("Content-Type", "application/json");
   let res: Response;
