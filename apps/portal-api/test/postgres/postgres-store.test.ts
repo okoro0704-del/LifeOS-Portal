@@ -28,6 +28,12 @@ const dbUrl = (() => {
   return url.toString();
 })();
 
+/** Scratch databases are dropped WITH (FORCE); a connection still closing then gets 57P01. Expected, not a failure. */
+function scratchPool(connectionString: string, max: number) {
+  const pool = new pg.Pool({ connectionString, max });
+  pool.on("error", () => {});
+  return pool;
+}
 let admin: pg.Client;
 let sql: pg.Pool;
 const opened: PortalStore[] = [];
@@ -60,7 +66,7 @@ before(async () => {
   admin = new pg.Client({ connectionString: ADMIN_URL });
   await admin.connect();
   await admin.query(`CREATE DATABASE ${dbName}`);
-  sql = new pg.Pool({ connectionString: dbUrl, max: 2 });
+  sql = scratchPool(dbUrl, 2);
 });
 
 after(async () => {
@@ -74,7 +80,7 @@ after(async () => {
 describe("migrations", () => {
   test("concurrent boots migrate once, idempotently, under the advisory lock", async () => {
     const { applySchemaMigrations } = await import("../../src/store/migrate.js");
-    const pools = [1, 2, 3].map(() => new pg.Pool({ connectionString: dbUrl, max: 1 }));
+    const pools = [1, 2, 3].map(() => scratchPool(dbUrl, 1));
     try {
       await Promise.all(pools.map((pool) => applySchemaMigrations(pool)));
       await applySchemaMigrations(pools[0]!);
@@ -252,7 +258,7 @@ describe("write failures", () => {
     await admin.query(`CREATE DATABASE ${scratch}`);
     const url = new URL(dbUrl);
     url.pathname = `/${scratch}`;
-    const pool = new pg.Pool({ connectionString: url.toString(), max: 1 });
+    const pool = scratchPool(url.toString(), 1);
     try {
       // Pre-existing object with an incompatible return type makes a late 003 statement fail.
       await pool.query("CREATE SCHEMA portal; CREATE FUNCTION portal.notify_change() RETURNS integer LANGUAGE sql AS 'SELECT 1'");
@@ -317,7 +323,7 @@ describe("legacy snapshot import", () => {
     const url = new URL(dbUrl);
     url.pathname = `/${scratch}`;
     const legacyUrl = url.toString();
-    const pool = new pg.Pool({ connectionString: legacyUrl, max: 2 });
+    const pool = scratchPool(legacyUrl, 2);
     try {
       const { PORTAL_FINPROVE_DDL } = await import("../../src/store/migrate.js");
       await pool.query(PORTAL_FINPROVE_DDL);
