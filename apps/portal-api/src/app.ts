@@ -6,6 +6,7 @@ import { env } from "./config/env.js";
 import securityPlugin from "./plugins/security.js";
 import corsPlugin from "./plugins/cors.js";
 import errorHandlerPlugin from "./plugins/error-handler.js";
+import emptyBodyPlugin from "./plugins/empty-body.js";
 import { registerHealthModule } from "./modules/health/health.route.js";
 import { attachSession, enforceCookieCsrf, trustIdTokenVault } from "./lib/auth.js";
 import { createStore, type PortalStore } from "./store.js";
@@ -163,6 +164,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   await app.register(securityPlugin);
   await app.register(corsPlugin, { store });
   await app.register(errorHandlerPlugin);
+  await app.register(emptyBodyPlugin);
   await app.register(cookie, { secret: env.cookieSecret });
 
   app.addHook("preHandler", async (req, reply) => {

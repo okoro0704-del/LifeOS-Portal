@@ -111,6 +111,19 @@ test("Railway production defaults Finprove private DNS and injected PORT", () =>
   });
 });
 
+test("DATABASE_CA_CERT turns Postgres TLS into verify-full; unset keeps the previous behaviour", () => {
+  const url = "postgresql://postgres:pass@postgres.railway.internal:5432/railway";
+  const pem = "-----BEGIN CERTIFICATE-----\nMIIBfakeCertificateBody\n-----END CERTIFICATE-----";
+  assert.deepEqual(postgresSslConfig(url, { NODE_ENV: "production" }), { rejectUnauthorized: false });
+  assert.deepEqual(postgresSslConfig(url, { NODE_ENV: "production", DATABASE_CA_CERT: pem }), { ca: pem, rejectUnauthorized: true });
+  const escaped = pem.replace(/\n/g, "\\n");
+  assert.deepEqual(postgresSslConfig(url, { NODE_ENV: "production", DATABASE_CA_CERT: escaped }), { ca: pem, rejectUnauthorized: true });
+  const b64 = Buffer.from(pem).toString("base64");
+  assert.deepEqual(postgresSslConfig(url, { NODE_ENV: "production", DATABASE_CA_CERT: b64 }), { ca: pem, rejectUnauthorized: true });
+  assert.throws(() => postgresSslConfig(url, { NODE_ENV: "production", DATABASE_CA_CERT: "not-a-cert" }), /not a PEM certificate/);
+  assert.equal(postgresSslConfig("postgres://u:p@127.0.0.1:5432/db?sslmode=disable", { DATABASE_CA_CERT: pem }), undefined, "sslmode=disable still wins");
+});
+
 test("local development still falls back to localhost Finprove", () => {
   const env = parsePortalServerEnv({
     NODE_ENV: "development",

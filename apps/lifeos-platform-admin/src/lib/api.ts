@@ -20,8 +20,9 @@ export const trustIdWeb = import.meta.env.VITE_TRUSTID_WEB ?? "http://localhost:
 export const trustIdApi = import.meta.env.VITE_TRUSTID_API ?? "http://localhost:8787";
 export const portalApiBase = import.meta.env.VITE_PORTAL_API ?? "/api";
 export const enableTrustId = import.meta.env.VITE_ENABLE_TRUST_ID !== "false";
+/** Testing-only guest sign-in. Never in a production build, whatever the build environment says. */
 export const bypassAuthForTesting =
-  import.meta.env.VITE_BYPASS_AUTH_FOR_TESTING !== "false" && !enableTrustId;
+  !import.meta.env.PROD && import.meta.env.VITE_BYPASS_AUTH_FOR_TESTING !== "false" && !enableTrustId;
 export const trustIdMode = !enableTrustId
   ? "disabled"
   : import.meta.env.PROD || import.meta.env.VITE_TRUSTID_MODE === "remote"

@@ -31,14 +31,27 @@ export function defaultListenHost(source: NodeJS.ProcessEnv, fallback = "0.0.0.0
   return isRailwayRuntime(source) ? "::" : fallback;
 }
 
+/** PEM from DATABASE_CA_CERT: raw PEM, or the PEM base64-encoded for single-line variable stores. */
+function databaseCaCert(source: NodeJS.ProcessEnv): string | undefined {
+  const raw = source.DATABASE_CA_CERT?.trim();
+  if (!raw) return undefined;
+  const pem = raw.includes("BEGIN CERTIFICATE") ? raw.replace(/\\n/g, "\n") : Buffer.from(raw, "base64").toString("utf8");
+  if (!pem.includes("BEGIN CERTIFICATE")) throw new Error("DATABASE_CA_CERT is not a PEM certificate");
+  return pem;
+}
+
 /**
  * Railway managed Postgres needs TLS. Local compose / :54322 stays cleartext
  * unless the URL or PGSSLMODE asks for SSL.
+ *
+ * With DATABASE_CA_CERT set to the database's public root CA, the server certificate and hostname are
+ * verified (verify-full). Without it, TLS stays encrypted but unverified, as before: the Railway image
+ * issues its server certificate from a per-instance root CA, so no public CA bundle can verify it.
  */
 export function postgresSslConfig(
   databaseUrl: string,
   source: NodeJS.ProcessEnv = process.env,
-): { rejectUnauthorized: false } | undefined {
+): { rejectUnauthorized: boolean; ca?: string } | undefined {
   const url = databaseUrl.toLowerCase();
   const mode = (source.PGSSLMODE ?? "").toLowerCase();
   if (mode === "disable" || url.includes("sslmode=disable")) return undefined;
@@ -53,7 +66,8 @@ export function postgresSslConfig(
     isRailwayRuntime(source) ||
     railwayHost
   ) {
-    return { rejectUnauthorized: false };
+    const ca = databaseCaCert(source);
+    return ca ? { ca, rejectUnauthorized: true } : { rejectUnauthorized: false };
   }
   return undefined;
 }

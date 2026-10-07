@@ -24,8 +24,9 @@ export const trustIdApi = import.meta.env.VITE_TRUSTID_API ?? "http://localhost:
 export const portalApiBase = import.meta.env.VITE_PORTAL_API ?? "/api";
 /** TrustID is bypassed on the Dashboard for now — reuse Portal session / guest auth. */
 export const enableTrustId = import.meta.env.VITE_ENABLE_TRUST_ID === "true";
+/** Testing-only guest sign-in. Never in a production build, whatever the build environment says. */
 export const bypassAuthForTesting =
-  import.meta.env.VITE_BYPASS_AUTH_FOR_TESTING !== "false" && !enableTrustId;
+  !import.meta.env.PROD && import.meta.env.VITE_BYPASS_AUTH_FOR_TESTING !== "false" && !enableTrustId;
 export const trustIdMode = !enableTrustId
   ? "disabled"
   : import.meta.env.PROD || import.meta.env.VITE_TRUSTID_MODE === "remote"

@@ -310,6 +310,102 @@ describe("token vault", () => {
   });
 });
 
+describe("bodyless writes over a real socket (proxy-shaped requests)", () => {
+  let base = "";
+  before(async () => {
+    await app.listen({ port: 0, host: "127.0.0.1" });
+    base = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`;
+  });
+
+  /** Raw HTTP so the test controls framing exactly (chunked with zero bytes, as the /api proxy sends). */
+  function raw(method: string, urlPath: string, opts: { headers?: Record<string, string>; body?: string; chunked?: boolean } = {}) {
+    return new Promise<{ status: number; json: Record<string, unknown> | null }>((resolve, reject) => {
+      const headers: Record<string, string> = { ...(opts.headers ?? {}) };
+      if (opts.chunked) headers["transfer-encoding"] = "chunked";
+      else if (opts.body !== undefined) headers["content-length"] = String(Buffer.byteLength(opts.body));
+      const req = http.request(`${base}${urlPath}`, { method, headers }, (res) => {
+        let text = "";
+        res.on("data", (d) => (text += d));
+        res.on("end", () => {
+          let json = null;
+          try { json = JSON.parse(text); } catch {}
+          resolve({ status: res.statusCode ?? 0, json });
+        });
+      });
+      req.on("error", reject);
+      if (opts.body) req.write(opts.body);
+      req.end();
+    });
+  }
+
+  async function adminSession() {
+    const res = await call({ method: "POST", url: "/auth/login", headers: { origin: ADMIN }, payload: OWNER });
+    assert.equal(res.statusCode, 200, res.body);
+    return cookieFrom(res).value;
+  }
+
+  async function me(cookie: string) {
+    return (await raw("GET", "/auth/me", { headers: { origin: ADMIN, cookie: `portal_session=${cookie}` } })).status;
+  }
+
+  test("logout with {} → 200 and the session is revoked", async () => {
+    const cookie = await adminSession();
+    const out = await raw("POST", "/auth/logout", { headers: { origin: ADMIN, cookie: `portal_session=${cookie}`, "content-type": "application/json" }, body: "{}" });
+    assert.equal(out.status, 200);
+    assert.equal(await me(cookie), 401, "revoked cookie rejected afterwards");
+  });
+
+  test("logout with no body, chunked and untyped (proxy framing) → 200 and the session is revoked", async () => {
+    const cookie = await adminSession();
+    const out = await raw("POST", "/auth/logout", { headers: { origin: ADMIN, cookie: `portal_session=${cookie}` }, chunked: true });
+    assert.equal(out.status, 200, JSON.stringify(out.json));
+    assert.equal(await me(cookie), 401, "revoked cookie rejected afterwards");
+  });
+
+  test("logout with no body and Content-Length: 0 → 200 and revoked", async () => {
+    const cookie = await adminSession();
+    const out = await raw("POST", "/auth/logout", { headers: { origin: ADMIN, cookie: `portal_session=${cookie}` }, body: "" });
+    assert.equal(out.status, 200);
+    assert.equal(await me(cookie), 401);
+  });
+
+  test("an untyped body that is not empty is still refused (415)", async () => {
+    const out = await raw("POST", "/auth/logout", { headers: { origin: ADMIN }, body: "not-empty", chunked: true });
+    assert.equal(out.status, 415);
+    assert.equal(out.json?.error, "FST_ERR_CTP_INVALID_MEDIA_TYPE");
+  });
+
+  test("an unsupported content type is still refused (415), even when empty", async () => {
+    for (const body of ["<x/>", ""]) {
+      const out = await raw("POST", "/auth/logout", { headers: { origin: ADMIN, "content-type": "application/xml" }, body });
+      assert.equal(out.status, 415, `body=${JSON.stringify(body)}`);
+    }
+  });
+
+  test("malformed JSON where JSON is required is still rejected", async () => {
+    const out = await raw("POST", "/auth/login", { headers: { origin: ADMIN, "content-type": "application/json" }, body: "{bad json" });
+    assert.equal(out.status, 400);
+    const emptyTyped = await raw("POST", "/auth/login", { headers: { origin: ADMIN, "content-type": "application/json" }, body: "" });
+    assert.equal(emptyTyped.status, 400, "empty body with a JSON content type is not accepted");
+  });
+
+  test("a JSON-required route given an empty untyped body fails validation, never succeeds", async () => {
+    const out = await raw("POST", "/auth/login", { headers: { origin: ADMIN }, chunked: true });
+    assert.equal(out.status, 400);
+    assert.equal(out.json?.error, "invalid_body");
+  });
+
+  test("CSRF is unchanged for proxy-framed bodyless writes", async () => {
+    const cookie = await adminSession();
+    const noOrigin = await raw("POST", "/auth/logout", { headers: { cookie: `portal_session=${cookie}` }, chunked: true });
+    assert.equal(noOrigin.status, 403);
+    assert.equal(noOrigin.json?.error, "origin_required");
+    const foreign = await raw("POST", "/auth/logout", { headers: { origin: "https://evil.example", cookie: `portal_session=${cookie}` }, chunked: true });
+    assert.equal(foreign.status, 403);
+    assert.equal(await me(cookie), 200, "refused logouts did not revoke the session");
+  });
+});
+
 describe("outbound HTTP is bounded", () => {
   let server: http.Server;
   let base = "";
