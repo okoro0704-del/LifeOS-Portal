@@ -85,6 +85,12 @@ export function LoginPage() {
             Continue with TrustID
           </button>
         )}
+        {enableTrustId ? (
+          // The Portal handoff keeps working while TrustID is in canary; never strand a signed-in Portal user.
+          <a className="btn btn-ghost" href={`${GUEST_PORTAL_ORIGIN}/app`}>
+            Back to LifeOS Portal
+          </a>
+        ) : null}
         {enableTrustId && trustIdMode !== "mock" ? (
           <a className="muted small" href={`${trustIdWeb}/register?source=business-portal`}>
             Create TrustID

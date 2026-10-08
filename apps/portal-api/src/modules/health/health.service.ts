@@ -1,6 +1,7 @@
 import { LIFEOS_PRIMITIVE_IDS } from "@lifeos-portal/shared";
 import { env } from "../../config/env.js";
 import { GATEWAY_UPSTREAMS, probeUpstream } from "../../services/gateway.js";
+import { isTrustIdEnabled } from "../../lib/local-auth.js";
 import type { LivenessResponse, ReadinessResponse } from "./health.schema.js";
 
 export class HealthService {
@@ -9,6 +10,7 @@ export class HealthService {
       ok: true,
       service: "lifeos-portal-api",
       trustIdMode: env.trustIdMode,
+      trustIdAuthMode: env.trustIdAuthMode,
       installMode: env.installMode,
       gatewayMode: env.gatewayMode,
       primitives: [...LIFEOS_PRIMITIVE_IDS],
@@ -20,10 +22,11 @@ export class HealthService {
     const rows = await Promise.all(GATEWAY_UPSTREAMS.map(probeUpstream));
     const upstreams = {
       datazone: rows.find((row) => row.id === "datazone")?.ok ? "UP" : "DOWN",
-      trustId: rows.find((row) => row.id === "trust-id")?.ok ? "UP" : "DOWN",
+      // Disabled means no probe happened: say DISABLED, not UP. When on, it is probed like any upstream.
+      trustId: !isTrustIdEnabled() ? "DISABLED" : rows.find((row) => row.id === "trust-id")?.ok ? "UP" : "DOWN",
       finprove: rows.find((row) => row.id === "finprove")?.ok ? "UP" : "DOWN",
     } as const;
-    const healthy = Object.values(upstreams).every((state) => state === "UP");
+    const healthy = Object.values(upstreams).every((state) => state === "UP" || state === "DISABLED");
     return {
       status: healthy ? "healthy" : "degraded",
       timestamp,

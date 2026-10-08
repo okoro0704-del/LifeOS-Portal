@@ -310,6 +310,23 @@ describe("token vault", () => {
   });
 });
 
+describe("TrustID disabled (TRUSTID_AUTH_MODE unset)", () => {
+  test("local sign-in works, the TrustID path is refused, readiness says DISABLED (not UP)", async () => {
+    const local = await call({ method: "POST", url: "/auth/login", headers: { origin: GUEST }, payload: OWNER });
+    assert.equal(local.statusCode, 200);
+    const tid = await call({ method: "POST", url: "/auth/session", headers: { origin: GUEST }, payload: { accessToken: "any-token-value" } });
+    assert.equal(tid.statusCode, 503);
+    assert.equal(tid.json().error, "trustid_disabled");
+    const status = await call({ method: "GET", url: "/auth/status" });
+    assert.equal(status.json().localAuth, true);
+    assert.equal(status.json().enableTrustId, false);
+    const ready = await call({ method: "GET", url: "/api/v1/health" });
+    assert.equal(ready.json().upstreams.trustId, "DISABLED");
+    const live = await call({ method: "GET", url: "/health" });
+    assert.equal(live.json().trustIdAuthMode, "disabled");
+  });
+});
+
 describe("bodyless writes over a real socket (proxy-shaped requests)", () => {
   let base = "";
   before(async () => {

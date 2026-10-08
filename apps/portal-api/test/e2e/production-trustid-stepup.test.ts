@@ -21,6 +21,8 @@ process.env.CORS_ORIGINS = "https://getlifeos.app,https://admin.getlifeos.app";
 process.env.PLATFORM_ADMIN_URL = "https://admin.getlifeos.app";
 process.env.DATABASE_URL = "postgres://portal:portal@db.example.invalid:5432/lifeos";
 process.env.TRUSTID_TOKEN_KEYS = `k2:${Buffer.alloc(32, 2).toString("base64")}`;
+// Portal-side authority: TrustID proves identity only, so the admins are configured here, not claimed by TrustID.
+process.env.PLATFORM_ADMIN_TRUST_IDS = "TD-OWNER,TD-OTHER";
 delete process.env.LOCAL_ADMIN_EMAIL;
 delete process.env.LOCAL_ADMIN_PASSWORD;
 

@@ -199,6 +199,8 @@ export const portalApi = {
       body: JSON.stringify({ trustId: trustId ?? "TD-PORTAL-DEV" }),
     });
   },
+  /** Server truth for which sign-in paths are open (TRUSTID_AUTH_MODE): the UI never guesses. */
+  authStatus: () => api<{ localAuth: boolean; enableTrustId: boolean }>("/auth/status"),
   me: () => api<{ user: PortalUserPublic }>("/auth/me"),
   logout: () => api<{ ok: boolean }>("/auth/logout", { method: "POST" }),
   createHandoff: () =>

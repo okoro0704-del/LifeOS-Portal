@@ -15,6 +15,16 @@ export function LoginPage() {
     if (user?.roles?.includes("platform_admin")) navigate("/admin/tenants", { replace: true });
   }, [user, navigate]);
 
+  // During the TrustID canary the server keeps local sign-in open; it alone decides (TRUSTID_AUTH_MODE).
+  const [localAuth, setLocalAuth] = useState(trustIdMode === "disabled");
+  useEffect(() => {
+    if (trustIdMode === "disabled") return;
+    portalApi
+      .authStatus()
+      .then((status) => setLocalAuth(status.localAuth))
+      .catch(() => undefined);
+  }, []);
+
   async function mockEnter() {
     setBusy(true);
     setError(null);
@@ -59,7 +69,7 @@ export function LoginPage() {
         <h1>Operator sign-in</h1>
         <p className="lead">Manage tenants, billings, and their verticals.</p>
         {error ? <p className="banner-error">{error}</p> : null}
-        {trustIdMode === "disabled" ? (
+        {localAuth ? (
           <form className="form" onSubmit={(event) => void submitLocal(event)}>
             <label>
               Email
@@ -84,7 +94,8 @@ export function LoginPage() {
               </button>
             ) : null}
           </form>
-        ) : trustIdMode === "mock" ? (
+        ) : null}
+        {trustIdMode === "disabled" ? null : trustIdMode === "mock" ? (
           <button className="btn btn-primary" disabled={busy} onClick={() => void mockEnter()}>
             {busy ? "Entering…" : "Enter as platform operator"}
           </button>

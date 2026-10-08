@@ -153,13 +153,40 @@ export async function registerAuthRoutes(app: FastifyInstance, store: PortalStor
       return reply.code(mapped.statusCode).send({ error: mapped.code, message: mapped.message });
     }
 
-    const user = store.upsertUser({
-      trustId: identity.trustId,
-      displayName: publicDisplayName(identity.trustId),
+    // Account linking. TrustID proves who the person is; Portal keeps deciding what they may do.
+    const identityFacts = {
       trustTier: identity.trustLevel?.tier ?? null,
       identityStatus: identity.identityStatus ?? identity.status ?? null,
-      roles: identity.roles,
-    });
+    };
+    const signedIn = req.portalSessionVia ? req.portalUser : undefined;
+    const linked = store.getUserByTrustId(identity.trustId);
+    let user: PortalUser;
+    if (signedIn && !signedIn.trustId) {
+      // A signed-in (local) account claims this TrustID: proves control of both, keeps its Portal role.
+      if (linked && linked.id !== signedIn.id) {
+        return reply.code(409).send({
+          error: "trustid_already_linked",
+          message: "This TrustID is already linked to another Portal account.",
+        });
+      }
+      user = store.updateUser(signedIn.id, { trustId: identity.trustId, ...identityFacts })!;
+    } else if (linked) {
+      user = store.updateUser(linked.id, identityFacts)!;
+    } else {
+      user = store.upsertUser({
+        trustId: identity.trustId,
+        displayName: publicDisplayName(identity.trustId),
+        ...identityFacts,
+        roles: identity.roles,
+      });
+    }
+    // Server-configured platform admins (PLATFORM_ADMIN_TRUST_IDS) are trusted Portal state.
+    if (identity.roles?.includes("platform_admin") && user.role !== "ADMIN") {
+      user = store.updateUser(user.id, { role: "ADMIN", roles: rolesForAccount("ADMIN") })!;
+    }
+    if (user.suspended) {
+      return reply.code(403).send({ error: "suspended", message: "This account is suspended." });
+    }
 
     const { rawToken, expiresAt } = await issueSession(store, user, body.accessToken);
     setSessionCookie(reply, rawToken, expiresAt);

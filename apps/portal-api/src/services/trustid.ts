@@ -34,8 +34,14 @@ export async function checkTrustIdAvailable(): Promise<boolean> {
   }
 }
 
-function rolesForTrustId(trustId: string, claimed?: TrustIdRole[]): TrustIdRole[] {
-  const roles = new Set<TrustIdRole>(claimed?.length ? claimed : ["tenant"]);
+/**
+ * Portal authority for a TrustID subject. TrustID proves identity; it never grants Portal roles: roles a
+ * remote identity provider claims are ignored. platform_admin comes only from Portal-side state (an
+ * existing linked account) or the server-configured PLATFORM_ADMIN_TRUST_IDS. Mock tokens (local and
+ * test only; production refuses them) may still claim roles.
+ */
+function rolesForTrustId(trustId: string, mockClaimed?: TrustIdRole[]): TrustIdRole[] {
+  const roles = new Set<TrustIdRole>(mockClaimed?.length ? mockClaimed : ["tenant"]);
   if (config.platformAdminTrustIds.includes(trustId)) roles.add("platform_admin");
   return [...roles];
 }
@@ -103,7 +109,7 @@ export async function fetchTrustIdUserInfo(accessToken: string): Promise<TrustId
     ...data,
     trustId,
     sub: data.sub || data.trustId,
-    roles: rolesForTrustId(trustId, data.roles),
+    roles: rolesForTrustId(trustId),
   };
 }
 

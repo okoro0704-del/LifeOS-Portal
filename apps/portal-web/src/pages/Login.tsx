@@ -17,6 +17,16 @@ export function LoginPage() {
     if (user) navigate("/app", { replace: true });
   }, [user, navigate]);
 
+  // During the TrustID canary the server keeps local sign-in open; it alone decides (TRUSTID_AUTH_MODE).
+  const [localAuth, setLocalAuth] = useState(!enableTrustId);
+  useEffect(() => {
+    if (!enableTrustId) return;
+    portalApi
+      .authStatus()
+      .then((status) => setLocalAuth(status.localAuth))
+      .catch(() => undefined);
+  }, []);
+
   async function mockEnter() {
     setBusy(true);
     setError(null);
@@ -64,7 +74,7 @@ export function LoginPage() {
             : "Local accounts are enabled while TrustID is disconnected for standalone portal testing."}
         </p>
         {error ? <p className="banner-error">{error}</p> : null}
-        {!enableTrustId ? (
+        {localAuth ? (
           <form className="form" onSubmit={(event) => void submitLocal(event)}>
             {mode === "register" ? (
               <label>
@@ -97,7 +107,8 @@ export function LoginPage() {
               {mode === "login" ? "Create a local account" : "Have an account? Sign in"}
             </button>
           </form>
-        ) : trustIdMode === "mock" ? (
+        ) : null}
+        {!enableTrustId ? null : trustIdMode === "mock" ? (
           <button className="btn btn-primary" disabled={busy} onClick={() => void mockEnter()}>
             {busy ? "Entering…" : "Enter (local TrustID mock)"}
           </button>

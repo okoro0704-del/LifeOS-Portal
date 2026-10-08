@@ -42,6 +42,38 @@ function boolish(value: string | undefined, fallback: boolean) {
 }
 
 /**
+ * How Portal sign-in relates to TrustID. Explicit states instead of a boolean so the move to
+ * TrustID-only sign-in is never an atomic lockout:
+ * - disabled: TrustID sign-in unavailable; local (email/password) sign-in as today.
+ * - canary:   TrustID sign-in available AND local sign-in kept, for verification and account linking.
+ *             A migration state, not a permanent second identity system.
+ * - required: TrustID is the canonical sign-in; local sign-in/register are off.
+ * TRUSTID_AUTH_MODE wins. Without it the legacy ENABLE_TRUST_ID maps explicitly (true → required,
+ * its historical meaning; false/unset → disabled). Unknown or contradictory values refuse to boot.
+ */
+export const TRUSTID_AUTH_MODES = ["disabled", "canary", "required"] as const;
+export type TrustIdAuthMode = (typeof TRUSTID_AUTH_MODES)[number];
+
+export function resolveTrustIdAuthMode(source: NodeJS.ProcessEnv): TrustIdAuthMode {
+  const rawMode = source.TRUSTID_AUTH_MODE?.trim().toLowerCase();
+  const legacy = source.ENABLE_TRUST_ID?.trim();
+  const legacyEnabled = legacy ? legacy.toLowerCase() !== "false" : undefined;
+  if (!rawMode) return legacyEnabled ? "required" : "disabled";
+  if (!(TRUSTID_AUTH_MODES as readonly string[]).includes(rawMode)) {
+    throw new EnvValidationError([
+      { path: ["TRUSTID_AUTH_MODE"], message: `must be one of ${TRUSTID_AUTH_MODES.join(", ")} (got "${rawMode}")` },
+    ]);
+  }
+  const mode = rawMode as TrustIdAuthMode;
+  if (legacyEnabled !== undefined && legacyEnabled !== (mode !== "disabled")) {
+    throw new EnvValidationError([
+      { path: ["TRUSTID_AUTH_MODE"], message: `conflicts with ENABLE_TRUST_ID=${legacy}; remove ENABLE_TRUST_ID or make them agree` },
+    ]);
+  }
+  return mode;
+}
+
+/**
  * Boot-time portal/gateway env. Accepts the production aliases from the
  * readiness directive (PORTAL_SECRET_KEY, TRUST_ID_API_URL, GATEWAY_MODE=production)
  * and the names this repo already uses (COOKIE_SECRET, TRUSTID_API, local|remote).
@@ -49,7 +81,8 @@ function boolish(value: string | undefined, fallback: boolean) {
 export function parsePortalServerEnv(source: NodeJS.ProcessEnv = process.env) {
   const nodeEnv = (source.NODE_ENV ?? "development") as "development" | "test" | "production";
   const production = nodeEnv === "production";
-  const enableTrustId = boolish(source.ENABLE_TRUST_ID, false);
+  const trustIdAuthMode = resolveTrustIdAuthMode(source);
+  const enableTrustId = trustIdAuthMode !== "disabled";
   const bypassTrustId = boolish(source.BYPASS_TRUST_ID, !production);
   const bypassAuthForTesting = boolish(
     source.BYPASS_AUTH_FOR_TESTING,
@@ -246,6 +279,7 @@ export function parsePortalServerEnv(source: NodeJS.ProcessEnv = process.env) {
           ? false
           : production,
     enableTrustId,
+    trustIdAuthMode,
     bypassTrustId,
     bypassAuthForTesting,
     defaultUserRole: defaultUserRole as "USER" | "ADMIN",
@@ -276,7 +310,11 @@ export function parsePortalServerEnv(source: NodeJS.ProcessEnv = process.env) {
     netlifySiteId: source.NETLIFY_SITE_ID ?? "6fe10d54-6f94-4326-8933-ec5a383ec188",
     netlifyDnsZoneId: source.NETLIFY_DNS_ZONE_ID ?? "6a9b2bad0fa61322d229a883",
     lifeosApiUrl: source.LIFEOS_API_URL ?? "http://localhost:8790",
-    platformAdminTrustIds: csv(source.PLATFORM_ADMIN_TRUST_IDS, "TD-PLATFORM,TD-SUPER-ADMIN"),
+    /**
+     * TrustIDs Portal itself grants platform_admin (trusted server-side config). TrustID proves who
+     * someone is; it never decides Portal authority. Production has no built-in admin TrustIDs.
+     */
+    platformAdminTrustIds: csv(source.PLATFORM_ADMIN_TRUST_IDS, production ? "" : "TD-PLATFORM,TD-SUPER-ADMIN"),
     businessPortalUrl: source.BUSINESS_PORTAL_URL ?? "http://localhost:5177",
     platformAdminUrl: source.PLATFORM_ADMIN_URL ?? "http://localhost:5178",
     gatewayMode: gatewayMode as "local" | "remote",

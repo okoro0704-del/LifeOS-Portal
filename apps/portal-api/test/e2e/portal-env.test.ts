@@ -8,6 +8,7 @@ import {
   RAILWAY_FINPROVE_INTERNAL,
   parsePortalServerEnv,
   postgresSslConfig,
+  resolveTrustIdAuthMode,
 } from "@lifeos-portal/env";
 
 test("production boot rejects default secrets and localhost upstreams", () => {
@@ -109,6 +110,47 @@ test("Railway production defaults Finprove private DNS and injected PORT", () =>
   assert.deepEqual(postgresSslConfig(env.databaseUrl, { NODE_ENV: "production" }), {
     rejectUnauthorized: false,
   });
+});
+
+test("TRUSTID_AUTH_MODE: explicit states, legacy ENABLE_TRUST_ID mapping, invalid and contradictory values refused", () => {
+  assert.equal(resolveTrustIdAuthMode({}), "disabled", "unset is disabled, never enabled");
+  assert.equal(resolveTrustIdAuthMode({ ENABLE_TRUST_ID: "false" }), "disabled");
+  assert.equal(resolveTrustIdAuthMode({ ENABLE_TRUST_ID: "true" }), "required", "legacy true keeps its historical meaning");
+  for (const mode of ["disabled", "canary", "required"] as const) {
+    assert.equal(resolveTrustIdAuthMode({ TRUSTID_AUTH_MODE: mode }), mode);
+  }
+  assert.equal(resolveTrustIdAuthMode({ TRUSTID_AUTH_MODE: " Canary " }), "canary");
+  assert.equal(resolveTrustIdAuthMode({ TRUSTID_AUTH_MODE: "canary", ENABLE_TRUST_ID: "true" }), "canary");
+  for (const bad of ["on", "true", "enabled", "requried"]) {
+    assert.throws(() => resolveTrustIdAuthMode({ TRUSTID_AUTH_MODE: bad }), EnvValidationError, bad);
+  }
+  assert.throws(() => resolveTrustIdAuthMode({ TRUSTID_AUTH_MODE: "canary", ENABLE_TRUST_ID: "false" }), EnvValidationError);
+  assert.throws(() => resolveTrustIdAuthMode({ TRUSTID_AUTH_MODE: "disabled", ENABLE_TRUST_ID: "true" }), EnvValidationError);
+  assert.throws(() => parsePortalServerEnv({ NODE_ENV: "development", TRUSTID_AUTH_MODE: "maybe" }), EnvValidationError, "boot refuses an invalid mode");
+});
+
+test("production TrustID modes: no built-in admin TrustIDs; canary needs remote TrustID and sealing keys", () => {
+  const base = {
+    NODE_ENV: "production",
+    BYPASS_TRUST_ID: "false",
+    GATEWAY_MODE: "production",
+    DATAZONE_API_URL: "https://datazone.getlifeos.app",
+    TRUST_ID_API_URL: "https://trustedid.netlify.app/api",
+    FINPROVE_API_URL: "https://finprove.getlifeos.app",
+    PORTAL_SECRET_KEY: "prod-portal-secret-key-32-chars-min",
+    PORTAL_DOMAIN: "https://portal.getlifeos.app",
+    INTERNAL_PROVISION_TOKEN: "prod-provision-token-not-default",
+    DATABASE_URL: "postgres://portal:portal@db.internal:5432/lifeos",
+  };
+  assert.deepEqual(parsePortalServerEnv({ ...base, TRUSTID_MODE: "remote" }).platformAdminTrustIds, [], "no default admin TrustIDs in production");
+  assert.deepEqual(parsePortalServerEnv({ NODE_ENV: "development" }).platformAdminTrustIds, ["TD-PLATFORM", "TD-SUPER-ADMIN"], "dev fixtures unchanged");
+  const keys = `k1:${Buffer.alloc(32, 3).toString("base64")}`;
+  const canary = parsePortalServerEnv({ ...base, TRUSTID_AUTH_MODE: "canary", TRUSTID_MODE: "remote", TRUSTID_TOKEN_KEYS: keys });
+  assert.equal(canary.trustIdAuthMode, "canary");
+  assert.equal(canary.enableTrustId, true);
+  assert.throws(() => parsePortalServerEnv({ ...base, TRUSTID_AUTH_MODE: "canary", TRUSTID_MODE: "mock", TRUSTID_TOKEN_KEYS: keys }), EnvValidationError, "production mock TrustID refused");
+  assert.throws(() => parsePortalServerEnv({ ...base, TRUSTID_AUTH_MODE: "canary", TRUSTID_MODE: "remote" }), EnvValidationError, "canary without sealing keys refused");
+  assert.throws(() => parsePortalServerEnv({ ...base, TRUSTID_AUTH_MODE: "required", TRUSTID_MODE: "remote", TRUSTID_TOKEN_KEYS: keys, TRUST_ID_API_URL: "http://localhost:8787" }), EnvValidationError, "localhost TrustID refused");
 });
 
 test("DATABASE_CA_CERT turns Postgres TLS into verify-full; unset keeps the previous behaviour", () => {

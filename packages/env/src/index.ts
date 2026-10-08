@@ -1,7 +1,10 @@
 export {
   EnvValidationError,
   parsePortalServerEnv,
+  resolveTrustIdAuthMode,
+  TRUSTID_AUTH_MODES,
   type PortalServerEnv,
+  type TrustIdAuthMode,
 } from "./server.js";
 export {
   DOCKER_FINPROVE_INTERNAL,
