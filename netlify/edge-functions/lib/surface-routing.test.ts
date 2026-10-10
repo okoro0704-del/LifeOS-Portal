@@ -13,6 +13,7 @@ import {
   rewriteDigitalSpaceLocation,
   rewriteNewsLocation,
   selectBrandSurface,
+  studioEntryRedirect,
   shouldRedirectLifeToSpace,
   tenantLabelFromHost,
 } from "./surface-routing.ts";
@@ -157,5 +158,31 @@ describe("custom domain hosts", () => {
     assert.equal(isCustomDomainCandidate("localhost"), false);
     assert.equal(isCustomDomainCandidate("75.2.60.5"), false);
     assert.equal(tenantLabelFromHost("brand.example"), null);
+  });
+});
+
+describe("Studio entry on a brand host (Trust ID only)", () => {
+  test("legacy white-label auto-login parameters are stripped", () => {
+    assert.equal(
+      studioEntryRedirect("?returnTo=%2Fadmin&wl=1&trustId=TD-WL-MRFUNDZMAN&name=Mr+Fundzman"),
+      "/enter?returnTo=%2Fadmin",
+    );
+    assert.equal(studioEntryRedirect("?wl=1"), "/enter?returnTo=%2Fadmin");
+  });
+  test("a bare entry returns to the Studio after sign-in", () => {
+    assert.equal(studioEntryRedirect(""), "/enter?returnTo=%2Fadmin");
+  });
+  test("a clean entry is proxied unchanged (no redirect loop)", () => {
+    assert.equal(studioEntryRedirect("?returnTo=%2Fadmin"), null);
+    assert.equal(studioEntryRedirect("?returnTo=%2Fadmin%2Fassets"), null);
+    // Applying the redirect target again must be a fixed point.
+    const once = studioEntryRedirect("?wl=1&trustId=TD-WL-X")!;
+    assert.equal(studioEntryRedirect(once.slice("/enter".length)), null);
+  });
+  test("no synthetic identity is ever produced", () => {
+    for (const search of ["", "?wl=1", "?returnTo=%2Fadmin", "?trustId=TD-WL-KINGBOOKER&wl=1"]) {
+      const out = studioEntryRedirect(search) ?? "";
+      assert.doesNotMatch(out, /TD-WL|wl=|trustId=/);
+    }
   });
 });

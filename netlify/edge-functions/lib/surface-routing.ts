@@ -192,3 +192,28 @@ export function rewriteDigipediaLocation(location: string, brandHost: string, di
 
 /** @deprecated Use rewriteDigitalSpaceLocation. */
 export const rewriteDigitalLifeLocation = rewriteDigitalSpaceLocation;
+
+/** Legacy white-label Studio entry parameters (pre Trust ID). mybrandOS now refuses them. */
+const LEGACY_STUDIO_ENTRY_PARAMS = ["wl", "trustId", "name"] as const;
+
+/**
+ * Studio entry on a brand host (`/enter`). Creators sign in with Trust ID: the entry must never
+ * carry the legacy white-label auto-login (`wl=1` + a synthetic `TD-WL-*` identity), which
+ * mybrandOS refuses under Trust ID enforcement. Returns the path to redirect to, or null when the
+ * request is already a clean Studio entry and can be proxied as is.
+ */
+export function studioEntryRedirect(search: string): string | null {
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  let changed = false;
+  for (const key of LEGACY_STUDIO_ENTRY_PARAMS) {
+    if (params.has(key)) {
+      params.delete(key);
+      changed = true;
+    }
+  }
+  if (!params.get("returnTo")) {
+    params.set("returnTo", "/admin");
+    changed = true;
+  }
+  return changed ? `/enter?${params.toString()}` : null;
+}

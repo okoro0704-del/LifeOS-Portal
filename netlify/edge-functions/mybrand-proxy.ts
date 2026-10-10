@@ -6,7 +6,7 @@
  * - /news        → independent Digiconomy News
  * - /life        → permanent compatibility redirect to /space
  * - USER APP     → `/` and other public mybrandOS paths
- * - USER ADMIN   → `/admin` (upstream white-label `/enter?wl=1…`)
+ * - USER ADMIN   → `/admin` → `/enter?returnTo=/admin` → Trust ID sign-in (no white-label auto-login)
  *
  * Critical: never allow an upstream Studio callback to redirect the browser to
  * `/` on a brand host (`/` is the public user app).
@@ -25,6 +25,7 @@ import {
   rewriteDigitalSpaceLocation,
   rewriteNewsLocation,
   shouldRedirectLifeToSpace,
+  studioEntryRedirect,
   tenantLabelFromHost,
 } from "./lib/surface-routing.ts";
 
@@ -112,32 +113,6 @@ function tagTenant(response: Response, slug: string): Response {
   const headers = new Headers(response.headers);
   headers.set("X-LifeOS-Tenant", slug);
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
-}
-
-function studioEnterPath(tenant: TenantBody, brandSlug: string, search: string): string {
-  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
-  const upstream = tenant.tenant?.mybrand?.upstreamAdminOrigin;
-  if (upstream) {
-    try {
-      const u = new URL(upstream);
-      if (u.pathname.startsWith("/enter")) {
-        for (const [key, value] of u.searchParams.entries()) {
-          if (!params.get(key)) params.set(key, value);
-        }
-      }
-    } catch {
-      /* fall through */
-    }
-  }
-  const trustId =
-    tenant.tenant?.mybrand?.trustId ||
-    `TD-WL-${brandSlug.toUpperCase().replace(/-/g, "")}`.slice(0, 80);
-  const name = tenant.tenant?.displayName || brandSlug;
-  params.set("wl", "1");
-  if (!params.get("trustId")) params.set("trustId", trustId);
-  if (!params.get("name")) params.set("name", name);
-  if (!params.get("returnTo")) params.set("returnTo", "/admin");
-  return `/enter?${params.toString()}`;
 }
 
 function rewriteUpstreamLocation(location: string, brandHost: string, surface: "studio" | "user_app"): string {
@@ -384,12 +359,8 @@ async function routeTenant(request: Request, context: Context, url: URL, host: s
     (request.method === "GET" || request.method === "HEAD") &&
     (url.pathname === "/enter" || url.pathname.startsWith("/enter/"))
   ) {
-    const params = new URLSearchParams(url.search.startsWith("?") ? url.search.slice(1) : url.search);
-    if (params.get("wl") !== "1") {
-      if (!params.get("returnTo")) params.set("returnTo", "/admin");
-      const enterPath = studioEnterPath(tenant, brandSlug, `?${params.toString()}`);
-      return Response.redirect(`https://${host}${enterPath}`, 302);
-    }
+    const enterPath = studioEntryRedirect(url.search);
+    if (enterPath) return Response.redirect(`https://${host}${enterPath}`, 302);
   }
 
   const target = new URL(upstreamPath, `${MYBRANDOS}/`);
