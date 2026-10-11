@@ -2,7 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # main, plus the TrustID integration branch until its pull request is open.
+    branches: [main, trustid-canary-readiness]
   pull_request:
 
 concurrency:
