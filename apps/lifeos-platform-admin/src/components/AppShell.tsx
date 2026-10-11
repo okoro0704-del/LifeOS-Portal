@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { StepUpPrompt } from "./StepUpPrompt";
 
 export function AppShell() {
   const { user, logout } = useAuth();
@@ -26,6 +27,7 @@ export function AppShell() {
         </div>
       </aside>
       <main className="main">
+        <StepUpPrompt />
         <Outlet />
       </main>
     </div>

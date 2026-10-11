@@ -102,7 +102,58 @@ export function stepUpEnabled(kind: "biometric" | "master") {
   }
 }
 
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
+/* TrustID Master Device step-up (TrustID contract v1 §4). A refused write (403 step_up_required) asks
+ * Portal API to open a challenge for exactly that request, waits while the admin approves it on their
+ * Master Device inside TrustID, then retries once with the challenge id. The approval itself never
+ * reaches this page: Portal API consumes and verifies it server-side. */
+export type StepUpState =
+  | { status: "pending"; challengeId: string; action: string; expiresAt?: string }
+  | { status: "done" | "failed"; challengeId?: string; action?: string };
+export const STEP_UP_EVENT = "portal-step-up";
+
+function announceStepUp(state: StepUpState) {
+  window.dispatchEvent(new CustomEvent<StepUpState>(STEP_UP_EVENT, { detail: state }));
+}
+
+const STEP_UP_POLL_MS = 2_000;
+const STEP_UP_MAX_WAIT_MS = 5 * 60_000;
+
+async function approveOnMasterDevice(method: string, path: string, body: unknown): Promise<string> {
+  const created = await api<{ challenge_id: string; action: string; expires_at?: string }>(
+    "/v1/step-up/challenges",
+    { method: "POST", body: JSON.stringify({ operation: { method, path: path.split("?")[0], body } }) },
+    false,
+  );
+  const id = created.challenge_id;
+  announceStepUp({ status: "pending", challengeId: id, action: created.action, expiresAt: created.expires_at });
+  const deadline = Math.min(
+    Date.now() + STEP_UP_MAX_WAIT_MS,
+    created.expires_at ? Date.parse(created.expires_at) : Number.POSITIVE_INFINITY,
+  );
+  try {
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, STEP_UP_POLL_MS));
+      const { status } = await api<{ status: string }>(`/v1/step-up/challenges/${id}`, undefined, false);
+      if (status === "approved") {
+        announceStepUp({ status: "done", challengeId: id, action: created.action });
+        return id;
+      }
+      if (status !== "pending") break;
+    }
+  } catch (err) {
+    announceStepUp({ status: "failed", challengeId: id, action: created.action });
+    throw err;
+  }
+  announceStepUp({ status: "failed", challengeId: id, action: created.action });
+  throw new ApiError("The action was not approved on your Master Device.", 403, "step_up_not_approved");
+}
+
+/** Cancels a pending Master Device challenge (the approval prompt's Cancel button). */
+export function cancelStepUp(challengeId: string) {
+  return api<{ status: string }>(`/v1/step-up/challenges/${challengeId}/cancel`, { method: "POST" }, false);
+}
+
+async function api<T>(path: string, init?: RequestInit, stepUp = true): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
   // The same-origin /api proxy can hand a bodiless write to the gateway as a body without a type (415).
   if (method !== "GET" && method !== "HEAD" && init?.body == null) init = { ...init, body: "{}" };
@@ -118,16 +169,28 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   }
   const data = (await res.json().catch(() => ({}))) as T & { error?: string; message?: string };
   if (!res.ok) {
+    if (stepUp && res.status === 403 && data.error === "step_up_required" && trustIdMode === "remote") {
+      let body: unknown = {};
+      try {
+        body = typeof init?.body === "string" ? JSON.parse(init.body) : {};
+      } catch {
+        body = {};
+      }
+      const challengeId = await approveOnMasterDevice(method, path, body);
+      const retryHeaders = new Headers(init?.headers);
+      retryHeaders.set("X-TrustID-Step-Up", challengeId);
+      return api<T>(path, { ...init, headers: retryHeaders }, false);
+    }
     throw new ApiError(data.message || data.error || `HTTP ${res.status}`, res.status, data.error ?? "unknown");
   }
   return data;
 }
 
 export const portalApi = {
-  createSession: (accessToken: string) =>
+  createSession: (accessToken: string, idToken?: string, nonce?: string) =>
     api<{ sessionToken?: string; user: PortalUserPublic }>("/auth/session", {
       method: "POST",
-      body: JSON.stringify({ accessToken }),
+      body: JSON.stringify({ accessToken, idToken, nonce }),
     }),
   devSession: (trustId?: string, platformAdmin = true) => {
     if (trustIdMode !== "mock") {

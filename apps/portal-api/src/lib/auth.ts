@@ -17,6 +17,8 @@ declare module "fastify" {
     portalSessionVia?: "cookie" | "header";
     /** Opened per request from the sealed session copy; never persisted or returned. */
     trustIdAccessToken?: string;
+    /** The Portal OAuth client that TrustID token was issued to (audience of its step-up approvals). */
+    trustIdClientId?: string;
   }
 }
 
@@ -35,7 +37,7 @@ export function trustIdTokenVault() {
 export async function issuePortalSession(
   store: PortalStore,
   user: PortalUser,
-  opts: { ttlMs?: number; trustIdAccessToken?: string } = {},
+  opts: { ttlMs?: number; trustIdAccessToken?: string; trustIdClientId?: string } = {},
 ) {
   const rawToken = randomToken(32);
   const tokenHash = hashSecret(rawToken);
@@ -45,15 +47,31 @@ export async function issuePortalSession(
     userId: user.id,
     expiresAt,
     ...(opts.trustIdAccessToken
-      ? { trustIdAccessTokenEnc: trustIdTokenVault().seal(opts.trustIdAccessToken, tokenHash) }
+      ? {
+          trustIdAccessTokenEnc: trustIdTokenVault().seal(
+            // The client id travels sealed with the token: it is the audience of that token's step-up approvals.
+            opts.trustIdClientId ? JSON.stringify({ v: 1, token: opts.trustIdAccessToken, client: opts.trustIdClientId }) : opts.trustIdAccessToken,
+            tokenHash,
+          ),
+        }
       : {}),
   });
   return { rawToken, expiresAt };
 }
 
-function openTrustIdAccessToken(session: PortalSession) {
+function openTrustIdAccessToken(session: PortalSession): { token: string; clientId?: string } | undefined {
   if (!session.trustIdAccessTokenEnc) return undefined;
-  return trustIdTokenVault().open(session.trustIdAccessTokenEnc, session.tokenHash);
+  const opened = trustIdTokenVault().open(session.trustIdAccessTokenEnc, session.tokenHash);
+  if (!opened) return undefined;
+  if (opened.startsWith("{")) {
+    try {
+      const value = JSON.parse(opened) as { v?: number; token?: string; client?: string };
+      if (value.v === 1 && typeof value.token === "string") return { token: value.token, clientId: value.client };
+    } catch {
+      return undefined;
+    }
+  }
+  return { token: opened };
 }
 
 /** True when the browser surface keeps its session only in the HttpOnly cookie. */
@@ -149,7 +167,9 @@ export async function attachSession(req: FastifyRequest, store: PortalStore) {
       req.portalUser = resolved.user;
       req.portalSessionToken = extracted.token;
       req.portalSessionVia = extracted.via;
-      req.trustIdAccessToken = openTrustIdAccessToken(resolved.session);
+      const trustId = openTrustIdAccessToken(resolved.session);
+      req.trustIdAccessToken = trustId?.token;
+      req.trustIdClientId = trustId?.clientId;
       return;
     }
   }

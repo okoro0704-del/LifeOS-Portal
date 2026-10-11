@@ -1,4 +1,5 @@
-export const PORTAL_AUTH_SCOPES = "openid profile";
+/** TrustID scopes for Portal clients (TrustID contract v1 §1): identity, plus Master Device step-up. */
+export const PORTAL_AUTH_SCOPES = "openid identity.basic identity.step_up";
 export const PORTAL_SESSION_COOKIE = "portal_session";
 export const PORTAL_SESSION_HEADER = "x-portal-session";
 

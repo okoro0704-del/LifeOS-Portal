@@ -30,9 +30,11 @@ delete process.env.PLATFORM_ADMIN_TRUST_IDS;
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import type { FastifyInstance, InjectOptions } from "fastify";
+import { createFakeTrustId, foreignKey } from "../fixtures/fake-trustid.js";
 
 const TRUSTID = "https://trustid.example.test/api";
 const GUEST = "https://getlifeos.app";
+const fake = createFakeTrustId(TRUSTID);
 let behaviour: "ok" | "down" | "slow" | "malformed" = "ok";
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
@@ -43,13 +45,10 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
     // Hang until the caller's deadline aborts the request.
     await new Promise((_, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal!.reason)));
   }
-  if (url.endsWith("/oauth/userinfo")) {
-    if (behaviour === "malformed") return new Response("<html>not json</html>", { status: 200, headers: { "content-type": "text/html" } });
-    const token = new Headers(init?.headers).get("authorization")?.replace(/^Bearer /, "");
-    if (token !== "tok-valid") return new Response(JSON.stringify({ error: "invalid_token" }), { status: 401 });
-    return new Response(JSON.stringify({ sub: "TD-REQUIRED", trustId: "TD-REQUIRED", status: "active" }), { status: 200 });
+  if (behaviour === "malformed" && url.endsWith("/oauth/userinfo")) {
+    return new Response("<html>not json</html>", { status: 200, headers: { "content-type": "text/html" } });
   }
-  return new Response("{}", { status: 404 });
+  return (await fake.handle(url, init))!;
 }) as typeof fetch;
 
 let app: FastifyInstance;
@@ -58,7 +57,9 @@ const call = (opts: InjectOptions) => {
   ip += 1;
   return app.inject({ remoteAddress: `198.19.${Math.floor(ip / 250) % 250}.${(ip % 250) + 1}`, ...opts });
 };
-const signIn = (accessToken: string) => call({ method: "POST", url: "/auth/session", headers: { origin: GUEST }, payload: { accessToken } });
+type SignInOptions = Parameters<typeof fake.signIn>[2];
+const signIn = (opts: SignInOptions = {}) =>
+  call({ method: "POST", url: "/auth/session", headers: { origin: GUEST }, payload: fake.signIn("TD-REQUIRED", "lifeos_portal_public", opts) });
 
 before(async () => {
   const { createStore } = await import("../../src/store.js");
@@ -84,22 +85,24 @@ test("local sign-in and registration are refused; status says so", async () => {
 
 test("the TrustID path works", async () => {
   behaviour = "ok";
-  const res = await signIn("tok-valid");
+  const res = await signIn();
   assert.equal(res.statusCode, 200, res.body);
   assert.equal(res.json().user.trustId, "TD-REQUIRED");
   assert.equal(res.json().user.role, "USER");
 });
 
-for (const [label, mode, token, status] of [
-  ["TrustID unreachable", "down", "tok-valid", 503],
-  ["TrustID slow (deadline)", "slow", "tok-valid", 503],
-  ["invalid token", "ok", "tok-forged", 401],
-  ["malformed TrustID answer", "malformed", "tok-valid", 401],
-] as const) {
+const valid: SignInOptions = {};
+for (const [label, mode, opts, status] of [
+  ["TrustID unreachable", "down", valid, 503],
+  ["TrustID slow (deadline)", "slow", valid, 503],
+  ["revoked access token", "ok", { userinfo: "invalid" }, 401],
+  ["forged id_token", "ok", { idToken: () => ({ key: foreignKey() }) }, 401],
+  ["malformed TrustID answer", "malformed", valid, 401],
+] as Array<[string, typeof behaviour, SignInOptions, number]>) {
   test(`${label} fails closed: no session, no bypass`, async () => {
     behaviour = mode;
     try {
-      const res = await signIn(token);
+      const res = await signIn(opts);
       assert.equal(res.statusCode, status, res.body);
       assert.equal(res.headers["set-cookie"], undefined);
       assert.equal(res.json().sessionToken, undefined);

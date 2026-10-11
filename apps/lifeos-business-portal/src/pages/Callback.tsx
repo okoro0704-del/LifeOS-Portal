@@ -26,7 +26,7 @@ export function CallbackPage() {
     void (async () => {
       try {
         const tokens = await authClient.exchangeCode(code, state);
-        const data = await portalApi.createSession(tokens.access_token);
+        const data = await portalApi.createSession(tokens.access_token, tokens.id_token, tokens.nonce);
         setSession(data.user);
         navigate("/dashboard/domains", { replace: true });
       } catch (err) {

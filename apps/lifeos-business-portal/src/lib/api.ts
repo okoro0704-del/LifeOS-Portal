@@ -123,10 +123,10 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const portalApi = {
-  createSession: (accessToken: string) =>
+  createSession: (accessToken: string, idToken?: string, nonce?: string) =>
     api<{ sessionToken?: string; user: PortalUserPublic }>("/auth/session", {
       method: "POST",
-      body: JSON.stringify({ accessToken }),
+      body: JSON.stringify({ accessToken, idToken, nonce }),
     }),
   exchangeHandoff: (code: string) =>
     api<{ ok: boolean; sessionToken?: string; user: PortalUserPublic }>("/auth/handoff/exchange", {

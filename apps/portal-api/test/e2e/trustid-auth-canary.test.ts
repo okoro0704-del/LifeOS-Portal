@@ -33,32 +33,25 @@ import { after, before, describe, test } from "node:test";
 import assert from "node:assert/strict";
 import type { FastifyInstance, InjectOptions } from "fastify";
 import type { CacheStore } from "../../src/store.js";
+import { createFakeTrustId } from "../fixtures/fake-trustid.js";
 
 const TRUSTID = "https://trustid.example.test/api";
 const ADMIN = "https://admin.getlifeos.app";
 const GUEST = "https://getlifeos.app";
 const OWNER = { email: "owner@canary.test", password: "canary-owner-password-2026!" };
-// Bearer → identity the fake TrustID resolves. "claimsAdmin" tries to smuggle a role claim.
-const IDENTITIES: Record<string, Record<string, unknown>> = {
-  "tok-owner": { sub: "TD-OWNER-CANARY", trustId: "TD-OWNER-CANARY", status: "active" },
-  "tok-stranger": { sub: "TD-STRANGER", trustId: "TD-STRANGER", status: "active" },
-  "tok-claims-admin": { sub: "TD-CLAIMS-ADMIN", trustId: "TD-CLAIMS-ADMIN", status: "active", roles: ["tenant", "platform_admin"] },
-  "tok-malformed": { status: "active" },
+const CLIENT_FOR: Record<string, string> = { [ADMIN]: "lifeos_platform_admin_public", [GUEST]: "lifeos_portal_public" };
+// Subject → what the fake TrustID's userinfo answers. "claims-admin" tries to smuggle a role claim.
+const USERINFO: Record<string, Record<string, unknown> | "invalid"> = {
+  "TD-CLAIMS-ADMIN": { sub: "TD-CLAIMS-ADMIN", trustId: "TD-CLAIMS-ADMIN", status: "active", roles: ["tenant", "platform_admin"] },
+  "TD-REVOKED": "invalid",
+  "TD-MALFORMED": { status: "active" },
 };
-let trustIdDown = false;
+const fake = createFakeTrustId(TRUSTID);
+fake.masterDevices.add("TD-OWNER-CANARY");
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-  if (!url.startsWith(TRUSTID)) return realFetch(input as never, init);
-  if (trustIdDown) throw new TypeError("fetch failed (simulated TrustID outage)");
-  if (url.endsWith("/health")) return new Response(JSON.stringify({ ok: true }), { status: 200 });
-  if (url.endsWith("/oauth/userinfo")) {
-    const token = new Headers(init?.headers).get("authorization")?.replace(/^Bearer /, "") ?? "";
-    const identity = IDENTITIES[token];
-    if (!identity) return new Response(JSON.stringify({ error: "invalid_token" }), { status: 401 });
-    return new Response(JSON.stringify(identity), { status: 200, headers: { "content-type": "application/json" } });
-  }
-  return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
+  return (await fake.handle(url, init)) ?? realFetch(input as never, init);
 }) as typeof fetch;
 
 let app: FastifyInstance;
@@ -69,8 +62,12 @@ const call = (opts: InjectOptions) => {
   return app.inject({ remoteAddress: `198.18.${Math.floor(ip / 250) % 250}.${(ip % 250) + 1}`, ...opts });
 };
 const cookieOf = (res: { headers: Record<string, unknown> }) => String(res.headers["set-cookie"] ?? "").split(";")[0]!.split("=").slice(1).join("=");
-const trustIdSignIn = (accessToken: string, extra: InjectOptions = {}) =>
-  call({ method: "POST", url: "/auth/session", ...extra, headers: { origin: GUEST, ...(extra.headers ?? {}) }, payload: { accessToken } });
+/** Completes a TrustID sign-in for `sub` with the client of the calling surface (origin). */
+const trustIdSignIn = (sub: string, extra: InjectOptions & { headers?: Record<string, string>; payload?: Record<string, unknown> } = {}) => {
+  const origin = extra.headers?.origin ?? GUEST;
+  const tokens = fake.signIn(sub, CLIENT_FOR[origin]!, { userinfo: USERINFO[sub] });
+  return call({ method: "POST", url: "/auth/session", ...extra, headers: { origin, ...(extra.headers ?? {}) }, payload: { ...tokens, ...(extra.payload ?? {}) } });
+};
 
 before(async () => {
   const { createStore } = await import("../../src/store.js");
@@ -99,37 +96,37 @@ describe("canary keeps local sign-in", () => {
   });
 
   test("a TrustID outage does not lock out local users", async () => {
-    trustIdDown = true;
+    fake.state.down = true;
     try {
-      const tid = await trustIdSignIn("tok-stranger");
+      const tid = await trustIdSignIn("TD-STRANGER");
       assert.equal(tid.statusCode, 503, "TrustID path fails closed");
       assert.equal(tid.json().error, "trustid_unavailable");
       assert.equal(tid.headers["set-cookie"], undefined, "no session minted while TrustID is down");
       const local = await call({ method: "POST", url: "/auth/login", headers: { origin: GUEST }, payload: OWNER });
       assert.equal(local.statusCode, 200, "local sign-in unaffected");
     } finally {
-      trustIdDown = false;
+      fake.state.down = false;
     }
   });
 });
 
 describe("TrustID path and account linking", () => {
   test("a new TrustID signs in as an ordinary user (no Portal role from TrustID)", async () => {
-    const res = await trustIdSignIn("tok-stranger");
+    const res = await trustIdSignIn("TD-STRANGER");
     assert.equal(res.statusCode, 200, res.body);
     assert.equal(res.json().user.role, "USER");
     assert.equal(res.json().user.trustId, "TD-STRANGER");
   });
 
   test("role claims from the identity provider are ignored", async () => {
-    const res = await trustIdSignIn("tok-claims-admin");
+    const res = await trustIdSignIn("TD-CLAIMS-ADMIN");
     assert.equal(res.statusCode, 200, res.body);
     assert.equal(res.json().user.role, "USER");
     assert.ok(!res.json().user.roles.includes("platform_admin"));
   });
 
   test("invalid and malformed TrustID answers never mint a session", async () => {
-    for (const token of ["tok-unknown", "tok-malformed"]) {
+    for (const token of ["TD-REVOKED", "TD-MALFORMED"]) {
       const res = await trustIdSignIn(token);
       assert.equal(res.statusCode, 401, `${token}: ${res.body}`);
       assert.equal(res.headers["set-cookie"], undefined);
@@ -140,13 +137,13 @@ describe("TrustID path and account linking", () => {
     const login = await call({ method: "POST", url: "/auth/login", headers: { origin: ADMIN }, payload: OWNER });
     const cookie = cookieOf(login);
     const ownerId = login.json().user.id as string;
-    const link = await trustIdSignIn("tok-owner", { headers: { origin: ADMIN }, cookies: { portal_session: cookie } });
+    const link = await trustIdSignIn("TD-OWNER-CANARY", { headers: { origin: ADMIN }, cookies: { portal_session: cookie } });
     assert.equal(link.statusCode, 200, link.body);
     assert.equal(link.json().user.id, ownerId, "same Portal account");
     assert.equal(link.json().user.trustId, "TD-OWNER-CANARY");
     assert.equal(link.json().user.role, "ADMIN", "Portal role retained");
     // Later: TrustID alone (no Portal session) reaches the same admin account.
-    const tidOnly = await trustIdSignIn("tok-owner");
+    const tidOnly = await trustIdSignIn("TD-OWNER-CANARY");
     assert.equal(tidOnly.json().user.id, ownerId);
     assert.equal(tidOnly.json().user.role, "ADMIN");
   });
@@ -154,7 +151,7 @@ describe("TrustID path and account linking", () => {
   test("a TrustID linked to one account cannot be claimed by another", async () => {
     const reg = await call({ method: "POST", url: "/auth/register", headers: { origin: GUEST }, payload: { email: "second@canary.test", password: "second-password-1" } });
     const token = reg.json().sessionToken as string;
-    const steal = await trustIdSignIn("tok-owner", { headers: { "x-portal-session": token } });
+    const steal = await trustIdSignIn("TD-OWNER-CANARY", { headers: { "x-portal-session": token } });
     assert.equal(steal.statusCode, 409);
     assert.equal(steal.json().error, "trustid_already_linked");
     assert.equal(store.getUserByEmail("second@canary.test")?.trustId, null);
@@ -167,7 +164,7 @@ describe("TrustID path and account linking", () => {
     const token = reg.json().sessionToken as string;
     const patch = await call({ method: "PATCH", url: "/auth/me", headers: { "x-portal-session": token }, payload: { role: "ADMIN", roles: ["platform_admin"] } });
     assert.equal(patch.json().user.role, "USER");
-    const viaSession = await trustIdSignIn("tok-claims-admin", { headers: { "x-portal-session": token }, payload: { accessToken: "tok-claims-admin", role: "ADMIN" } as never });
+    const viaSession = await trustIdSignIn("TD-CLAIMS-ADMIN", { headers: { "x-portal-session": token }, payload: { role: "ADMIN", roles: ["platform_admin"] } });
     assert.notEqual(viaSession.json().user?.role, "ADMIN");
   });
 });
@@ -176,15 +173,48 @@ describe("readiness reflects the real TrustID dependency", () => {
   test("probed: UP when reachable, DOWN when not (never a free UP)", async () => {
     const up = await call({ method: "GET", url: "/api/v1/health" });
     assert.equal(up.json().upstreams.trustId, "UP");
-    trustIdDown = true;
+    fake.state.down = true;
     try {
       const down = await call({ method: "GET", url: "/api/v1/health" });
       assert.equal(down.json().upstreams.trustId, "DOWN");
     } finally {
-      trustIdDown = false;
+      fake.state.down = false;
     }
     const live = await call({ method: "GET", url: "/health" });
     assert.equal(live.statusCode, 200, "liveness does not depend on TrustID");
     assert.equal(live.json().trustIdAuthMode, "canary");
+  });
+});
+
+describe("admin step-up in canary", () => {
+  const purge = { method: "POST", path: "/v1/admin/installs/purge-failed", body: {} };
+
+  test("a password admin session keeps reading (no canary lockout)", async () => {
+    const login = await call({ method: "POST", url: "/auth/login", headers: { origin: ADMIN }, payload: OWNER });
+    const res = await call({ method: "GET", url: "/v1/admin/tenants", headers: { origin: ADMIN }, cookies: { portal_session: cookieOf(login) } });
+    assert.equal(res.statusCode, 200, res.body);
+  });
+
+  test("a password admin session cannot write: approvals need a TrustID session", async () => {
+    const login = await call({ method: "POST", url: "/auth/login", headers: { origin: ADMIN }, payload: OWNER });
+    const asAdmin = { headers: { origin: ADMIN }, cookies: { portal_session: cookieOf(login) } };
+    const res = await call({ method: "POST", url: purge.path, ...asAdmin, payload: {} });
+    assert.equal(res.statusCode, 403);
+    assert.equal(res.json().error, "step_up_requires_trustid");
+    const create = await call({ method: "POST", url: "/v1/step-up/challenges", ...asAdmin, payload: { operation: purge } });
+    assert.equal(create.statusCode, 403);
+    assert.equal(create.json().error, "step_up_requires_trustid");
+  });
+
+  test("the linked admin signed in with TrustID writes after a Master Device approval", async () => {
+    const signIn = await trustIdSignIn("TD-OWNER-CANARY", { headers: { origin: ADMIN } });
+    assert.equal(signIn.json().user.role, "ADMIN", signIn.body);
+    const asAdmin = { headers: { origin: ADMIN }, cookies: { portal_session: cookieOf(signIn) } };
+    const create = await call({ method: "POST", url: "/v1/step-up/challenges", ...asAdmin, payload: { operation: purge } });
+    assert.equal(create.statusCode, 201, create.body);
+    const id = create.json().challenge_id as string;
+    fake.approve(id);
+    const res = await call({ method: "POST", url: purge.path, headers: { origin: ADMIN, "x-trustid-step-up": id }, cookies: asAdmin.cookies, payload: {} });
+    assert.equal(res.statusCode, 200, res.body);
   });
 });

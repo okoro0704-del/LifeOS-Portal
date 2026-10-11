@@ -50,9 +50,13 @@ test("POST /auth/session rejects mock tokens in production", async () => {
   const res = await app.inject({
     method: "POST",
     url: "/auth/session",
+    headers: { origin: "https://portal.getlifeos.app" },
     payload: { accessToken: "mock:TD-PORTAL-DEV" },
   });
-  assert.equal(res.statusCode, 401, res.body);
+  // Remote TrustID requires a verified id_token (bound to this surface's client) before userinfo.
+  assert.equal(res.statusCode, 400, res.body);
+  assert.equal((res.json() as { error: string }).error, "id_token_required");
+  assert.equal(res.headers["set-cookie"], undefined);
 });
 
 test("Fastify boots with trustProxy, Helmet HSTS, and rate-limit headers", async () => {

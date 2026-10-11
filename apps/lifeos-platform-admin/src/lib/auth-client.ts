@@ -34,7 +34,9 @@ export function createAuthClient(config: AuthClientConfig) {
       const verifier = randomString(64);
       const challenge = b64url(await sha256(verifier));
       const state = randomString(24);
-      const payload = JSON.stringify({ verifier, state, createdAt: Date.now() });
+      // OIDC nonce: echoed in the id_token, which Portal API verifies before creating a session.
+      const nonce = randomString(32);
+      const payload = JSON.stringify({ verifier, state, nonce, createdAt: Date.now() });
       localStorage.setItem(storageKey, payload);
       sessionStorage.setItem(storageKey, payload);
 
@@ -46,14 +48,15 @@ export function createAuthClient(config: AuthClientConfig) {
       url.searchParams.set("state", state);
       url.searchParams.set("code_challenge", challenge);
       url.searchParams.set("code_challenge_method", "S256");
+      url.searchParams.set("nonce", nonce);
       if (opts?.prompt) url.searchParams.set("prompt", opts.prompt);
       window.location.href = url.toString();
     },
 
-    async exchangeCode(code: string, state: string): Promise<{ access_token: string }> {
+    async exchangeCode(code: string, state: string): Promise<{ access_token: string; id_token?: string; nonce?: string }> {
       const raw = sessionStorage.getItem(storageKey) ?? localStorage.getItem(storageKey);
       if (!raw) throw new Error("Missing PKCE state. Start again from the Portal.");
-      const saved = JSON.parse(raw) as { verifier: string; state: string };
+      const saved = JSON.parse(raw) as { verifier: string; state: string; nonce?: string };
       if (saved.state !== state) throw new Error("State mismatch. Start login again.");
 
       const res = await fetch(`${config.trustIdApi}/oauth/token`, {
@@ -67,13 +70,13 @@ export function createAuthClient(config: AuthClientConfig) {
           code_verifier: saved.verifier,
         }),
       });
-      const data = (await res.json()) as { access_token?: string; error?: string };
+      const data = (await res.json()) as { access_token?: string; id_token?: string; error?: string };
       if (!res.ok || !data.access_token) {
         throw new Error(data.error || "Token exchange failed");
       }
       sessionStorage.removeItem(storageKey);
       localStorage.removeItem(storageKey);
-      return { access_token: data.access_token };
+      return { access_token: data.access_token, id_token: data.id_token, nonce: saved.nonce };
     },
   };
 }

@@ -18,6 +18,8 @@ import { isLocalAuthEnabled, isTrustIdEnabled, rolesForAccount } from "../lib/lo
 import type { PortalStore, PortalUser } from "../store.js";
 import { isDevAuthEnabled } from "../lib/dev-auth.js";
 import { checkTrustIdAvailable, fetchTrustIdUserInfo, mapTrustIdError } from "../services/trustid.js";
+import { TrustIdJwtRejected, verifyTrustIdIdToken } from "../lib/trustid-jwt.js";
+import { trustIdClientForOrigin } from "../lib/trustid-clients.js";
 
 const LOGIN_FAILURE_LIMIT = 10;
 const LOGIN_FAILURE_WINDOW_MS = 15 * 60_000;
@@ -48,8 +50,8 @@ function createLoginThrottle() {
   };
 }
 
-async function issueSession(store: PortalStore, user: PortalUser, trustIdAccessToken?: string) {
-  const issued = await issuePortalSession(store, user, { trustIdAccessToken });
+async function issueSession(store: PortalStore, user: PortalUser, trustIdAccessToken?: string, trustIdClientId?: string) {
+  const issued = await issuePortalSession(store, user, { trustIdAccessToken, trustIdClientId });
   store.updateUser(user.id, { lastLoginAt: new Date().toISOString() });
   return issued;
 }
@@ -144,13 +146,47 @@ export async function registerAuthRoutes(app: FastifyInstance, store: PortalStor
         message: "TrustID is disabled. Sign in with email and password.",
       });
     }
-    const body = z.object({ accessToken: z.string().min(4) }).parse(req.body);
+    const body = z
+      .object({
+        accessToken: z.string().min(4).max(4096),
+        idToken: z.string().min(16).max(8192).optional(),
+        nonce: z.string().min(16).max(256).optional(),
+      })
+      .parse(req.body);
+
+    // Remote TrustID: the id_token proves the access token was issued to THIS surface's client for
+    // THIS sign-in (aud, azp, nonce, at_hash). Userinfo alone cannot: it accepts any client's token.
+    let clientId: string | undefined;
+    let idTokenSubject: string | undefined;
+    if (config.trustIdMode === "remote") {
+      clientId = trustIdClientForOrigin(req.headers.origin);
+      if (!clientId) {
+        return reply.code(400).send({ error: "trustid_client_unknown", message: "Sign in with TrustID from a LifeOS Portal surface." });
+      }
+      if (!body.idToken || !body.nonce) {
+        return reply.code(400).send({ error: "id_token_required", message: "TrustID sign-in must include the id_token and nonce." });
+      }
+      try {
+        const claims = await verifyTrustIdIdToken({ idToken: body.idToken, clientId, nonce: body.nonce, accessToken: body.accessToken });
+        idTokenSubject = claims.sub;
+      } catch (err) {
+        if (err instanceof TrustIdJwtRejected && err.reason === "jwks_unavailable") {
+          return reply.code(503).send({ error: "trustid_unavailable", message: "TrustID is temporarily unavailable." });
+        }
+        const reason = err instanceof TrustIdJwtRejected ? err.reason : "invalid";
+        return reply.code(401).send({ error: "invalid_id_token", reason, message: "TrustID sign-in could not be verified." });
+      }
+    }
+
     let identity;
     try {
       identity = await fetchTrustIdUserInfo(body.accessToken);
     } catch (err) {
       const mapped = mapTrustIdError(err);
       return reply.code(mapped.statusCode).send({ error: mapped.code, message: mapped.message });
+    }
+    if (idTokenSubject !== undefined && identity.trustId !== idTokenSubject) {
+      return reply.code(401).send({ error: "invalid_id_token", reason: "subject_mismatch", message: "TrustID sign-in could not be verified." });
     }
 
     // Account linking. TrustID proves who the person is; Portal keeps deciding what they may do.
@@ -188,7 +224,7 @@ export async function registerAuthRoutes(app: FastifyInstance, store: PortalStor
       return reply.code(403).send({ error: "suspended", message: "This account is suspended." });
     }
 
-    const { rawToken, expiresAt } = await issueSession(store, user, body.accessToken);
+    const { rawToken, expiresAt } = await issueSession(store, user, body.accessToken, clientId);
     setSessionCookie(reply, rawToken, expiresAt);
     return sessionResponse(req, rawToken, user);
   });

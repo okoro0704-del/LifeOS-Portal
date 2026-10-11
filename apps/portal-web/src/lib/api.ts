@@ -111,10 +111,10 @@ export const portalApi = {
       upstreams?: Record<string, string>;
     };
   },
-  createSession: (accessToken: string) =>
+  createSession: (accessToken: string, idToken?: string, nonce?: string) =>
     api<{ sessionToken: string; user: PortalUserPublic }>("/auth/session", {
       method: "POST",
-      body: JSON.stringify({ accessToken }),
+      body: JSON.stringify({ accessToken, idToken, nonce }),
     }),
   login: (email: string, password: string) =>
     api<{ sessionToken: string; user: PortalUserPublic }>("/auth/login", {

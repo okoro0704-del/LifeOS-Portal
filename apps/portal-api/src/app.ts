@@ -37,6 +37,7 @@ import type { LifeOsExperienceReader } from "./services/lifeos-experience.js";
 import { registerEcommerceOsInternalRoutes } from "./routes/ecommerceos-internal.js";
 import { registerUserAdminRoutes } from "./routes/users.js";
 import { registerPushRoutes } from "./routes/push.js";
+import { registerStepUpRoutes } from "./routes/step-up.js";
 import { enforceProductionAuthority, seedLocalAdmin } from "./lib/seed-admin.js";
 import { registerDomainInfrastructureRoutes } from "./routes/domain-infrastructure.js";
 import { createDomainInfrastructure, type DomainInfraOptions } from "./domains/index.js";
@@ -184,6 +185,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   await registerPlatformAdminRoutes(app, store, distributor);
   await registerUserAdminRoutes(app, store);
   await registerPushRoutes(app, store);
+  await registerStepUpRoutes(app);
   await registerFinproveRoutes(app);
   await registerGatewayRoutes(app);
   await registerDataZoneAdminRoutes(app, store);
