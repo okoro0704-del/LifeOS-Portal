@@ -42,8 +42,14 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
   if (!url.startsWith(TRUSTID)) return realFetch(input as never, init);
   if (behaviour === "down") throw new TypeError("fetch failed (simulated TrustID outage)");
   if (behaviour === "slow") {
-    // Hang until the caller's deadline aborts the request.
-    await new Promise((_, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal!.reason)));
+    // Hang until the caller's deadline aborts the request. The deadline timer does not hold the
+    // event loop open (a listening server does), so hold it here or the runner sees an idle loop.
+    const keepAlive = setInterval(() => undefined, 1_000);
+    try {
+      await new Promise((_, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal!.reason)));
+    } finally {
+      clearInterval(keepAlive);
+    }
   }
   if (behaviour === "malformed" && url.endsWith("/oauth/userinfo")) {
     return new Response("<html>not json</html>", { status: 200, headers: { "content-type": "text/html" } });
