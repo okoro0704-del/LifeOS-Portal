@@ -97,6 +97,11 @@ export async function fetchTrustIdUserInfo(accessToken: string): Promise<TrustId
   if (res.status === 401 || res.status === 403) {
     throw new TrustIdError("Authorization was denied or revoked.", "authorization_revoked");
   }
+  // An outage behind TrustID's proxy (Netlify → Railway) answers 502/503/504: that is TrustID being
+  // unavailable, not the user's token being invalid.
+  if (res.status >= 500 || res.status === 429) {
+    throw new TrustIdError("TrustID is temporarily unavailable.", "trustid_unavailable");
+  }
   if (!res.ok) {
     throw new TrustIdError(data.error || "Token validation failed", "invalid_token");
   }

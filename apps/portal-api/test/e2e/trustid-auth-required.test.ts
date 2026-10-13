@@ -35,7 +35,7 @@ import { createFakeTrustId, foreignKey } from "../fixtures/fake-trustid.js";
 const TRUSTID = "https://trustid.example.test/api";
 const GUEST = "https://getlifeos.app";
 const fake = createFakeTrustId(TRUSTID);
-let behaviour: "ok" | "down" | "slow" | "malformed" = "ok";
+let behaviour: "ok" | "down" | "slow" | "malformed" | "proxy-502" = "ok";
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
@@ -50,6 +50,10 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
     } finally {
       clearInterval(keepAlive);
     }
+  }
+  // TrustID down behind its proxy (Netlify answering for an unreachable Railway service).
+  if (behaviour === "proxy-502" && url.endsWith("/oauth/userinfo")) {
+    return new Response(JSON.stringify({ error: "upstream_unavailable" }), { status: 502, headers: { "content-type": "application/json" } });
   }
   if (behaviour === "malformed" && url.endsWith("/oauth/userinfo")) {
     return new Response("<html>not json</html>", { status: 200, headers: { "content-type": "text/html" } });
@@ -101,6 +105,7 @@ const valid: SignInOptions = {};
 for (const [label, mode, opts, status] of [
   ["TrustID unreachable", "down", valid, 503],
   ["TrustID slow (deadline)", "slow", valid, 503],
+  ["TrustID down behind its proxy (502)", "proxy-502", valid, 503],
   ["revoked access token", "ok", { userinfo: "invalid" }, 401],
   ["forged id_token", "ok", { idToken: () => ({ key: foreignKey() }) }, 401],
   ["malformed TrustID answer", "malformed", valid, 401],
