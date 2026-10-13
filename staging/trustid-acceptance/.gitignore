@@ -1,0 +1,11 @@
+# Generated per run: secrets, keys, seeded identities, builds, evidence.
+*.env
+tls/
+seed.json
+held-tokens.json
+trustid-schema.prisma
+trustid-media/
+dist/
+shots/
+*.log
+results-*.json
