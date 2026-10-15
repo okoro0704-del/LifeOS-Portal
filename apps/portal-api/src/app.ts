@@ -45,6 +45,7 @@ import { registerDdiProvisioningRoutes } from "./routes/ddi-provisioning.js";
 import { deliverDdiInstallEvents } from "./services/ddi-install-events.js";
 import { MemoryReplayStore, PostgresReplayStore, readDdiIntegrationConfig, ServiceTokenVerifier, type DdiIntegrationConfig } from "./lib/service-token.js";
 import { MemoryProvisioningClaimStore, PostgresProvisioningClaimStore } from "./services/ddi-provisioning-claims.js";
+import { MemoryInstallClaimStore, PostgresInstallClaimStore } from "./services/install-claims.js";
 import pg from "pg";
 import { createDomainInfrastructure, type DomainInfraOptions } from "./domains/index.js";
 
@@ -114,7 +115,8 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   const ddi = opts.ddiIntegration ?? readDdiIntegrationConfig();
   // D3C-C: shared PostgreSQL state for replay protection and provisioning claims; in-process only without a database.
   const ddiPool = ddi.databaseUrl ? new pg.Pool({ connectionString: ddi.databaseUrl, max: 4 }) : undefined;
-  const distributor = opts.distributor ?? createDistributorClient({ signer: ddi.signer, audience: ddi.masterDistributorAudience });
+  // D3D-A: remote installs claim their subdomain across instances through PostgreSQL when the Portal has one.
+  const distributor = opts.distributor ?? createDistributorClient({ signer: ddi.signer, audience: ddi.masterDistributorAudience, installClaims: ddiPool ? new PostgresInstallClaimStore(ddiPool) : new MemoryInstallClaimStore() });
   const hos = opts.hos ?? createHospitalityOsClient();
   const eco = opts.eco ?? createEcommerceOsClient();
   const tos = opts.tos ?? createTransportationOsClient();

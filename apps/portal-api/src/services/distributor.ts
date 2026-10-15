@@ -10,6 +10,7 @@ import {
 import { config } from "../config.js";
 import { signServiceToken, type ServiceSigner } from "../lib/service-token.js";
 import { HttpError, httpJson } from "../lib/http.js";
+import { installClaimFingerprint, type InstallClaimStore, type InstallPayload } from "./install-claims.js";
 
 export type BootstrapInput = {
   tenantId: string;
@@ -36,8 +37,23 @@ export type CustomDomainProvisionResult = {
   sslStatus: string;
 };
 
+/**
+ * D3D-A: an install's hold on its subdomain (remote mode with install claims). `bootstrap` returns the
+ * checkpointed MD result or calls MD with the claim's original tenant id and payload.
+ */
+export type InstallGuard = {
+  tenantId: string;
+  bootstrap(): Promise<DistributorBootstrapResult>;
+  /** Binds the claim to the ready install; throws if another attempt took the claim over. */
+  commit(installId: string): Promise<void>;
+  fail(): Promise<void>;
+};
+export type BeginInstall = { kind: "guard"; guard: InstallGuard } | { kind: "committed"; installId: string; tenantId: string };
+
 export type DistributorClient = {
   bootstrap(input: BootstrapInput): Promise<DistributorBootstrapResult>;
+  /** Present only when installs are claimed across instances; null when this client has no claims. */
+  beginInstall?(input: BootstrapInput): Promise<BeginInstall | null>;
   getDomainStatus(domainId: string, accessToken?: string): Promise<DomainStatusResult>;
   provisionCustomDomain(input: {
     tenantId: string;
@@ -149,7 +165,19 @@ export function createLocalDistributor(): DistributorClient {
  * (`x-lifeos-owner-subject`) and is never proof of the Portal's identity. Remote mode has no
  * per-request local fallback: without a configured service identity it fails closed.
  */
-export function createRemoteDistributor(options: { signer?: ServiceSigner; audience?: string } = {}): DistributorClient {
+export type RemoteDistributorOptions = {
+  signer?: ServiceSigner;
+  audience?: string;
+  /** D3D-A: cross-instance install claims (PostgreSQL in production). */
+  installClaims?: InstallClaimStore;
+  installLeaseMs?: number;
+  /** Test seam: runs after Master Distributor succeeded and before the Portal checkpoints the result. */
+  afterBootstrap?: (result: DistributorBootstrapResult) => Promise<void>;
+};
+
+const inProgress = () => new HttpError("This installation is already being set up. Retry shortly.", 503, "install_in_progress");
+
+export function createRemoteDistributor(options: RemoteDistributorOptions = {}): DistributorClient {
   const base = config.masterDistributorUrl;
 
   function call<T>(method: "GET" | "POST", path: string, body?: unknown, ownerSubject?: string) {
@@ -168,18 +196,68 @@ export function createRemoteDistributor(options: { signer?: ServiceSigner; audie
   }
   const statusPath = (domainId: string) => `/v1/distributor/domains/${encodeURIComponent(domainId)}/status`;
 
+  const mdPayload = (input: BootstrapInput): InstallPayload => ({
+    tenantId: input.tenantId,
+    subdomain: input.subdomain,
+    customDomain: input.customDomain,
+    enabledPrimitives: primitivesForApp(input),
+    displayName: input.displayName,
+    brand: input.brand,
+    oauthDestinations: input.oauthDestinations,
+    enabledModules: input.enabledModules,
+  });
+  const bootstrapAtMd = (payload: InstallPayload, ownerSubject?: string) =>
+    call<DistributorBootstrapResult>("POST", HOSPITALITYOS_MANIFEST.install.bootstrapPath, payload, ownerSubject);
+
   return {
     async bootstrap(input) {
-      return call<DistributorBootstrapResult>("POST", HOSPITALITYOS_MANIFEST.install.bootstrapPath, {
-        tenantId: input.tenantId,
+      return bootstrapAtMd(mdPayload(input), input.ownerSubject);
+    },
+    async beginInstall(input) {
+      const claims = options.installClaims;
+      // No claims, or no identity (the call would fail closed anyway): the caller uses bootstrap().
+      if (!claims || !options.signer) return null;
+      const claim = await claims.claim({
         subdomain: input.subdomain,
-        customDomain: input.customDomain,
-        enabledPrimitives: primitivesForApp(input),
-        displayName: input.displayName,
-        brand: input.brand,
-        oauthDestinations: input.oauthDestinations,
-        enabledModules: input.enabledModules,
-      }, input.ownerSubject);
+        fingerprint: installClaimFingerprint({ ownerSubject: input.ownerSubject, appId: input.appId, subdomain: input.subdomain, customDomain: input.customDomain }),
+        payload: mdPayload(input),
+        leaseMs: options.installLeaseMs ?? 120_000,
+      });
+      if (claim.kind === "committed") return { kind: "committed", installId: claim.installId, tenantId: claim.tenantId };
+      if (claim.kind === "conflict") throw new HttpError("This subdomain belongs to another installation.", 409, "subdomain_unavailable");
+      if (claim.kind === "in_progress") throw inProgress();
+
+      const subdomain = input.subdomain;
+      let checkpoint = claim.bootstrap;
+      // Whether Master Distributor may hold state for this claim (decides abandon vs release).
+      let mdMayHaveActed = checkpoint !== null;
+      const guard: InstallGuard = {
+        tenantId: claim.tenantId,
+        async bootstrap() {
+          if (checkpoint) return checkpoint;
+          let result: DistributorBootstrapResult;
+          try {
+            // The claim's original tenant id and payload: MD replays its original result if it already ran.
+            result = await bootstrapAtMd(claim.payload, input.ownerSubject);
+          } catch (err) {
+            const status = err instanceof HttpError ? err.statusCode : 0;
+            if (!(status >= 400 && status < 500)) mdMayHaveActed = true;
+            throw err;
+          }
+          mdMayHaveActed = true;
+          await options.afterBootstrap?.(result);
+          if (!(await claims.checkpoint(subdomain, claim.leaseToken, result))) throw inProgress();
+          checkpoint = result;
+          return result;
+        },
+        async commit(installId) {
+          if (!(await claims.commit(subdomain, claim.leaseToken, installId))) throw inProgress();
+        },
+        async fail() {
+          await (mdMayHaveActed ? claims.abandon(subdomain, claim.leaseToken) : claims.release(subdomain, claim.leaseToken)).catch(() => undefined);
+        },
+      };
+      return { kind: "guard", guard };
     },
     async getDomainStatus(domainId) {
       return call<DomainStatusResult>("GET", statusPath(domainId));
@@ -208,6 +286,6 @@ export function createRemoteDistributor(options: { signer?: ServiceSigner; audie
   };
 }
 
-export function createDistributorClient(options: { signer?: ServiceSigner; audience?: string } = {}): DistributorClient {
+export function createDistributorClient(options: RemoteDistributorOptions = {}): DistributorClient {
   return config.installMode === "remote" ? createRemoteDistributor(options) : createLocalDistributor();
 }

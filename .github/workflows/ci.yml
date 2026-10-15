@@ -45,6 +45,12 @@ jobs:
         run: npm run test:postgres
         env:
           PORTAL_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+      # D3D-A: the DDI integration suites and the cross-instance install claims (PostgreSQL required).
+      - name: DDI integration and install-claim suites
+        run: npm run test:d3
+        env:
+          PORTAL_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+          PORTAL_REQUIRE_DATABASE_TESTS: "1"
 
   portal-api-docker:
     name: Portal API Docker image

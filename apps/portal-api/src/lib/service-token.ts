@@ -189,6 +189,8 @@ export function readDdiIntegrationConfig(env: NodeJS.ProcessEnv = process.env): 
     if (Object.keys(trustedServices).length && !databaseUrl) throw new Error("PORTAL_DDI_CONFIGURATION_INVALID");
     // Remote installs authenticate to Master Distributor as the Portal; never with a forwarded user token.
     if (env.INSTALL_MODE === "remote" && (!signer || !(env.MASTER_DISTRIBUTOR_URL ?? "").startsWith("https://"))) throw new Error("PORTAL_DDI_CONFIGURATION_INVALID");
+    // D3D-A: Master Distributor bootstrap claims must be shared across instances.
+    if (env.INSTALL_MODE === "remote" && !databaseUrl) throw new Error("PORTAL_DDI_CONFIGURATION_INVALID");
   }
   return { trustedServices, signer, eventsUrl: env.DDI_INSTALL_EVENTS_URL, productMap, production, databaseUrl, masterDistributorAudience: env.MD_SERVICE_AUDIENCE ?? "master-distributor" };
 }

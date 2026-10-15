@@ -3,7 +3,7 @@ import { HttpError, UPSTREAM_TIMEOUTS_MS, fetchWithTimeout } from "../lib/http.j
 import { identitySubject } from "../lib/local-auth.js";
 import { newId } from "../lib/crypto.js";
 import type { PortalInstall, PortalStore, PortalUser } from "../store.js";
-import type { DistributorClient } from "./distributor.js";
+import type { BootstrapInput, DistributorClient } from "./distributor.js";
 import { projectInstallToLifeOsShell } from "./shell-projection.js";
 import { provisionTenantHostname } from "./tenant-hostname.js";
 import { claimSubdomain } from "./subdomain-claim.js";
@@ -47,8 +47,32 @@ export async function installMyBrandOs(opts: {
   }
   claimSubdomain(opts.store, subdomain, "Brand subdomain");
 
-  const tenantId = `tid_mybrand_${subdomain}_${newId().slice(0, 6)}`;
   const base = mybrandBaseUrl();
+  const bootInput: BootstrapInput = {
+    tenantId: `tid_mybrand_${subdomain}_${newId().slice(0, 6)}`,
+    subdomain,
+    customDomain: opts.input.customDomain,
+    displayName: opts.input.displayName,
+    brand: {
+      primaryColor: opts.input.brand?.primaryColor ?? "#0B0C10",
+      logoUrl: opts.input.brand?.logoUrl,
+    },
+    oauthDestinations: [
+      `https://${subdomain}.getlifeos.app/admin`,
+      `https://${subdomain}.getlifeos.app/`,
+      `${base}/auth/callback`,
+    ],
+    enabledModules: ["studio", "public_brand"],
+    appId: "mybrandos",
+    accessToken: opts.accessToken,
+    ownerSubject: identitySubject(opts.user),
+  };
+  // D3D-A: claim the subdomain across Portal instances before anything is created. Conflicts and
+  // in-flight installs are never swallowed, unlike an unavailable Master Distributor below.
+  const begun = (await opts.distributor.beginInstall?.(bootInput)) ?? null;
+  if (begun?.kind === "committed") throw new HttpError(`Brand subdomain already installed: ${subdomain}`, 409, "conflict");
+  const guard = begun?.guard;
+  const tenantId = guard?.tenantId ?? bootInput.tenantId;
   const row = opts.store.createInstall({
     ownerUserId: opts.user.id,
     ownerTrustId: identitySubject(opts.user),
@@ -70,25 +94,7 @@ export async function installMyBrandOs(opts: {
 
   try {
     try {
-      const boot = await opts.distributor.bootstrap({
-        tenantId,
-        subdomain,
-        customDomain: opts.input.customDomain,
-        displayName: opts.input.displayName,
-        brand: {
-          primaryColor: opts.input.brand?.primaryColor ?? "#0B0C10",
-          logoUrl: opts.input.brand?.logoUrl,
-        },
-        oauthDestinations: [
-          `https://${subdomain}.getlifeos.app/admin`,
-          `https://${subdomain}.getlifeos.app/`,
-          `${base}/auth/callback`,
-        ],
-        enabledModules: ["studio", "public_brand"],
-        appId: "mybrandos",
-        accessToken: opts.accessToken,
-        ownerSubject: identitySubject(opts.user),
-      });
+      const boot = guard ? await guard.bootstrap() : await opts.distributor.bootstrap(bootInput);
       opts.store.updateInstall(row.id, {
         distributorTenantId: boot.tenantId,
         domainId: boot.domainId,
@@ -193,6 +199,11 @@ export async function installMyBrandOs(opts: {
       },
     });
 
+    // D3D-A: the ready install is durable before the claim is bound to it.
+    if (guard) {
+      await opts.store.flush();
+      await guard.commit(row.id);
+    }
     const ready = opts.store.getInstall(row.id)!;
     // LifeOS / OS Xperience consumer discovery launches the PUBLIC User App.
     // Creator Admin remains `{origin}/admin` and is never the catalog destination.
@@ -224,6 +235,7 @@ export async function installMyBrandOs(opts: {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Install failed";
     opts.store.updateInstall(row.id, { status: "failed", error: message });
+    await guard?.fail();
     if (err instanceof HttpError) throw err;
     throw new HttpError(message, 500, "install_failed");
   }
