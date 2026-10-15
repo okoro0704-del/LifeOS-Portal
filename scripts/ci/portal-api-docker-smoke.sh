@@ -32,6 +32,12 @@ else
   NET_ARGS=(-p "${PORT}:8792")
 fi
 
+# Remote installs authenticate to Master Distributor as the Portal service, and production refuses to
+# boot without that identity. Use a throwaway Ed25519 key made inside the image for this run only
+# (a non-`test-` key id, as production requires); it never leaves this job.
+PORTAL_SERVICE_PRIVATE_KEY=$(docker run --rm "$IMAGE" node -e \
+  "process.stdout.write(require('node:crypto').generateKeyPairSync('ed25519').privateKey.export({ type: 'pkcs8', format: 'pem' }))")
+
 echo "2. production boot (migrations + row-level store) against Postgres"
 docker run -d --name "$NAME" "${NET_ARGS[@]}" \
   -e GATEWAY_MODE=production \
@@ -42,6 +48,9 @@ docker run -d --name "$NAME" "${NET_ARGS[@]}" \
   -e DATAZONE_API_URL=https://datazone.smoke.invalid \
   -e FINPROVE_API_URL=https://finprove.smoke.invalid \
   -e MASTER_DISTRIBUTOR_URL=https://distributor.smoke.invalid \
+  -e PORTAL_SERVICE_ID=lifeos-portal \
+  -e PORTAL_SERVICE_KEY_ID=ci-smoke-portal \
+  -e PORTAL_SERVICE_PRIVATE_KEY="$PORTAL_SERVICE_PRIVATE_KEY" \
   -e PORTAL_SECRET_KEY=smoke-portal-secret-key-at-least-32-chars \
   -e INTERNAL_PROVISION_TOKEN=smoke-provision-token-not-default \
   -e PORTAL_DOMAIN=https://getlifeos.app \
