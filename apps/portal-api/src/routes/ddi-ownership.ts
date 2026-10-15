@@ -1,7 +1,8 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { PortalStore } from "../store.js";
+import { bearer, type ServiceTokenVerifier } from "../lib/service-token.js";
 
 const requestBody = z.object({
   ownerSubject: z.string().min(1).max(512),
@@ -27,15 +28,29 @@ function sameSecret(actual: string | undefined, expected: string | undefined) {
 }
 
 /**
+ * D3C-B: DDI authenticates with a pinned Ed25519 service token whose permission
+ * comes from Portal configuration. The D3A shared secret remains accepted only
+ * when no DDI service key is configured (legacy deployments).
+ */
+export function ddiCaller(req: FastifyRequest, path: string, permission: string, verifier?: ServiceTokenVerifier, legacySecret?: string): "ok" | "unauthenticated" | "forbidden" {
+  if (verifier) {
+    const caller = verifier.verify(bearer(req.headers.authorization), { method: req.method, path });
+    if (!caller) return "unauthenticated";
+    return caller.permissions.includes(permission) ? "ok" : "forbidden";
+  }
+  return sameSecret(req.headers["x-ddi-ownership-secret"] as string | undefined, legacySecret) ? "ok" : "forbidden";
+}
+
+/**
  * Internal authenticated authority lookup. It intentionally accepts no Portal
  * browser session or caller-provided evidence: only DDI's service credential
  * may ask whether a canonical TrustID subject owns an authoritative install.
  */
-export async function registerDdiOwnershipRoutes(app: FastifyInstance, store: PortalStore, sharedSecret?: string) {
+export async function registerDdiOwnershipRoutes(app: FastifyInstance, store: PortalStore, sharedSecret?: string, verifier?: ServiceTokenVerifier) {
   app.post("/internal/ddi/ownership/verify", async (req, reply) => {
-    if (!sameSecret(req.headers["x-ddi-ownership-secret"] as string | undefined, sharedSecret)) {
-      return reply.code(403).send({ error: "forbidden" });
-    }
+    const auth = ddiCaller(req, "/internal/ddi/ownership/verify", "ownership:verify", verifier, sharedSecret);
+    if (auth === "unauthenticated") return reply.code(401).send({ error: "unauthenticated" });
+    if (auth === "forbidden") return reply.code(403).send({ error: "forbidden" });
     const parsed = requestBody.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: "invalid_request" });
     const installId = parsed.data.externalReference.slice("portal-install:".length);
@@ -65,6 +80,8 @@ export async function registerDdiOwnershipRoutes(app: FastifyInstance, store: Po
       externalSystem: parsed.data.externalSystem,
       externalReference: parsed.data.externalReference,
       readiness: ready ? "ready" : "pending",
+      // D3C-B: lets DDI order this answer against install-state events.
+      sequence: install.ddiSequence ?? 0,
     };
   });
 }

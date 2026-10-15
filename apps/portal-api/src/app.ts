@@ -41,6 +41,9 @@ import { registerStepUpRoutes } from "./routes/step-up.js";
 import { enforceProductionAuthority, seedLocalAdmin } from "./lib/seed-admin.js";
 import { registerDomainInfrastructureRoutes } from "./routes/domain-infrastructure.js";
 import { registerDdiOwnershipRoutes } from "./routes/ddi-ownership.js";
+import { registerDdiProvisioningRoutes } from "./routes/ddi-provisioning.js";
+import { deliverDdiInstallEvents } from "./services/ddi-install-events.js";
+import { readDdiIntegrationConfig, ServiceTokenVerifier, type DdiIntegrationConfig } from "./lib/service-token.js";
 import { createDomainInfrastructure, type DomainInfraOptions } from "./domains/index.js";
 
 export type BuildAppOptions = {
@@ -58,6 +61,8 @@ export type BuildAppOptions = {
   onRoute?: (route: { method: string | string[]; url: string }) => void;
   /** Internal DDI-to-Portal ownership verifier credential; never a browser credential. */
   ddiOwnershipSharedSecret?: string;
+  /** D3C-B DDI integration (service trust, product map, event delivery). Defaults to environment. */
+  ddiIntegration?: DdiIntegrationConfig;
 };
 
 const defaultPersist = path.resolve(
@@ -181,7 +186,21 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   await registerCatalogRoutes(app);
   await registerBillingRoutes(app, store);
   await registerInstallRoutes(app, store, distributor, hos, eco, tos, sos);
-  await registerDdiOwnershipRoutes(app, store, opts.ddiOwnershipSharedSecret ?? process.env.DDI_OWNERSHIP_SHARED_SECRET);
+  const ddi = opts.ddiIntegration ?? readDdiIntegrationConfig();
+  // One verifier per app instance so service-token replay detection spans every DDI route.
+  const ddiVerifier = Object.keys(ddi.trustedServices).length
+    ? new ServiceTokenVerifier({ audience: ddi.signer?.serviceId ?? "lifeos-portal", services: ddi.trustedServices, production: ddi.production })
+    : undefined;
+  await registerDdiOwnershipRoutes(app, store, opts.ddiOwnershipSharedSecret ?? process.env.DDI_OWNERSHIP_SHARED_SECRET, ddiVerifier);
+  await registerDdiProvisioningRoutes(app, store, { verifier: ddiVerifier, productMap: ddi.productMap });
+  // The outbox in the store is the source of truth; this timer only drives delivery.
+  const ddiEvents = ddi.eventsUrl && ddi.signer
+    ? setInterval(() => {
+        deliverDdiInstallEvents({ store, url: ddi.eventsUrl!, signer: ddi.signer! }).catch((err) => app.log.warn({ err: (err as Error).message }, "ddi_install_events_failed"));
+      }, Number(process.env.DDI_INSTALL_EVENTS_INTERVAL_MS ?? 5_000))
+    : undefined;
+  ddiEvents?.unref();
+  app.addHook("onClose", async () => { if (ddiEvents) clearInterval(ddiEvents); });
   await registerEcommerceOsInternalRoutes(app, store);
   await registerOrganizationRoutes(app, store);
   await registerTenantRoutes(app, store, distributor);

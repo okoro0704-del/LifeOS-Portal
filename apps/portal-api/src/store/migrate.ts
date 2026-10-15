@@ -109,6 +109,8 @@ export const PORTAL_RECORD_KINDS = [
   "dataZoneProvenance",
   "dataZoneTombstones",
   "dataZoneAudit",
+  "ddiProvisioning",
+  "ddiInstallEvents",
   ...DOMAIN_INFRA_KINDS.map((kind) => `domainInfra.${kind}`),
 ] as const;
 

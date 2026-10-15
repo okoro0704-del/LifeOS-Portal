@@ -83,6 +83,8 @@ function emptySnapshot(): Snapshot {
     dataZoneProvenance: [],
     dataZoneTombstones: [],
     dataZoneAudit: [],
+    ddiProvisioning: [],
+    ddiInstallEvents: [],
     pushTokens: [],
     domainInfra: Object.fromEntries(DOMAIN_INFRA_KINDS.map((kind) => [kind, []])) as unknown as DomainInfraSnapshot,
     meta: {},

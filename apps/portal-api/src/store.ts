@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type {
   BankAccount,
@@ -105,9 +106,47 @@ export type PortalInstall = {
   diningOps?: unknown;
   status: InstallStatus;
   suspended?: boolean;
+  /** D3C-B: monotonic per-install sequence of DDI-relevant state changes. */
+  ddiSequence?: number;
+  /** D3C-B: DDI commercial authorization bound to this install (license, not ownership). */
+  ddiLicense?: { licenseId: string; entitlementId: string; productId: string; planId: string; redemptionId: string; reference: string; boundAt: string };
   error?: string;
   createdAt: string;
   updatedAt: string;
+};
+
+/** D3C-B: a DDI provisioning request already answered, replayed verbatim for the same Idempotency-Key. */
+export type DdiProvisioningRecord = {
+  id: string;
+  fingerprint: string;
+  installId: string;
+  redemptionId: string;
+  licenseId: string;
+  entitlementId: string;
+  productId: string;
+  planId: string;
+  ownerSubject: string;
+  reference: string;
+  createdAt: string;
+};
+
+/** D3C-B: durable, sequenced install-state event for DDI (contract portal.install-events.v1). */
+export type DdiInstallEvent = {
+  id: string;
+  installId: string;
+  type: "INSTALL_SUSPENDED" | "INSTALL_REINSTATED" | "INSTALL_RETIRED" | "OWNER_SUSPENDED" | "OWNER_REINSTATED";
+  ownerSubject: string;
+  externalReference: string;
+  sequence: number;
+  state: { installSuspended: boolean; ownerSuspended: boolean; retired: boolean };
+  correlationId: string;
+  occurredAt: string;
+  status: "PENDING" | "DELIVERED" | "DEAD";
+  attempts: number;
+  nextAttemptAt: string;
+  lastError?: string;
+  deliveredAt?: string;
+  outcome?: string;
 };
 
 export type PortalBilling = {
@@ -151,6 +190,8 @@ export type Snapshot = {
   dataZoneProvenance: DataZoneProvenance[];
   dataZoneTombstones: DataZoneTombstone[];
   dataZoneAudit: DataZoneAuditEvent[];
+  ddiProvisioning?: DdiProvisioningRecord[];
+  ddiInstallEvents?: DdiInstallEvent[];
   pushTokens: PortalPushToken[];
   domainInfra?: DomainInfraSnapshot;
   meta?: Record<string, string>;
@@ -248,6 +289,12 @@ export type PortalStore = {
   listDataZoneTombstones(): DataZoneTombstone[];
   appendDataZoneAudit(input: Omit<DataZoneAuditEvent, "id" | "createdAt"> & { id?: string }): DataZoneAuditEvent;
   listDataZoneAudit(): DataZoneAuditEvent[];
+  /** D3C-B: idempotency records for DDI provisioning, keyed by Idempotency-Key. */
+  ddiProvisioningGet(id: string): DdiProvisioningRecord | undefined;
+  ddiProvisioningPut(row: DdiProvisioningRecord): DdiProvisioningRecord;
+  /** D3C-B: durable outbox of install-state events for DDI. */
+  listDdiInstallEvents(): DdiInstallEvent[];
+  updateDdiInstallEvent(id: string, patch: Partial<DdiInstallEvent>): DdiInstallEvent | undefined;
   upsertPushToken(input: PortalPushToken): PortalPushToken;
   getPushToken(userId: string): PortalPushToken | undefined;
   /** Domain Infrastructure collections (registrar domains, quotes, intents, bindings, registrants, audit). */
@@ -273,6 +320,8 @@ export type StoreKind =
   | "dataZoneProvenance"
   | "dataZoneTombstones"
   | "dataZoneAudit"
+  | "ddiProvisioning"
+  | "ddiInstallEvents"
   | "pushTokens"
   | "meta"
   | `domainInfra.${DomainInfraKind}`;
@@ -345,6 +394,8 @@ export function createStore(opts?: {
   const dataZoneProvenance = new Map<string, DataZoneProvenance>();
   const dataZoneTombstones = new Map<string, DataZoneTombstone>();
   const dataZoneAudit = new Map<string, DataZoneAuditEvent>();
+  const ddiProvisioning = new Map<string, DdiProvisioningRecord>();
+  const ddiInstallEvents = new Map<string, DdiInstallEvent>();
   const pushTokens = new Map<string, PortalPushToken>();
   const domainInfra = Object.fromEntries(DOMAIN_INFRA_KINDS.map((kind) => [kind, new Map()])) as {
     [K in DomainInfraKind]: Map<string, DomainInfraCollections[K]>;
@@ -365,9 +416,47 @@ export function createStore(opts?: {
     dataZoneProvenance,
     dataZoneTombstones,
     dataZoneAudit,
+    ddiProvisioning,
+    ddiInstallEvents,
     pushTokens,
     ...Object.fromEntries(DOMAIN_INFRA_KINDS.map((kind) => [`domainInfra.${kind}`, domainInfra[kind]])),
   };
+
+  /**
+   * D3C-B: record a DDI install-state event in the same store write path as the
+   * state change itself. Events carry the full DDI-relevant state and a per-install
+   * sequence, so DDI can apply the newest and ignore duplicates or late arrivals.
+   * Installs owned by a Portal-local subject are never DDI properties and emit nothing.
+   */
+  function emitDdiInstallEvent(install: PortalInstall, type: DdiInstallEvent["type"]): PortalInstall {
+    if (!install.ownerTrustId || install.ownerTrustId.startsWith("local:")) return install;
+    const sequence = (install.ddiSequence ?? 0) + 1;
+    const retired = type === "INSTALL_RETIRED";
+    let current = install;
+    if (!retired && installs.has(install.id)) {
+      current = { ...install, ddiSequence: sequence };
+      installs.set(install.id, current);
+      changed("installs", install.id, current);
+    }
+    const occurredAt = new Date().toISOString();
+    const event: DdiInstallEvent = {
+      id: `ddi-evt-${randomUUID()}`,
+      installId: install.id,
+      type,
+      ownerSubject: install.ownerTrustId,
+      externalReference: `portal-install:${install.id}`,
+      sequence,
+      state: { installSuspended: Boolean(install.suspended), ownerSuspended: Boolean(users.get(install.ownerUserId)?.suspended), retired },
+      correlationId: `portal-${randomUUID()}`,
+      occurredAt,
+      status: "PENDING",
+      attempts: 0,
+      nextAttemptAt: occurredAt,
+    };
+    ddiInstallEvents.set(event.id, event);
+    changed("ddiInstallEvents", event.id, event);
+    return current;
+  }
 
   function snapshot(): Snapshot {
     return {
@@ -384,6 +473,8 @@ export function createStore(opts?: {
       dataZoneProvenance: [...dataZoneProvenance.values()],
       dataZoneTombstones: [...dataZoneTombstones.values()],
       dataZoneAudit: [...dataZoneAudit.values()],
+      ddiProvisioning: [...ddiProvisioning.values()],
+      ddiInstallEvents: [...ddiInstallEvents.values()],
       pushTokens: [...pushTokens.values()],
       domainInfra: Object.fromEntries(
         DOMAIN_INFRA_KINDS.map((kind) => [kind, [...domainInfra[kind].values()]]),
@@ -437,6 +528,8 @@ export function createStore(opts?: {
       for (const p of snap.dataZoneProvenance ?? []) dataZoneProvenance.set(p.id, p);
       for (const t of snap.dataZoneTombstones ?? []) dataZoneTombstones.set(t.id, t);
       for (const a of snap.dataZoneAudit ?? []) dataZoneAudit.set(a.id, a);
+      for (const r of snap.ddiProvisioning ?? []) ddiProvisioning.set(r.id, r);
+      for (const e of snap.ddiInstallEvents ?? []) ddiInstallEvents.set(e.id, e);
       for (const t of snap.pushTokens ?? []) pushTokens.set(t.userId, t);
       for (const kind of DOMAIN_INFRA_KINDS) {
         const map = domainInfra[kind] as Map<string, { id: string }>;
@@ -594,6 +687,11 @@ export function createStore(opts?: {
       const next = normalizeUser({ ...prev, ...patch, id: prev.id });
       putUser(next);
       changed("users", id, next);
+      if (Boolean(prev.suspended) !== Boolean(next.suspended)) {
+        for (const install of [...installs.values()]) {
+          if (install.ownerUserId === id) emitDdiInstallEvent(install, next.suspended ? "OWNER_SUSPENDED" : "OWNER_REINSTATED");
+        }
+      }
       return next;
     },
     getUser(id) {
@@ -662,12 +760,17 @@ export function createStore(opts?: {
       const next = { ...prev, ...patch, id: prev.id, updatedAt: new Date().toISOString() };
       installs.set(id, next);
       changed("installs", id, next);
+      if ("suspended" in patch && Boolean(prev.suspended) !== Boolean(next.suspended)) {
+        return emitDdiInstallEvent(next, next.suspended ? "INSTALL_SUSPENDED" : "INSTALL_REINSTATED");
+      }
       return next;
     },
     deleteInstall(id) {
-      if (!installs.has(id)) return false;
+      const prev = installs.get(id);
+      if (!prev) return false;
       installs.delete(id);
       changed("installs", id, null);
+      emitDdiInstallEvent(prev, "INSTALL_RETIRED");
       return true;
     },
     getInstall(id) {
@@ -695,6 +798,7 @@ export function createStore(opts?: {
         installs.delete(row.id);
         removed.push(row.id);
         changed("installs", row.id, null);
+        emitDdiInstallEvent(row, "INSTALL_RETIRED");
       }
       return removed;
     },
@@ -904,6 +1008,25 @@ export function createStore(opts?: {
     },
     listDataZoneAudit() {
       return [...dataZoneAudit.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    },
+    ddiProvisioningGet(id) {
+      return ddiProvisioning.get(id);
+    },
+    ddiProvisioningPut(row) {
+      ddiProvisioning.set(row.id, row);
+      changed("ddiProvisioning", row.id, row);
+      return row;
+    },
+    listDdiInstallEvents() {
+      return [...ddiInstallEvents.values()].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt) || a.sequence - b.sequence);
+    },
+    updateDdiInstallEvent(id, patch) {
+      const prev = ddiInstallEvents.get(id);
+      if (!prev) return undefined;
+      const next = { ...prev, ...patch, id: prev.id };
+      ddiInstallEvents.set(id, next);
+      changed("ddiInstallEvents", id, next);
+      return next;
     },
     upsertPushToken(input) {
       const row: PortalPushToken = {
