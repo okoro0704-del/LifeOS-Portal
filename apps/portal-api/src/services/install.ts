@@ -16,7 +16,7 @@ import { HttpError } from "../lib/http.js";
 import { identitySubject } from "../lib/local-auth.js";
 import { newId } from "../lib/crypto.js";
 import type { PortalInstall, PortalStore, PortalUser } from "../store.js";
-import type { DistributorClient } from "./distributor.js";
+import type { BootstrapInput, DistributorClient } from "./distributor.js";
 import type { HosClient } from "./hospitalityos.js";
 import type { EcoClient } from "./ecommerceos.js";
 import type { TosClient } from "./transportationos.js";
@@ -179,13 +179,29 @@ export async function installDomainOs(opts: {
   }
   claimSubdomain(opts.store, subdomain);
 
-  const tenantId = `tid_${subdomain}_${newId().slice(0, 6)}`;
   const destinations = oauthDestinations(osId, subdomain);
   const manifest = manifestForOs(osId);
   const brand = {
     primaryColor: opts.input.brand?.primaryColor ?? manifest.brandDefaults.primaryColor,
     logoUrl: opts.input.brand?.logoUrl,
   };
+  const bootInput: BootstrapInput = {
+    tenantId: `tid_${subdomain}_${newId().slice(0, 6)}`,
+    subdomain,
+    customDomain: opts.input.customDomain,
+    displayName: opts.input.displayName,
+    brand,
+    oauthDestinations: destinations,
+    enabledModules,
+    appId: osId,
+    accessToken: opts.accessToken,
+    ownerSubject: identitySubject(opts.user),
+  };
+  // D3D-A: claim the subdomain across Portal instances before anything is created.
+  const begun = (await opts.distributor.beginInstall?.(bootInput)) ?? null;
+  if (begun?.kind === "committed") throw new HttpError(`Subdomain already installed: ${subdomain}`, 409, "conflict");
+  const guard = begun?.guard;
+  const tenantId = guard?.tenantId ?? bootInput.tenantId;
 
   const row = opts.store.createInstall({
     ownerUserId: opts.user.id,
@@ -220,18 +236,7 @@ export async function installDomainOs(opts: {
 
   try {
     opts.store.updateInstall(row.id, { status: "bootstrapping" });
-    const boot = await opts.distributor.bootstrap({
-      tenantId,
-      subdomain,
-      customDomain: opts.input.customDomain,
-      displayName: opts.input.displayName,
-      brand,
-      oauthDestinations: destinations,
-      enabledModules,
-      appId: osId,
-      accessToken: opts.accessToken,
-      ownerSubject: identitySubject(opts.user),
-    });
+    const boot = guard ? await guard.bootstrap() : await opts.distributor.bootstrap(bootInput);
 
     opts.store.updateInstall(row.id, {
       distributorTenantId: boot.tenantId,
@@ -361,6 +366,11 @@ export async function installDomainOs(opts: {
       status: "ready",
       error: undefined,
     })!;
+    // D3D-A: the ready install is durable before the claim is bound to it.
+    if (guard) {
+      await opts.store.flush();
+      await guard.commit(ready.id);
+    }
     opts.store.updateBilling(billing.id, { status: "consumed", installId: ready.id });
     seedHotelProperty(ready, opts.store, {
       email: opts.input.adminStaff.email,
@@ -405,6 +415,7 @@ export async function installDomainOs(opts: {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Install failed";
     opts.store.updateInstall(row.id, { status: "failed", error: message });
+    await guard?.fail();
     throw err;
   }
 }

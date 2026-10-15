@@ -303,6 +303,20 @@ CREATE TABLE IF NOT EXISTS portal.ddi_provisioning_claims (
   committed_at timestamptz
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ddi_provisioning_claims_install_uidx ON portal.ddi_provisioning_claims (install_id);
+
+-- 005 (additive, D3D-A): one install claim per subdomain across instances (remote installs).
+CREATE TABLE IF NOT EXISTS portal.install_claims (
+  subdomain text PRIMARY KEY,
+  fingerprint text NOT NULL,
+  tenant_id text NOT NULL UNIQUE,
+  payload jsonb NOT NULL,
+  state text NOT NULL CHECK (state IN ('CLAIMED', 'COMMITTED')),
+  lease_token text,
+  claimed_at timestamptz NOT NULL,
+  bootstrap jsonb,
+  install_id text,
+  committed_at timestamptz
+);
 `;
 
 /** Serialises migrations when several API instances boot against one database. */
