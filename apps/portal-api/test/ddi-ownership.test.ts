@@ -37,3 +37,29 @@ test("ownership verifier rejects forged credentials, cross-owner claims, and non
   assert.equal((await request({ ownerSubject: "TD-OTHER", externalSystem: "lifeos", externalReference: `portal-install:${owned.id}`, type: "PERSONAL_BRAND" })).statusCode, 404);
   assert.equal((await request({ ownerSubject: owner, externalSystem: "lifeos", externalReference: `portal-install:${pending.id}`, type: "PERSONAL_BRAND" })).statusCode, 409);
 });
+
+test("bootstrap purpose verifies the owner of an in-flight install as pending, never a failed or suspended one", async () => {
+  const store = createStore();
+  const ready = makeInstall(store);
+  const inFlight = makeInstall(store, { id: "ins_d3b_inflight", subdomain: "d3b-inflight", status: "provisioning" });
+  const failed = makeInstall(store, { id: "ins_d3b_failed", subdomain: "d3b-failed", status: "provisioning" });
+  const suspended = makeInstall(store, { id: "ins_d3b_suspended", subdomain: "d3b-suspended", status: "provisioning", suspended: true });
+  const app = await buildApp({ store, ddiOwnershipSharedSecret: secret });
+  after(() => app.close());
+  // buildApp purges failed installs at startup (that path answers 404); fail one afterwards to cover 409.
+  store.updateInstall(failed.id, { status: "failed" });
+  const request = (installId: string, patch: Record<string, unknown> = {}) => app.inject({ method: "POST", url: "/internal/ddi/ownership/verify", headers: { "x-ddi-ownership-secret": secret }, payload: { ownerSubject: owner, externalSystem: "lifeos", externalReference: `portal-install:${installId}`, type: "PERSONAL_BRAND", ...patch } });
+  const pending = await request(inFlight.id, { purpose: "bootstrap" });
+  assert.equal(pending.statusCode, 200, pending.body);
+  assert.equal(pending.json().readiness, "pending");
+  assert.equal((await request(inFlight.id)).statusCode, 409);
+  assert.equal((await request(inFlight.id, { purpose: "activate" })).statusCode, 409);
+  assert.equal((await request(failed.id, { purpose: "bootstrap" })).statusCode, 409);
+  assert.equal((await request(suspended.id, { purpose: "bootstrap" })).statusCode, 409);
+  assert.equal((await request(inFlight.id, { purpose: "bootstrap", ownerSubject: "TD-OTHER" })).statusCode, 404);
+  assert.equal((await request(inFlight.id, { purpose: "grant-everything" })).statusCode, 400);
+  const readyReply = await request(ready.id, { purpose: "bootstrap" });
+  assert.equal(readyReply.statusCode, 200);
+  assert.equal(readyReply.json().readiness, "ready");
+  assert.equal((await request(ready.id)).json().readiness, "ready");
+});

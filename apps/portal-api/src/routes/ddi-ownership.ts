@@ -8,7 +8,16 @@ const requestBody = z.object({
   externalSystem: z.literal("lifeos"),
   externalReference: z.string().regex(/^portal-install:[A-Za-z0-9:_-]+$/),
   type: z.enum(["PERSONAL_BRAND", "BUSINESS", "SPACE", "APPLICATION"]),
+  /**
+   * activate (default, D3A behaviour): the install must be READY.
+   * bootstrap (D3B): the same owner check, but an in-flight install is
+   * reported as pending so DDI can hold the property without privileges
+   * while provisioning that READY may depend on proceeds.
+   */
+  purpose: z.enum(["activate", "bootstrap"]).default("activate"),
 });
+
+const IN_FLIGHT = new Set(["bootstrapping", "awaiting_domain", "provisioning"]);
 
 function sameSecret(actual: string | undefined, expected: string | undefined) {
   if (!actual || !expected) return false;
@@ -32,7 +41,10 @@ export async function registerDdiOwnershipRoutes(app: FastifyInstance, store: Po
     const installId = parsed.data.externalReference.slice("portal-install:".length);
     const install = store.getInstall(installId);
     if (!install || install.ownerTrustId !== parsed.data.ownerSubject) return reply.code(404).send({ error: "ownership_not_found" });
-    if (install.status !== "ready" || install.suspended) return reply.code(409).send({ error: "ownership_pending" });
+    if (install.suspended) return reply.code(409).send({ error: "ownership_pending" });
+    const ready = install.status === "ready";
+    // A failed install, or a non-ready install outside bootstrap, never verifies.
+    if (!ready && (parsed.data.purpose !== "bootstrap" || !IN_FLIGHT.has(install.status))) return reply.code(409).send({ error: "ownership_pending" });
     const verifiedAt = new Date().toISOString();
     const expiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
     // The receipt identifies the exact authoritative record version. It is not
@@ -47,6 +59,7 @@ export async function registerDdiOwnershipRoutes(app: FastifyInstance, store: Po
       ownerSubject: parsed.data.ownerSubject,
       externalSystem: parsed.data.externalSystem,
       externalReference: parsed.data.externalReference,
+      readiness: ready ? "ready" : "pending",
     };
   });
 }
