@@ -40,6 +40,7 @@ import { registerPushRoutes } from "./routes/push.js";
 import { registerStepUpRoutes } from "./routes/step-up.js";
 import { enforceProductionAuthority, seedLocalAdmin } from "./lib/seed-admin.js";
 import { registerDomainInfrastructureRoutes } from "./routes/domain-infrastructure.js";
+import { registerDdiOwnershipRoutes } from "./routes/ddi-ownership.js";
 import { createDomainInfrastructure, type DomainInfraOptions } from "./domains/index.js";
 
 export type BuildAppOptions = {
@@ -55,6 +56,8 @@ export type BuildAppOptions = {
   domainInfra?: DomainInfraOptions;
   /** Test boundary: observe every registered route (security audits). */
   onRoute?: (route: { method: string | string[]; url: string }) => void;
+  /** Internal DDI-to-Portal ownership verifier credential; never a browser credential. */
+  ddiOwnershipSharedSecret?: string;
 };
 
 const defaultPersist = path.resolve(
@@ -178,6 +181,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   await registerCatalogRoutes(app);
   await registerBillingRoutes(app, store);
   await registerInstallRoutes(app, store, distributor, hos, eco, tos, sos);
+  await registerDdiOwnershipRoutes(app, store, opts.ddiOwnershipSharedSecret ?? process.env.DDI_OWNERSHIP_SHARED_SECRET);
   await registerEcommerceOsInternalRoutes(app, store);
   await registerOrganizationRoutes(app, store);
   await registerTenantRoutes(app, store, distributor);
