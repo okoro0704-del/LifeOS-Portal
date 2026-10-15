@@ -2,7 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { PortalStore } from "../store.js";
-import { bearer, type ServiceTokenVerifier } from "../lib/service-token.js";
+import { bearer, ServiceReplayUnavailable, type ServiceTokenVerifier } from "../lib/service-token.js";
 
 const requestBody = z.object({
   ownerSubject: z.string().min(1).max(512),
@@ -32,12 +32,16 @@ function sameSecret(actual: string | undefined, expected: string | undefined) {
  * comes from Portal configuration. The D3A shared secret remains accepted only
  * when no DDI service key is configured (legacy deployments).
  */
-export function ddiCaller(req: FastifyRequest, path: string, permission: string, verifier?: ServiceTokenVerifier, legacySecret?: string): "ok" | "unauthenticated" | "forbidden" {
+export async function ddiCaller(req: FastifyRequest, path: string, permission: string, verifier?: ServiceTokenVerifier, legacySecret?: string): Promise<"ok" | "unauthenticated" | "forbidden" | "unavailable"> {
   if (verifier) {
-    const caller = verifier.verify(bearer(req.headers.authorization), { method: req.method, path });
+    let caller;
+    try { caller = await verifier.verify(bearer(req.headers.authorization), { method: req.method, path }); }
+    catch (err) { if (err instanceof ServiceReplayUnavailable) return "unavailable"; throw err; }
     if (!caller) return "unauthenticated";
     return caller.permissions.includes(permission) ? "ok" : "forbidden";
   }
+  // D3C-C: the D3A shared secret is a development/legacy fallback only; production requires service keys.
+  if (process.env.NODE_ENV === "production") return "forbidden";
   return sameSecret(req.headers["x-ddi-ownership-secret"] as string | undefined, legacySecret) ? "ok" : "forbidden";
 }
 
@@ -48,7 +52,8 @@ export function ddiCaller(req: FastifyRequest, path: string, permission: string,
  */
 export async function registerDdiOwnershipRoutes(app: FastifyInstance, store: PortalStore, sharedSecret?: string, verifier?: ServiceTokenVerifier) {
   app.post("/internal/ddi/ownership/verify", async (req, reply) => {
-    const auth = ddiCaller(req, "/internal/ddi/ownership/verify", "ownership:verify", verifier, sharedSecret);
+    const auth = await ddiCaller(req, "/internal/ddi/ownership/verify", "ownership:verify", verifier, sharedSecret);
+    if (auth === "unavailable") return reply.code(503).send({ error: "replay_protection_unavailable" });
     if (auth === "unauthenticated") return reply.code(401).send({ error: "unauthenticated" });
     if (auth === "forbidden") return reply.code(403).send({ error: "forbidden" });
     const parsed = requestBody.safeParse(req.body);

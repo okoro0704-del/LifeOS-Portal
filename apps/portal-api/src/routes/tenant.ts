@@ -66,6 +66,7 @@ export async function registerTenantRoutes(
         subdomain: install.subdomain,
         customDomain: hostname,
         accessToken: req.trustIdAccessToken,
+        ownerSubject: install.ownerTrustId,
       });
       const domain = store.createDomain({
         installId: install.id,

@@ -8,7 +8,7 @@ import {
   type DomainStatusResult,
 } from "@lifeos-portal/shared";
 import { config } from "../config.js";
-import { isTrustIdEnabled } from "../lib/local-auth.js";
+import { signServiceToken, type ServiceSigner } from "../lib/service-token.js";
 import { HttpError, httpJson } from "../lib/http.js";
 
 export type BootstrapInput = {
@@ -21,7 +21,10 @@ export type BootstrapInput = {
   enabledModules?: string[];
   enabledPrimitives?: string[];
   appId?: string;
+  /** Retained for call-site compatibility; never forwarded to Master Distributor (D3C-C). */
   accessToken?: string;
+  /** Canonical TrustID subject of the owner: business context only, never authentication. */
+  ownerSubject?: string;
 };
 
 export type CustomDomainProvisionResult = {
@@ -41,6 +44,7 @@ export type DistributorClient = {
     subdomain: string;
     customDomain: string;
     accessToken?: string;
+    ownerSubject?: string;
   }): Promise<CustomDomainProvisionResult>;
   verifyDomain(domainId: string, accessToken?: string): Promise<DomainStatusResult>;
   renewSsl(domainId: string, accessToken?: string): Promise<DomainStatusResult>;
@@ -137,74 +141,55 @@ export function createLocalDistributor(): DistributorClient {
   };
 }
 
-export function createRemoteDistributor(): DistributorClient {
+/**
+ * D3C-C: Master Distributor is called as the Portal service, never with a forwarded user token.
+ * Each call carries a short-lived Ed25519 service token bound to Master Distributor's audience,
+ * the HTTP method and the exact path; Master Distributor decides the Portal's permissions from its
+ * own configuration. The owner's canonical TrustID subject travels only as business context
+ * (`x-lifeos-owner-subject`) and is never proof of the Portal's identity. Remote mode has no
+ * per-request local fallback: without a configured service identity it fails closed.
+ */
+export function createRemoteDistributor(options: { signer?: ServiceSigner; audience?: string } = {}): DistributorClient {
   const base = config.masterDistributorUrl;
-  const local = createLocalDistributor();
 
-  // Standalone/guest installs have no TrustID session token. Keep Master Distributor
-  // remote when a token is present; otherwise finish bootstrap locally.
-  function useLocalFallback(accessToken?: string) {
-    return !isTrustIdEnabled() && !accessToken;
+  function call<T>(method: "GET" | "POST", path: string, body?: unknown, ownerSubject?: string) {
+    if (!options.signer) {
+      throw new HttpError("Master Distributor service identity is not configured.", 503, "distributor_identity_unconfigured");
+    }
+    const token = signServiceToken(options.signer, { audience: options.audience ?? "master-distributor", method, path });
+    const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+    if (ownerSubject && !ownerSubject.startsWith("local:")) headers["x-lifeos-owner-subject"] = ownerSubject;
+    return httpJson<T>(base, path, {
+      method,
+      dependency: "Master Distributor",
+      headers,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
   }
+  const statusPath = (domainId: string) => `/v1/distributor/domains/${encodeURIComponent(domainId)}/status`;
 
   return {
     async bootstrap(input) {
-      if (useLocalFallback(input.accessToken)) {
-        return local.bootstrap(input);
-      }
-      if (!input.accessToken) {
-        throw new HttpError(
-          "TrustID access token required for Master Distributor bootstrap.",
-          401,
-          "unauthorized",
-        );
-      }
-      return httpJson<DistributorBootstrapResult>(base, HOSPITALITYOS_MANIFEST.install.bootstrapPath, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${input.accessToken}` },
-        body: JSON.stringify({
-          tenantId: input.tenantId,
-          subdomain: input.subdomain,
-          customDomain: input.customDomain,
-          enabledPrimitives: primitivesForApp(input),
-          displayName: input.displayName,
-          brand: input.brand,
-          oauthDestinations: input.oauthDestinations,
-          enabledModules: input.enabledModules,
-        }),
-      });
+      return call<DistributorBootstrapResult>("POST", HOSPITALITYOS_MANIFEST.install.bootstrapPath, {
+        tenantId: input.tenantId,
+        subdomain: input.subdomain,
+        customDomain: input.customDomain,
+        enabledPrimitives: primitivesForApp(input),
+        displayName: input.displayName,
+        brand: input.brand,
+        oauthDestinations: input.oauthDestinations,
+        enabledModules: input.enabledModules,
+      }, input.ownerSubject);
     },
-    async getDomainStatus(domainId, accessToken) {
-      if (useLocalFallback(accessToken)) return local.getDomainStatus(domainId);
-      return httpJson<DomainStatusResult>(
-        base,
-        `/v1/distributor/domains/${encodeURIComponent(domainId)}/status`,
-        {
-          method: "GET",
-          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-        },
-      );
+    async getDomainStatus(domainId) {
+      return call<DomainStatusResult>("GET", statusPath(domainId));
     },
     async provisionCustomDomain(input) {
-      if (useLocalFallback(input.accessToken)) {
-        return local.provisionCustomDomain(input);
-      }
-      if (!input.accessToken) {
-        throw new HttpError(
-          "TrustID access token required for custom domain attachment.",
-          401,
-          "unauthorized",
-        );
-      }
-      const raw = await httpJson<CustomDomainProvisionResult>(base, "/v1/distributor/domains/provision", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${input.accessToken}` },
-        body: JSON.stringify({
-          tenantId: input.tenantId,
-          subdomain: input.subdomain,
-          customDomain: input.customDomain,
-        }),
-      });
+      const raw = await call<CustomDomainProvisionResult>("POST", "/v1/distributor/domains/provision", {
+        tenantId: input.tenantId,
+        subdomain: input.subdomain,
+        customDomain: input.customDomain,
+      }, input.ownerSubject);
       return {
         domainId: raw.domainId,
         customDomain: raw.customDomain,
@@ -214,31 +199,15 @@ export function createRemoteDistributor(): DistributorClient {
         sslStatus: raw.sslStatus,
       };
     },
-    async verifyDomain(domainId, accessToken) {
-      if (useLocalFallback(accessToken)) return local.verifyDomain(domainId);
-      return httpJson<DomainStatusResult>(
-        base,
-        `/v1/distributor/domains/${encodeURIComponent(domainId)}/status`,
-        {
-          method: "GET",
-          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-        },
-      );
+    async verifyDomain(domainId) {
+      return call<DomainStatusResult>("GET", statusPath(domainId));
     },
-    async renewSsl(domainId, accessToken) {
-      if (useLocalFallback(accessToken)) return local.renewSsl(domainId);
-      return httpJson<DomainStatusResult>(
-        base,
-        `/v1/distributor/domains/${encodeURIComponent(domainId)}/status`,
-        {
-          method: "GET",
-          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-        },
-      );
+    async renewSsl(domainId) {
+      return call<DomainStatusResult>("GET", statusPath(domainId));
     },
   };
 }
 
-export function createDistributorClient(): DistributorClient {
-  return config.installMode === "remote" ? createRemoteDistributor() : createLocalDistributor();
+export function createDistributorClient(options: { signer?: ServiceSigner; audience?: string } = {}): DistributorClient {
+  return config.installMode === "remote" ? createRemoteDistributor(options) : createLocalDistributor();
 }

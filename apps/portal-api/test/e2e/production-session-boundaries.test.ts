@@ -10,6 +10,11 @@ process.env.BYPASS_TRUST_ID = "false";
 process.env.BYPASS_AUTH_FOR_TESTING = "false";
 process.env.GATEWAY_MODE = "production";
 process.env.INSTALL_MODE = "remote";
+// D3C-C: production remote installs require the Portal's own service identity toward Master Distributor.
+// An ephemeral in-memory key (never persisted, not a production key) completes this production fixture.
+process.env.PORTAL_SERVICE_ID = "lifeos-portal";
+process.env.PORTAL_SERVICE_KEY_ID = "ci-ephemeral-portal";
+process.env.PORTAL_SERVICE_PRIVATE_KEY = generateKeyPairSync("ed25519").privateKey.export({ type: "pkcs8", format: "pem" }).toString();
 process.env.DATAZONE_API_URL = "https://datazone.example.invalid";
 process.env.FINPROVE_API_URL = "https://finprove.example.invalid";
 process.env.MASTER_DISTRIBUTOR_URL = "https://distributor.example.invalid";
@@ -27,6 +32,7 @@ process.env.TRUSTID_TOKEN_KEYS = `kb1:${Buffer.alloc(32, 9).toString("base64")}`
 process.env.SESSION_SWEEP_MINUTES = "0";
 delete process.env.COOKIE_SESSION_ORIGINS;
 
+import { generateKeyPairSync } from "node:crypto";
 import { after, before, describe, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
