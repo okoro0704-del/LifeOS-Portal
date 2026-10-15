@@ -40,7 +40,12 @@ export async function registerDdiOwnershipRoutes(app: FastifyInstance, store: Po
     if (!parsed.success) return reply.code(400).send({ error: "invalid_request" });
     const installId = parsed.data.externalReference.slice("portal-install:".length);
     const install = store.getInstall(installId);
+    // A Portal-local fallback subject (local:<userId>) is not a canonical TrustID subject and never proves ownership.
+    if (parsed.data.ownerSubject.startsWith("local:")) return reply.code(404).send({ error: "ownership_not_found" });
     if (!install || install.ownerTrustId !== parsed.data.ownerSubject) return reply.code(404).send({ error: "ownership_not_found" });
+    // The owning account must still exist and be in good standing, not only the install.
+    const owner = store.getUser(install.ownerUserId);
+    if (!owner || owner.suspended) return reply.code(404).send({ error: "ownership_not_found" });
     if (install.suspended) return reply.code(409).send({ error: "ownership_pending" });
     const ready = install.status === "ready";
     // A failed install, or a non-ready install outside bootstrap, never verifies.

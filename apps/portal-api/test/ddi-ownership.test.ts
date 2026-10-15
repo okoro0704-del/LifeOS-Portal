@@ -5,9 +5,12 @@ import { createStore } from "../src/store.js";
 
 const secret = "d3-isolated-portal-to-ddi-secret";
 const owner = "TD-D3-OWNER";
+// The verifier requires the owning Portal account to exist and be in good standing.
+const ownerUser = (store: ReturnType<typeof createStore>, trustId = owner) =>
+  store.getUserByTrustId(trustId) ?? store.upsertUser({ trustId, displayName: "D3 Owner", trustTier: null, identityStatus: null });
 const makeInstall = (store: ReturnType<typeof createStore>, patch: Record<string, unknown> = {}) =>
   store.createInstall({
-    ownerUserId: "usr_d3", ownerTrustId: owner, appId: "mybrandos", osId: "mybrandos", verticalId: "creator",
+    ownerUserId: ownerUser(store).id, ownerTrustId: owner, appId: "mybrandos", osId: "mybrandos", verticalId: "creator",
     displayName: "D3 Brand", subdomain: "d3-brand", distributorTenantId: "tenant_d3", modulesEnabled: [], seedApplied: true, status: "ready",
     ...patch,
   });
@@ -62,4 +65,20 @@ test("bootstrap purpose verifies the owner of an in-flight install as pending, n
   assert.equal(readyReply.statusCode, 200);
   assert.equal(readyReply.json().readiness, "ready");
   assert.equal((await request(ready.id)).json().readiness, "ready");
+});
+
+test("Portal-local subjects and suspended owner accounts never verify ownership", async () => {
+  const store = createStore();
+  const install = makeInstall(store);
+  const localUser = store.upsertUser({ trustId: null, email: "local-d3c@example.test", displayName: "Local", trustTier: null, identityStatus: null });
+  const localInstall = makeInstall(store, { id: "ins_d3c_local", subdomain: "d3c-local", ownerUserId: localUser.id, ownerTrustId: `local:${localUser.id}` });
+  const app = await buildApp({ store, ddiOwnershipSharedSecret: secret });
+  after(() => app.close());
+  const request = (ownerSubject: string, installId: string) => app.inject({ method: "POST", url: "/internal/ddi/ownership/verify", headers: { "x-ddi-ownership-secret": secret }, payload: { ownerSubject, externalSystem: "lifeos", externalReference: `portal-install:${installId}`, type: "PERSONAL_BRAND" } });
+  assert.equal((await request(owner, install.id)).statusCode, 200);
+  assert.equal((await request(`local:${localUser.id}`, localInstall.id)).statusCode, 404);
+  store.updateUser(ownerUser(store).id, { suspended: true });
+  assert.equal((await request(owner, install.id)).statusCode, 404);
+  store.updateUser(ownerUser(store).id, { suspended: false });
+  assert.equal((await request(owner, install.id)).statusCode, 200);
 });
