@@ -325,6 +325,7 @@ export async function registerInstallRoutes(
         tenantId: row.distributorTenantId,
         subdomain: row.subdomain,
         customDomain: hostname,
+        ownerSubject: row.ownerTrustId,
       });
       const domain = store.createDomain({
         installId: row.id,

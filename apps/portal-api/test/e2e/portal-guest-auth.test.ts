@@ -160,14 +160,15 @@ test("tenant detail groups sibling verticals and health lists failures", async (
 test("guest hotel install works when TrustID is off and distributor is remote", async () => {
   const { createStore } = await import("../../src/store.js");
   const { buildApp } = await import("../../src/app.js");
-  const { createRemoteDistributor } = await import("../../src/services/distributor.js");
+  // D3C-C: a remote distributor no longer falls back to local bootstrap; guests use the local distributor explicitly.
+  const { createLocalDistributor } = await import("../../src/services/distributor.js");
   const { createRemoteHospitalityOs } = await import("../../src/services/hospitalityos.js");
   const { createRemoteEcommerceOs } = await import("../../src/services/ecommerceos.js");
   const { createRemoteTransportationOs } = await import("../../src/services/transportationos.js");
 
   const local = await buildApp({
     store: createStore(),
-    distributor: createRemoteDistributor(),
+    distributor: createLocalDistributor(),
     hos: createRemoteHospitalityOs(),
     eco: createRemoteEcommerceOs(),
     tos: createRemoteTransportationOs(),
@@ -528,14 +529,15 @@ test("guest hotel install works when TrustID is off and distributor is remote", 
 test("restaurant and home-kitchen tenant apps serve menus, orders, and staff boards", async () => {
   const { createStore } = await import("../../src/store.js");
   const { buildApp } = await import("../../src/app.js");
-  const { createRemoteDistributor } = await import("../../src/services/distributor.js");
+  // D3C-C: a remote distributor no longer falls back to local bootstrap; guests use the local distributor explicitly.
+  const { createLocalDistributor } = await import("../../src/services/distributor.js");
   const { createRemoteHospitalityOs } = await import("../../src/services/hospitalityos.js");
   const { createRemoteEcommerceOs } = await import("../../src/services/ecommerceos.js");
   const { createRemoteTransportationOs } = await import("../../src/services/transportationos.js");
 
   const local = await buildApp({
     store: createStore(),
-    distributor: createRemoteDistributor(),
+    distributor: createLocalDistributor(),
     hos: createRemoteHospitalityOs(),
     eco: createRemoteEcommerceOs(),
     tos: createRemoteTransportationOs(),
@@ -797,4 +799,14 @@ test("catalog is reachable without a session cookie", async () => {
   assert.ok(ids.includes("hospitalityos"));
   assert.ok(ids.includes("ecommerceos"));
   assert.ok(ids.includes("transportationos"));
+});
+
+test("a remote distributor without a Portal service identity fails closed instead of bootstrapping locally", async () => {
+  const { createRemoteDistributor } = await import("../../src/services/distributor.js");
+  const remote = createRemoteDistributor();
+  await assert.rejects(
+    remote.bootstrap({ tenantId: "t", subdomain: "guest-remote", displayName: "Guest", oauthDestinations: [] }),
+    (err: { statusCode?: number; code?: string }) => err.statusCode === 503 && err.code === "distributor_identity_unconfigured",
+  );
+  await assert.rejects(remote.getDomainStatus("dom_guest-remote"), (err: { code?: string }) => err.code === "distributor_identity_unconfigured");
 });

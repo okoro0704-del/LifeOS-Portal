@@ -230,6 +230,7 @@ export async function installDomainOs(opts: {
       enabledModules,
       appId: osId,
       accessToken: opts.accessToken,
+      ownerSubject: identitySubject(opts.user),
     });
 
     opts.store.updateInstall(row.id, {

@@ -87,6 +87,7 @@ export async function installMyBrandOs(opts: {
         enabledModules: ["studio", "public_brand"],
         appId: "mybrandos",
         accessToken: opts.accessToken,
+        ownerSubject: identitySubject(opts.user),
       });
       opts.store.updateInstall(row.id, {
         distributorTenantId: boot.tenantId,

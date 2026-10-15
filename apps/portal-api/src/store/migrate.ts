@@ -109,6 +109,8 @@ export const PORTAL_RECORD_KINDS = [
   "dataZoneProvenance",
   "dataZoneTombstones",
   "dataZoneAudit",
+  "ddiProvisioning",
+  "ddiInstallEvents",
   ...DOMAIN_INFRA_KINDS.map((kind) => `domainInfra.${kind}`),
 ] as const;
 
@@ -276,6 +278,33 @@ export async function verifySchemas(client: { query: (sql: string) => Promise<{ 
   }
 }
 
+/**
+ * 004 (additive, D3C-C): cross-instance security state for the DDI integration.
+ * - service_token_replay: atomic single use of service tokens (only SHA-256 of issuer+jti).
+ * - ddi_provisioning_claims: atomic idempotency claims; one binding per install.
+ */
+export const DDI_SERVICE_SECURITY_DDL = `
+CREATE TABLE IF NOT EXISTS portal.service_token_replay (
+  jti_hash text PRIMARY KEY,
+  issuer text NOT NULL,
+  expires_at timestamptz NOT NULL
+);
+CREATE INDEX IF NOT EXISTS service_token_replay_expiry_idx ON portal.service_token_replay (expires_at);
+
+CREATE TABLE IF NOT EXISTS portal.ddi_provisioning_claims (
+  idempotency_key text PRIMARY KEY,
+  fingerprint text NOT NULL,
+  install_id text NOT NULL,
+  license_id text NOT NULL,
+  state text NOT NULL CHECK (state IN ('CLAIMED', 'COMMITTED')),
+  lease_token text,
+  claimed_at timestamptz NOT NULL,
+  reference text,
+  committed_at timestamptz
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ddi_provisioning_claims_install_uidx ON portal.ddi_provisioning_claims (install_id);
+`;
+
 /** Serialises migrations when several API instances boot against one database. */
 const MIGRATION_LOCK_KEY = 4_204_181_903;
 
@@ -286,6 +315,7 @@ export async function applySchemaMigrations(pool: pg.Pool): Promise<void> {
     await client.query("SELECT pg_advisory_xact_lock($1)", [MIGRATION_LOCK_KEY]);
     await client.query(PORTAL_FINPROVE_DDL);
     await client.query(portalRowLevelDdl());
+    await client.query(DDI_SERVICE_SECURITY_DDL);
     await importLegacySnapshot(client);
     await client.query("COMMIT");
   } catch (err) {

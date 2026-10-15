@@ -40,6 +40,12 @@ import { registerPushRoutes } from "./routes/push.js";
 import { registerStepUpRoutes } from "./routes/step-up.js";
 import { enforceProductionAuthority, seedLocalAdmin } from "./lib/seed-admin.js";
 import { registerDomainInfrastructureRoutes } from "./routes/domain-infrastructure.js";
+import { registerDdiOwnershipRoutes } from "./routes/ddi-ownership.js";
+import { registerDdiProvisioningRoutes } from "./routes/ddi-provisioning.js";
+import { deliverDdiInstallEvents } from "./services/ddi-install-events.js";
+import { MemoryReplayStore, PostgresReplayStore, readDdiIntegrationConfig, ServiceTokenVerifier, type DdiIntegrationConfig } from "./lib/service-token.js";
+import { MemoryProvisioningClaimStore, PostgresProvisioningClaimStore } from "./services/ddi-provisioning-claims.js";
+import pg from "pg";
 import { createDomainInfrastructure, type DomainInfraOptions } from "./domains/index.js";
 
 export type BuildAppOptions = {
@@ -55,6 +61,10 @@ export type BuildAppOptions = {
   domainInfra?: DomainInfraOptions;
   /** Test boundary: observe every registered route (security audits). */
   onRoute?: (route: { method: string | string[]; url: string }) => void;
+  /** Internal DDI-to-Portal ownership verifier credential; never a browser credential. */
+  ddiOwnershipSharedSecret?: string;
+  /** D3C-B DDI integration (service trust, product map, event delivery). Defaults to environment. */
+  ddiIntegration?: DdiIntegrationConfig;
 };
 
 const defaultPersist = path.resolve(
@@ -101,7 +111,10 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   }
   // Boot repairs above are row writes: refuse to serve until they are durable.
   await store.flush();
-  const distributor = opts.distributor ?? createDistributorClient();
+  const ddi = opts.ddiIntegration ?? readDdiIntegrationConfig();
+  // D3C-C: shared PostgreSQL state for replay protection and provisioning claims; in-process only without a database.
+  const ddiPool = ddi.databaseUrl ? new pg.Pool({ connectionString: ddi.databaseUrl, max: 4 }) : undefined;
+  const distributor = opts.distributor ?? createDistributorClient({ signer: ddi.signer, audience: ddi.masterDistributorAudience });
   const hos = opts.hos ?? createHospitalityOsClient();
   const eco = opts.eco ?? createEcommerceOsClient();
   const tos = opts.tos ?? createTransportationOsClient();
@@ -178,6 +191,20 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   await registerCatalogRoutes(app);
   await registerBillingRoutes(app, store);
   await registerInstallRoutes(app, store, distributor, hos, eco, tos, sos);
+  const replay = ddiPool ? new PostgresReplayStore(ddiPool, "portal.service_token_replay") : new MemoryReplayStore();
+  const ddiVerifier = Object.keys(ddi.trustedServices).length
+    ? new ServiceTokenVerifier({ audience: ddi.signer?.serviceId ?? "lifeos-portal", services: ddi.trustedServices, production: ddi.production, replay })
+    : undefined;
+  await registerDdiOwnershipRoutes(app, store, opts.ddiOwnershipSharedSecret ?? process.env.DDI_OWNERSHIP_SHARED_SECRET, ddiVerifier);
+  await registerDdiProvisioningRoutes(app, store, { verifier: ddiVerifier, productMap: ddi.productMap, claims: ddiPool ? new PostgresProvisioningClaimStore(ddiPool) : new MemoryProvisioningClaimStore() });
+  // The outbox in the store is the source of truth; this timer only drives delivery.
+  const ddiEvents = ddi.eventsUrl && ddi.signer
+    ? setInterval(() => {
+        deliverDdiInstallEvents({ store, url: ddi.eventsUrl!, signer: ddi.signer! }).catch((err) => app.log.warn({ err: (err as Error).message }, "ddi_install_events_failed"));
+      }, Number(process.env.DDI_INSTALL_EVENTS_INTERVAL_MS ?? 5_000))
+    : undefined;
+  ddiEvents?.unref();
+  app.addHook("onClose", async () => { if (ddiEvents) clearInterval(ddiEvents); await ddiPool?.end(); });
   await registerEcommerceOsInternalRoutes(app, store);
   await registerOrganizationRoutes(app, store);
   await registerTenantRoutes(app, store, distributor);
