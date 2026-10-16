@@ -367,10 +367,7 @@ export async function installDomainOs(opts: {
       error: undefined,
     })!;
     // D3D-A: the ready install is durable before the claim is bound to it.
-    if (guard) {
-      await opts.store.flush();
-      await guard.commit(ready.id);
-    }
+    if (guard) await guard.commitReady(ready.id, () => opts.store.flush());
     opts.store.updateBilling(billing.id, { status: "consumed", installId: ready.id });
     seedHotelProperty(ready, opts.store, {
       email: opts.input.adminStaff.email,

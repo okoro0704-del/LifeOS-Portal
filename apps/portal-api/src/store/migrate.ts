@@ -319,6 +319,33 @@ CREATE TABLE IF NOT EXISTS portal.install_claims (
 );
 `;
 
+/**
+ * 006 (D3D-B1): at most one READY install per normalized subdomain, across every instance.
+ * A second instance's ready write for a subdomain that is already ready is rejected by the
+ * database (409 at flush) instead of becoming a duplicate installation.
+ */
+export const READY_INSTALL_INDEX = "records_ready_install_subdomain_uidx";
+
+/**
+ * Refuses, before changing anything, when existing data already holds duplicate ready installs:
+ * those need an operator decision, never an automatic pick. Runs inside the migration transaction.
+ */
+export async function enforceReadyInstallUniqueness(client: Pick<pg.PoolClient, "query">): Promise<void> {
+  const duplicates = await client.query<{ subdomain: string; installs: number }>(
+    `SELECT lower(payload->>'subdomain') AS subdomain, count(*)::int AS installs
+     FROM portal.records WHERE kind = 'installs' AND payload->>'status' = 'ready'
+     GROUP BY 1 HAVING count(*) > 1 ORDER BY 1 LIMIT 20`,
+  );
+  if (duplicates.rows.length) {
+    const list = duplicates.rows.map((row) => `${row.subdomain} (${row.installs})`).join(", ");
+    throw new Error(`PORTAL_READY_INSTALL_DUPLICATES: resolve duplicate ready installs before upgrading: ${list}`);
+  }
+  await client.query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS ${READY_INSTALL_INDEX} ON portal.records ((lower(payload->>'subdomain')))
+     WHERE kind = 'installs' AND payload->>'status' = 'ready'`,
+  );
+}
+
 /** Serialises migrations when several API instances boot against one database. */
 const MIGRATION_LOCK_KEY = 4_204_181_903;
 
@@ -331,6 +358,8 @@ export async function applySchemaMigrations(pool: pg.Pool): Promise<void> {
     await client.query(portalRowLevelDdl());
     await client.query(DDI_SERVICE_SECURITY_DDL);
     await importLegacySnapshot(client);
+    // After the legacy import, so imported rows are checked too.
+    await enforceReadyInstallUniqueness(client);
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});

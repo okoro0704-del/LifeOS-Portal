@@ -10,7 +10,7 @@ import {
 import { config } from "../config.js";
 import { signServiceToken, type ServiceSigner } from "../lib/service-token.js";
 import { HttpError, httpJson } from "../lib/http.js";
-import { installClaimFingerprint, type InstallClaimStore, type InstallPayload } from "./install-claims.js";
+import { installClaimFingerprint, type InstallClaimStore, type InstallPayload, type ReadyInstallLookup } from "./install-claims.js";
 
 export type BootstrapInput = {
   tenantId: string;
@@ -46,6 +46,12 @@ export type InstallGuard = {
   bootstrap(): Promise<DistributorBootstrapResult>;
   /** Binds the claim to the ready install; throws if another attempt took the claim over. */
   commit(installId: string): Promise<void>;
+  /**
+   * D3D-B1: makes the ready install durable (`flush`), then binds the claim to it. If the database
+   * rejects it because another instance's install for this owner is already ready, the claim is bound
+   * to that install instead and `already_installed` is thrown; another owner's install is a conflict.
+   */
+  commitReady(installId: string, flush: () => Promise<void>): Promise<void>;
   fail(): Promise<void>;
 };
 export type BeginInstall = { kind: "guard"; guard: InstallGuard } | { kind: "committed"; installId: string; tenantId: string };
@@ -173,9 +179,15 @@ export type RemoteDistributorOptions = {
   installLeaseMs?: number;
   /** Test seam: runs after Master Distributor succeeded and before the Portal checkpoints the result. */
   afterBootstrap?: (result: DistributorBootstrapResult) => Promise<void>;
+  /** D3D-B1: finds the READY install holding a subdomain across instances (PostgreSQL in production). */
+  readyInstalls?: ReadyInstallLookup;
+  /** Test seam: runs after the ready install is durable and before the claim is committed. */
+  beforeCommit?: () => Promise<void>;
 };
 
 const inProgress = () => new HttpError("This installation is already being set up. Retry shortly.", 503, "install_in_progress");
+const subdomainUnavailable = () => new HttpError("This subdomain belongs to another installation.", 409, "subdomain_unavailable");
+const alreadyInstalled = (subdomain: string) => new HttpError(`Already installed: ${subdomain}`, 409, "already_installed");
 
 export function createRemoteDistributor(options: RemoteDistributorOptions = {}): DistributorClient {
   const base = config.masterDistributorUrl;
@@ -228,6 +240,19 @@ export function createRemoteDistributor(options: RemoteDistributorOptions = {}):
       if (claim.kind === "in_progress") throw inProgress();
 
       const subdomain = input.subdomain;
+      const owner = input.ownerSubject ?? "";
+      // D3D-B1: an earlier attempt may have made its install ready and crashed before committing the
+      // claim. That install, not a new one, is the outcome: bind the claim to it.
+      const existing = options.readyInstalls ? await options.readyInstalls(subdomain) : null;
+      if (existing) {
+        if (existing.ownerSubject !== owner) {
+          // Another owner's ready install (e.g. from before claims existed) holds the subdomain.
+          await (claim.bootstrap ? claims.abandon(subdomain, claim.leaseToken) : claims.release(subdomain, claim.leaseToken)).catch(() => undefined);
+          throw subdomainUnavailable();
+        }
+        if (!(await claims.commit(subdomain, claim.leaseToken, existing.installId))) throw inProgress();
+        return { kind: "committed", installId: existing.installId, tenantId: claim.tenantId };
+      }
       let checkpoint = claim.bootstrap;
       // Whether Master Distributor may hold state for this claim (decides abandon vs release).
       let mdMayHaveActed = checkpoint !== null;
@@ -252,6 +277,23 @@ export function createRemoteDistributor(options: RemoteDistributorOptions = {}):
         },
         async commit(installId) {
           if (!(await claims.commit(subdomain, claim.leaseToken, installId))) throw inProgress();
+        },
+        async commitReady(installId, flush) {
+          try {
+            await flush();
+          } catch (err) {
+            // The ready-install index rejected this install: find the one that holds the subdomain.
+            if (!(err instanceof HttpError && err.statusCode === 409) || !options.readyInstalls) throw err;
+            const holder = await options.readyInstalls(subdomain);
+            if (!holder || holder.installId === installId) throw err;
+            if (holder.ownerSubject !== owner) throw subdomainUnavailable();
+            if (!(await claims.commit(subdomain, claim.leaseToken, holder.installId)) && (await claims.committedInstall(subdomain)) !== holder.installId) throw inProgress();
+            throw alreadyInstalled(subdomain);
+          }
+          await options.beforeCommit?.();
+          if (await claims.commit(subdomain, claim.leaseToken, installId)) return;
+          // Lease lost: a recovering attempt may already have bound the claim to this very install.
+          if ((await claims.committedInstall(subdomain)) !== installId) throw inProgress();
         },
         async fail() {
           await (mdMayHaveActed ? claims.abandon(subdomain, claim.leaseToken) : claims.release(subdomain, claim.leaseToken)).catch(() => undefined);
