@@ -36,7 +36,13 @@ export type InstallClaimStore = {
   abandon(subdomain: string, leaseToken: string): Promise<void>;
   /** Failure before anything can exist at MD: drop the claim. */
   release(subdomain: string, leaseToken: string): Promise<void>;
+  /** Read-only: the install a committed claim is bound to, or null. */
+  committedInstall(subdomain: string): Promise<string | null>;
 };
+
+/** D3D-B1: the READY install that holds a subdomain, wherever it was created. */
+export type ReadyInstall = { installId: string; ownerSubject: string };
+export type ReadyInstallLookup = (subdomain: string) => Promise<ReadyInstall | null>;
 
 /** What identifies the installation a subdomain is claimed for. Cosmetic fields are not part of it. */
 export function installClaimFingerprint(input: { ownerSubject?: string; appId?: string; subdomain: string; customDomain?: string }): string {
@@ -99,6 +105,11 @@ export class MemoryInstallClaimStore implements InstallClaimStore {
 
   async release(subdomain: string, leaseToken: string) {
     if (this.held(subdomain, leaseToken)) this.rows.delete(subdomain.toLowerCase());
+  }
+
+  async committedInstall(subdomain: string) {
+    const row = this.rows.get(subdomain.toLowerCase());
+    return row?.state === "COMMITTED" ? row.installId : null;
   }
 }
 
@@ -164,4 +175,33 @@ export class PostgresInstallClaimStore implements InstallClaimStore {
   async release(subdomain: string, leaseToken: string) {
     await this.db.query(`DELETE FROM portal.install_claims WHERE subdomain = lower($1) AND state = 'CLAIMED' AND lease_token = $2`, [subdomain, leaseToken]);
   }
+
+  async committedInstall(subdomain: string) {
+    const found = await this.db.query<{ install_id: string }>(`SELECT install_id FROM portal.install_claims WHERE subdomain = lower($1) AND state = 'COMMITTED'`, [subdomain]);
+    return found.rows[0]?.install_id ?? null;
+  }
+}
+
+/**
+ * Reads the READY install for a subdomain straight from `portal.records`, so an instance whose cache
+ * has not seen another instance's install still finds it. Served by the ready-install unique index.
+ */
+export function postgresReadyInstallLookup(db: Db): ReadyInstallLookup {
+  return async (subdomain) => {
+    const found = await db.query<{ id: string; owner: string | null }>(
+      `SELECT id, payload->>'ownerTrustId' AS owner FROM portal.records
+       WHERE kind = 'installs' AND payload->>'status' = 'ready' AND lower(payload->>'subdomain') = lower($1)`,
+      [subdomain],
+    );
+    const row = found.rows[0];
+    return row ? { installId: row.id, ownerSubject: row.owner ?? "" } : null;
+  };
+}
+
+/** Single-process lookup (no database): the local store is the whole truth. */
+export function localReadyInstallLookup(store: { getReadyInstallBySubdomain(subdomain: string): { id: string; ownerTrustId: string } | undefined }): ReadyInstallLookup {
+  return async (subdomain) => {
+    const install = store.getReadyInstallBySubdomain(subdomain);
+    return install ? { installId: install.id, ownerSubject: install.ownerTrustId } : null;
+  };
 }

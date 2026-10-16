@@ -200,10 +200,7 @@ export async function installMyBrandOs(opts: {
     });
 
     // D3D-A: the ready install is durable before the claim is bound to it.
-    if (guard) {
-      await opts.store.flush();
-      await guard.commit(row.id);
-    }
+    if (guard) await guard.commitReady(row.id, () => opts.store.flush());
     const ready = opts.store.getInstall(row.id)!;
     // LifeOS / OS Xperience consumer discovery launches the PUBLIC User App.
     // Creator Admin remains `{origin}/admin` and is never the catalog destination.
